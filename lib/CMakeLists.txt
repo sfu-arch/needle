@@ -1,0 +1,5 @@
+add_subdirectory(epp-inst)
+add_subdirectory(epp-rt)
+add_subdirectory(grok)
+add_subdirectory(inliner)
+add_subdirectory(namer)
