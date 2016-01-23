@@ -24,6 +24,7 @@
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Program.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetRegistry.h"
@@ -44,6 +45,8 @@
 #include "Namer.h"
 
 #include "config.h"
+
+#define DEBUG_TYPE "peruse_epp"
 
 using namespace std;
 using namespace llvm;
@@ -143,8 +146,8 @@ static void compile(Module &m, string outputPath) {
     machine->addAnalysisPasses(pm);
 
     // if (const DataLayout *dl = machine->createDataLayout()) {
-    // m.setDataLayout(dl);
-    //}
+    //      m.setDataLayout(dl);
+    // }
     pm.add(new DataLayoutPass());
 
     { // Bound this scope
@@ -194,9 +197,9 @@ static void link(const string &objectFile, const string &outputFile) {
     charArgs.push_back(0);
 
     for (auto &arg : args) {
-        outs() << arg.c_str() << " ";
+        DEBUG(outs() << arg.c_str() << " ");
     }
-    outs() << "\n";
+    DEBUG(outs() << "\n");
 
     string err;
     if (-1 ==
@@ -228,6 +231,8 @@ static void saveModule(Module &m, StringRef filename) {
 static void instrumentModule(Module &module, std::string, const char *argv0) {
     // Build up all of the passes that we want to run on the module.
     PassManager pm;
+    pm.add(createLowerSwitchPass());
+    pm.add(createLoopSimplifyPass());
     pm.add(new DataLayoutPass());
     pm.add(new LoopInfo());
     // FIXME : runOnSCC and runOnModule mix?
@@ -261,6 +266,9 @@ static void instrumentModule(Module &module, std::string, const char *argv0) {
 
 static void interpretResults(Module &module, std::string filename) {
     PassManager pm;
+    pm.add(createLowerSwitchPass());
+    pm.add(createLoopSimplifyPass());
+    pm.add(new DataLayoutPass());
     pm.add(new LoopInfo());
     // FIXME : runOnSCC and runOnModule mix?
     //pm.add(new epp::PeruseInliner());

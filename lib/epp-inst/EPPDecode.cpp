@@ -1,5 +1,6 @@
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/Support/raw_ostream.h"
@@ -46,15 +47,6 @@ struct Path {
     // Path() : Func(nullptr), id(APInt(256, StringRef("0"), 10)), count(0) {}
 };
 
-// static bool isTargetFunction(const Function &f,
-// const cl::list<std::string> &FunctionList) {
-// if (f.isDeclaration())
-// return false;
-// for (auto &fname : FunctionList)
-// if (fname == f.getName())
-// return true;
-// return false;
-//}
 
 static bool isFunctionExiting(BasicBlock *BB) {
     if (BB->getTerminator()->getNumSuccessors() == 0)
@@ -112,6 +104,26 @@ static uint64_t pathCheck(vector<BasicBlock *> &Blocks) {
     }
 
     return NumIns;
+}
+
+void printPathSrc(std::vector<llvm::BasicBlock*> &blocks) {
+  unsigned line = 0;
+  llvm::StringRef file;
+  for (auto *bb : blocks) {
+    for (auto &instruction : *bb) {
+      MDNode *n = instruction.getMetadata("dbg");
+      if (!n) {
+        continue;
+      }
+
+      DILocation loc(n);
+      if (loc.getLineNumber() != line || loc.getFilename() != file) {
+        line = loc.getLineNumber();
+        file = loc.getFilename();
+        outs() << "File " << file.str() << " line " << line << "\n";
+      }
+    }
+  }
 }
 
 bool EPPDecode::runOnModule(Module &M) {
@@ -180,10 +192,12 @@ bool EPPDecode::runOnModule(Module &M) {
         } else {
             pathFail++;
         }
+        outs() << "Path ID: " << paths[i].id.toString(10, false) << "\n";
+        printPathSrc(bbSequences[i].second);  
         DEBUG(errs() << "\n");
     }
 
-    errs() << "Path Check Fails : " << pathFail << "\n";
+    DEBUG(errs() << "Path Check Fails : " << pathFail << "\n");
 
     // Dump self loops (if any)
     for (auto KV : SelfProfileMap) {
@@ -240,7 +254,11 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
         SelectedEdges.push_back(Select);
         Position = Select->tgt();
         pathID -= Wt;
-        // DEBUG(errs() << pathID << "\n");
+         DEBUG(errs() << pathID << "\n");
+    }
+
+    if(SelectedEdges.empty()) {
+        return make_pair(RIRO, sequence);
     }
 
     if (SelectedEdges.front()->Type == EREAL &&

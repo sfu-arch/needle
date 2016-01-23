@@ -376,7 +376,8 @@ void EPPEncode::encode(Function &F) {
         DEBUG(errs() << I.first->src()->getName() << " -> "
                      << I.first->tgt()->getName() << " " << I.second << "\n");
 
-    errs() << "NumPaths : " << numPaths[&F.getEntryBlock()] << "\n";
+    DEBUG(errs() << "NumPaths : " << numPaths[&F.getEntryBlock()] << "\n");
+    
 }
 
 char EPPEncode::ID = 0;
