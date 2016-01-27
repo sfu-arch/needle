@@ -14,17 +14,27 @@ CLANG=`which clang`
 DIS=`which llvm-dis`
 FN="main"
 
-pushd ../test > /dev/null
-for x in `ls *.c`; do
-    BCNAME=`echo ${x} | sed 's/\.c/\.bc/'`
-    ${CLANG} -c -g -emit-llvm -O2 -o ${BCNAME} ${x} 
+pushd stage > /dev/null
+for x in {1..7}; do
+    echo "Running Test ${x}"
+    cp ../src/${x}.c .
+    BCNAME=${x}.bc
+    ${CLANG} -c -g -emit-llvm -O3 -o ${BCNAME} ${x}.c
     ARGS="${BCNAME} -epp-fn=${FN} -o test"
     ${EPP} ${ARGS} 
-    ./test
+    IN=`cat ../input/${x}.in`
+    ./test ${IN} 2>&1 > /dev/null
     ARGS="${BCNAME} -epp-fn=${FN} -p=path-profile-results.txt -o test"
-    ${EPP} ${ARGS} 
+    ${EPP} ${ARGS} 2> ${x}.out
+    DIFF=`diff -q ${x}.out ../gold/${x}.gold > /dev/null`
+    if [ "$DIFF" != "" ]; then
+        echo "FAIL"
+    else
+        echo "PASS"
+    fi
+    rm -f test* *.txt *.bc *.c *.out
 done
-popd  > /dev/null
+popd > /dev/null
 
 export PATH=$SAVE_PATH
 export LD_LIBRARY_PATH=$SAVE_LD

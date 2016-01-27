@@ -26,7 +26,13 @@ struct PeruseInliner : public Inliner {
     InlineCostAnalysis *ICA;
 
   public:
-    PeruseInliner() : Inliner(ID, -2000000000, true), ICA(nullptr) {}
+    PeruseInliner() : Inliner(ID, -2000000000, true) {
+        ICA = new InlineCostAnalysis();    
+    }
+
+    ~PeruseInliner() {
+        delete ICA;
+    }
 
     std::ofstream InlineStats;
 
@@ -37,7 +43,7 @@ struct PeruseInliner : public Inliner {
 
     using llvm::Pass::doInitialization;
     bool doInitialization(CallGraph &CG) override {
-        InlineStats.open("inline.stat", std::ios::out);
+        InlineStats.open("inline.txt", std::ios::out);
         return false;
     }
 

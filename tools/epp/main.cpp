@@ -1,6 +1,5 @@
 #include "llvm/ADT/Triple.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/CodeGen/CommandFlags.h"
@@ -35,6 +34,9 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Linker/Linker.h"
+
+#include "llvm/Analysis/Passes.h"
+#include "llvm/Analysis/LoopInfo.h"
 
 #include <memory>
 #include <string>
@@ -231,12 +233,15 @@ static void saveModule(Module &m, StringRef filename) {
 static void instrumentModule(Module &module, std::string, const char *argv0) {
     // Build up all of the passes that we want to run on the module.
     PassManager pm;
+    pm.add(new DataLayoutPass());
+    pm.add(new llvm::AssumptionCacheTracker());
     pm.add(createLowerSwitchPass());
     pm.add(createLoopSimplifyPass());
-    pm.add(new DataLayoutPass());
+    pm.add(createBasicAliasAnalysisPass());
+    pm.add(createTypeBasedAliasAnalysisPass());
     pm.add(new LoopInfo());
-    // FIXME : runOnSCC and runOnModule mix?
-    //pm.add(new epp::PeruseInliner());
+    pm.add(new llvm::CallGraphWrapperPass());
+    pm.add(new epp::PeruseInliner());
     pm.add(new epp::Namer());
     pm.add(new epp::EPPProfile());
     pm.add(createVerifierPass());
@@ -266,14 +271,18 @@ static void instrumentModule(Module &module, std::string, const char *argv0) {
 
 static void interpretResults(Module &module, std::string filename) {
     PassManager pm;
+    pm.add(new DataLayoutPass());
+    pm.add(new llvm::AssumptionCacheTracker());
     pm.add(createLowerSwitchPass());
     pm.add(createLoopSimplifyPass());
-    pm.add(new DataLayoutPass());
+    pm.add(createBasicAliasAnalysisPass());
+    pm.add(createTypeBasedAliasAnalysisPass());
     pm.add(new LoopInfo());
-    // FIXME : runOnSCC and runOnModule mix?
-    //pm.add(new epp::PeruseInliner());
+    pm.add(new llvm::CallGraphWrapperPass());
+    pm.add(new epp::PeruseInliner());
     pm.add(new epp::Namer());
     pm.add(new epp::EPPDecode());
+    pm.add(createVerifierPass());
     pm.run(module);
 }
 

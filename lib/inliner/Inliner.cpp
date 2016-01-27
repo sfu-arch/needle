@@ -28,7 +28,6 @@ InlineCost PeruseInliner::getInlineCost(CallSite CS) {
 }
 
 bool PeruseInliner::runOnSCC(CallGraphSCC &SCC) {
-    ICA = &getAnalysis<InlineCostAnalysis>();
     bool Changed = false;
     while ((Changed = Inliner::runOnSCC(SCC)))
         ;
@@ -36,10 +35,8 @@ bool PeruseInliner::runOnSCC(CallGraphSCC &SCC) {
 }
 
 void PeruseInliner::getAnalysisUsage(AnalysisUsage &AU) const {
-    AU.addRequired<InlineCostAnalysis>();
     Inliner::getAnalysisUsage(AU);
 }
 
 char PeruseInliner::ID = 0;
-static RegisterPass<PeruseInliner> X("",
-                                     "Efficient Path Profiling -- AllInliner");
+static RegisterPass<PeruseInliner> X("", "Efficient Path Profiling -- AllInliner");

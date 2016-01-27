@@ -90,9 +90,9 @@ static uint64_t pathCheck(vector<BasicBlock *> &Blocks) {
                 } else {
                     if (CS.getCalledFunction()->isDeclaration() &&
                         checkIntrinsic(CS.getCalledFunction())) {
-                        errs()
-                            << "LIB Call: " << CS.getCalledFunction()->getName()
-                            << "\n";
+                        DEBUG(errs()
+                            << "Lib Call: " << CS.getCalledFunction()->getName()
+                            << "\n");
                         return 0;
                     }
                 }
@@ -120,7 +120,7 @@ void printPathSrc(std::vector<llvm::BasicBlock*> &blocks) {
       if (loc.getLineNumber() != line || loc.getFilename() != file) {
         line = loc.getLineNumber();
         file = loc.getFilename();
-        outs() << "File " << file.str() << " line " << line << "\n";
+        errs() << "File " << file.str() << " line " << line << "\n";
       }
     }
   }
@@ -192,7 +192,8 @@ bool EPPDecode::runOnModule(Module &M) {
         } else {
             pathFail++;
         }
-        outs() << "Path ID: " << paths[i].id.toString(10, false) << "\n";
+        errs() << "Path ID: " << paths[i].id.toString(10, false) 
+               << " Freq: " << paths[i].count << "\n";
         printPathSrc(bbSequences[i].second);  
         DEBUG(errs() << "\n");
     }
@@ -257,6 +258,7 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
          DEBUG(errs() << pathID << "\n");
     }
 
+    // Only one path so it must be REAL
     if(SelectedEdges.empty()) {
         return make_pair(RIRO, sequence);
     }
