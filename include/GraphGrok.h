@@ -50,6 +50,8 @@ enum VertexType {
     SELECT,
     PHI,
     MEM,
+    MEM_LD,
+    MEM_ST,
     BB_START,
     RET,
     CONVERT,

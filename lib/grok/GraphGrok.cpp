@@ -32,7 +32,7 @@ using namespace std;
 
 const char *VertexTypeStr[NUM_VERTEX_TYPES] = {
     "INT",     "FP",     "FUNC", "INTRIN", "GEP",      "UBR",
-    "CBR",     "SELECT", "PHI",  "MEM",    "BB_START", "RET",
+    "CBR",     "SELECT", "PHI",  "MEM", "MEM_LD", "MEM_ST", "BB_START", "RET",
     "CONVERT", "VECTOR", "AGG",  "OTHER",  "CHAIN"};
 const char *EdgeTypeStr[NUM_EDGE_TYPES] = {"REG", "DATA"};
 
@@ -1036,10 +1036,14 @@ void analyseGeneral(const Path &P, BoostGraph &BG,
                 IndirectCallCount++;
         }
         if (BG[V].Type == MEM) {
-            if (dyn_cast<LoadInst>(BG[V].Inst))
+            if (dyn_cast<LoadInst>(BG[V].Inst)) {
+                BG[V].Type = MEM_LD;
                 LoadCounter++;
-            if (dyn_cast<StoreInst>(BG[V].Inst))
+            }
+            if (dyn_cast<StoreInst>(BG[V].Inst)) {
+                BG[V].Type = MEM_ST;
                 StoreCounter++;
+            }
         }
     }
 

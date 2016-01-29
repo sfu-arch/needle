@@ -4,18 +4,31 @@
 
 1. LLVM 3.6.2  
 2. Boost 1.55  
+3. CMake 2.8.8  
 
 ### Build 
-
-1. Compile LLVM using CMake as described [here](http://llvm.org/docs/CMake.html) with additional options.  
+0. Download LLVM 3.6.2 source from [here](http://llvm.org/releases/download.html). Also download the Clang source code.   
+    a. `$ tar xvf llvm-3.6.2.src.tar.xz`  
+    b. `$ tar xvf cfe-3.6.2.src.tar.xz`  
+    c. `$ mv cfe-3.6.2.src llvm-3.6.2.src/tools/clang`  
+1. Compile LLVM using CMake as described [here](http://llvm.org/docs/CMake.html). CMake needs to be run with additional options.  
+    Options  
     a. `LLVM_ENABLE_EH=ON`  
     b. `LLVM_ENABLE_RTTI=ON`  
+    Example  
+    `$ mkdir llvm-build && cd llvm-build`  
+    `$ cmake -DLLVM_ENABLE_EH=ON -DLLVM_ENABLE_RTTI=ON <path/to/llvm-3.6.2.src>`  
+    `$ make -j <cpu_count>`  
 2. Compile boost with `regex` and `graph` libraries.  
 3. Compile _PASHA_ with CMake options  
     a. `BOOST_ROOT`=`<boost/dir>`  
     b. `LLVM_DIR`=`<llvm/dir>`  
     c. `LLVM_ENABLE_EH=ON`  
     d. `LLVM_ENABLE_RTTI=ON`  
+    Example  
+    `$ mkdir pasha-build && cd pasha-build`  
+    `$ cmake -DLLVM_ENABLE_EH=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_DIR=<path/to/llvm-build/share/llvm/cmake> -DBOOST_ROOT=<path/to/boost>`  
+    `$ make -j <cpu_count>`  
 
 ### Testing
 The folder tests contains a script `run-tests.sh`. Please modify the variables in the script to point to executables in the correct directories. 
