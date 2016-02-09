@@ -25,15 +25,11 @@ using namespace llvm;
 using namespace mwe;
 using namespace std;
 
-cl::opt<string> TargetFunction("fn", cl::Required,
-                               cl::desc("Target function name"),
-                               cl::value_desc("string"), cl::init("main"));
+extern cl::opt<string> TargetFunction;
 
-cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to analyse"),
-                         cl::value_desc("Integer"), cl::init(10));
+//cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to analyse"),
+                         //cl::value_desc("Integer"), cl::init(10));
 
-cl::opt<string> OnlyPath("path", cl::desc("Run on only specified path"),
-                         cl::value_desc("String"), cl::init("na"));
 
 void MicroWorkloadExtract::readSequences(vector<Path> &S,
                                          map<int64_t, int64_t> &SM) {
@@ -45,9 +41,6 @@ void MicroWorkloadExtract::readSequences(vector<Path> &S,
         std::vector<std::string> Tokens;
         boost::split(Tokens, Line, boost::is_any_of("\t "));
         P.Id = Tokens[0];
-
-        if (OnlyPath != "na" && OnlyPath != P.Id)
-            continue;
 
         P.Freq = stoull(Tokens[1]);
         P.PType = static_cast<PathType>(stoi(Tokens[2]));
@@ -85,7 +78,7 @@ void MicroWorkloadExtract::readSequences(vector<Path> &S,
         S.push_back(P);
         // SM[P.Id] = Count;
         Count++;
-        if (Count == MaxNumPaths)
+        if (Count == NumSeq)
             break;
     }
     SeqFile.close();

@@ -26,7 +26,6 @@ using namespace llvm::sys;
 using namespace grok;
 using namespace mwe;
 
-namespace {
 cl::opt<string> InPath(cl::Positional, cl::desc("<Module to analyze>"),
                        cl::value_desc("bitcode filename"), cl::Required);
 
@@ -37,7 +36,15 @@ cl::opt<string> SeqFilePath("seq",
 
 cl::opt<int> NumSeq("num", cl::desc("Number of sequences to analyse"),
                     cl::value_desc("positive integer"), cl::init(3));
-}
+
+cl::opt<string> TargetFunction("fn", cl::Required,
+                               cl::desc("Target function name"),
+                               cl::value_desc("string"));
+
+//cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to analyse"),
+                         //cl::value_desc("Integer"), cl::init(10));
+
+
 
 int main(int argc, char **argv, const char **env) {
     // This boilerplate provides convenient stack traces and clean LLVM exit

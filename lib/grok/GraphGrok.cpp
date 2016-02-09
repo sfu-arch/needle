@@ -42,18 +42,17 @@ static_assert(NUM_VERTEX_TYPES ==
 static_assert(NUM_EDGE_TYPES == sizeof(EdgeTypeStr) / sizeof(EdgeTypeStr[0]),
               "Unequal number of Edge Types and string descriptions");
 
-cl::opt<string> TargetFunction("fn", cl::Required,
-                               cl::desc("Target function name"),
-                               cl::value_desc("string"), cl::init("main"));
+extern cl::opt<string> TargetFunction; 
 
-cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to analyse"),
-                         cl::value_desc("Integer"), cl::init(10));
+//cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to analyse"),
+                         //cl::value_desc("Integer"), cl::init(10));
+                         
 cl::opt<string>
     GenerateTrace("trace", cl::desc("Generate bitcode trace from path graph"),
                   cl::value_desc("static/dynamic"), cl::init("unset"));
 
-cl::opt<string> OnlyPath("path", cl::desc("Run on only specified path"),
-                         cl::value_desc("String"), cl::init("na"));
+//cl::opt<string> OnlyPath("path", cl::desc("Run on only specified path"),
+                         //cl::value_desc("String"), cl::init("na"));
 
 VertexType getOpType(Instruction &I);
 
@@ -66,9 +65,6 @@ void GraphGrok::readSequences(vector<Path> &S, map<int64_t, int64_t> &SM) {
         std::vector<std::string> Tokens;
         boost::split(Tokens, Line, boost::is_any_of("\t "));
         P.Id = Tokens[0];
-
-        if (OnlyPath != "na" && OnlyPath != P.Id)
-            continue;
 
         P.Freq = stoull(Tokens[1]);
         P.PType = static_cast<PathType>(stoi(Tokens[2]));
@@ -106,7 +102,7 @@ void GraphGrok::readSequences(vector<Path> &S, map<int64_t, int64_t> &SM) {
         S.push_back(P);
         // SM[P.Id] = Count;
         Count++;
-        if (Count == MaxNumPaths)
+        if (Count == NumSeq)
             break;
     }
     SeqFile.close();
