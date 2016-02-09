@@ -31,8 +31,8 @@ using namespace grok;
 using namespace std;
 
 const char *VertexTypeStr[NUM_VERTEX_TYPES] = {
-    "INT",     "FP",     "FUNC", "INTRIN", "GEP",      "UBR",
-    "CBR",     "SELECT", "PHI",  "MEM", "MEM_LD", "MEM_ST", "BB_START", "RET",
+    "INT",     "FP",     "FUNC", "INTRIN", "GEP",    "UBR",      "CBR",
+    "SELECT",  "PHI",    "MEM",  "MEM_LD", "MEM_ST", "BB_START", "RET",
     "CONVERT", "VECTOR", "AGG",  "OTHER",  "CHAIN"};
 const char *EdgeTypeStr[NUM_EDGE_TYPES] = {"REG", "DATA"};
 

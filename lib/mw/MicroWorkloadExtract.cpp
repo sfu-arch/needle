@@ -25,7 +25,6 @@ using namespace llvm;
 using namespace mwe;
 using namespace std;
 
-
 cl::opt<string> TargetFunction("fn", cl::Required,
                                cl::desc("Target function name"),
                                cl::value_desc("string"), cl::init("main"));
@@ -36,7 +35,8 @@ cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to analyse"),
 cl::opt<string> OnlyPath("path", cl::desc("Run on only specified path"),
                          cl::value_desc("String"), cl::init("na"));
 
-void MicroWorkloadExtract::readSequences(vector<Path> &S, map<int64_t, int64_t> &SM) {
+void MicroWorkloadExtract::readSequences(vector<Path> &S,
+                                         map<int64_t, int64_t> &SM) {
     ifstream SeqFile(SeqFilePath.c_str(), ios::in);
     assert(SeqFile.is_open() && "Could not open file");
     string Line;
@@ -98,26 +98,24 @@ bool MicroWorkloadExtract::doInitialization(Module &M) {
 
 bool MicroWorkloadExtract::doFinalization(Module &M) { return false; }
 
-
 static bool isBlockInPath(const string &S, const Path &P) {
     return find(P.Seq.begin(), P.Seq.end(), S) != P.Seq.end();
 }
 
-static inline bool isUnconditionalBranch(Instruction *I) {
-    if (auto BRI = dyn_cast<BranchInst>(I))
-        return BRI->isUnconditional();
-    return false;
-}
-
-static inline uint32_t getBlockIdx(const Path &P, BasicBlock *BB) {
-    auto Name = BB->getName().str();
-    uint32_t Idx = 0;
-    for (; Idx < P.Seq.size(); Idx++)
-        if (Name == P.Seq[Idx])
-            return Idx;
-    assert(false && "Should be Unreachable");
-}
-
+// static inline bool isUnconditionalBranch(Instruction *I) {
+//     if (auto BRI = dyn_cast<BranchInst>(I))
+//         return BRI->isUnconditional();
+//     return false;
+// }
+//
+// static inline uint32_t getBlockIdx(const Path &P, BasicBlock *BB) {
+//     auto Name = BB->getName().str();
+//     uint32_t Idx = 0;
+//     for (; Idx < P.Seq.size(); Idx++)
+//         if (Name == P.Seq[Idx])
+//             return Idx;
+//     assert(false && "Should be Unreachable");
+// }
 
 static inline void bSliceDFSHelper(
     BasicBlock *BB, DenseSet<BasicBlock *> &BSlice,
@@ -754,7 +752,6 @@ static void generateStaticGraphFromPath(const Path &P,
         }
     }
 
-
     auto VoidTy = Type::getVoidTy(Mod->getContext());
 
     std::vector<Type *> ParamTy;
@@ -795,7 +792,7 @@ static void generateStaticGraphFromPath(const Path &P,
     LOA->setAlignment(8);
 
     staticHelper(StaticFunc, GuardFunc, LOA, LiveIn, LiveOut, Globals,
-                 RevTopoChop, BackEdges, Mod->getContext() );
+                 RevTopoChop, BackEdges, Mod->getContext());
 
     StripDebugInfo(*Mod);
 

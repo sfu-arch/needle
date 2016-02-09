@@ -20,7 +20,7 @@ using namespace llvm;
 using namespace epp;
 using namespace std;
 
-#define DEBUG_TYPE "peruse_epp"
+#define DEBUG_TYPE "epp_encode"
 
 bool EPPEncode::doInitialization(Module &m) { return false; }
 
@@ -353,10 +353,10 @@ void EPPEncode::encode(Function &F) {
     }
     DEBUG(errs() << "\n");
 
-    DEBUG(errs() << "\nEdge Weights :\n");
+    errs() << "\nEdge Weights :\n";
     for (auto &V : Val)
-        DEBUG(errs() << V.first->src()->getName() << " -> "
-                     << V.first->tgt()->getName() << " " << V.second << "\n");
+        errs() << V.first->src()->getName() << " -> "
+                     << V.first->tgt()->getName() << " " << V.second << "\n";
 
     DEBUG(errs() << "\nPath Counts :\n");
     for (auto &P : numPaths)
@@ -377,7 +377,6 @@ void EPPEncode::encode(Function &F) {
                      << I.first->tgt()->getName() << " " << I.second << "\n");
 
     DEBUG(errs() << "NumPaths : " << numPaths[&F.getEntryBlock()] << "\n");
-    
 }
 
 char EPPEncode::ID = 0;

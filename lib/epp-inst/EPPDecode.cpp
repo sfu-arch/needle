@@ -15,7 +15,7 @@ using namespace llvm;
 using namespace epp;
 using namespace std;
 
-#define DEBUG_TYPE "peruse_epp"
+#define DEBUG_TYPE "epp_decode"
 
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &, const cl::list<std::string> &);
@@ -46,7 +46,6 @@ struct Path {
 
     // Path() : Func(nullptr), id(APInt(256, StringRef("0"), 10)), count(0) {}
 };
-
 
 static bool isFunctionExiting(BasicBlock *BB) {
     if (BB->getTerminator()->getNumSuccessors() == 0)
@@ -90,9 +89,9 @@ static uint64_t pathCheck(vector<BasicBlock *> &Blocks) {
                 } else {
                     if (CS.getCalledFunction()->isDeclaration() &&
                         checkIntrinsic(CS.getCalledFunction())) {
-                        DEBUG(errs()
-                            << "Lib Call: " << CS.getCalledFunction()->getName()
-                            << "\n");
+                        DEBUG(errs() << "Lib Call: "
+                                     << CS.getCalledFunction()->getName()
+                                     << "\n");
                         return 0;
                     }
                 }
@@ -106,26 +105,28 @@ static uint64_t pathCheck(vector<BasicBlock *> &Blocks) {
     return NumIns;
 }
 
-void printPathSrc(std::vector<llvm::BasicBlock*> &blocks) {
-  unsigned line = 0;
-  llvm::StringRef file;
-  for (auto *bb : blocks) {
-    for (auto &instruction : *bb) {
-      MDNode *n = instruction.getMetadata("dbg");
-      if (!n) {
-        continue;
-      }
+void printPathSrc(std::vector<llvm::BasicBlock *> &blocks) {
+    unsigned line = 0;
+    llvm::StringRef file;
+    for (auto *bb : blocks) {
+        for (auto &instruction : *bb) {
+            MDNode *n = instruction.getMetadata("dbg");
+            if (!n) {
+                continue;
+            }
 
-      DILocation loc(n);
-      if (loc.getLineNumber() != line || loc.getFilename() != file) {
-        line = loc.getLineNumber();
-        file = loc.getFilename();
-        DEBUG(errs() << "File " << file.str() << " line " << line << "\n");
-        break; // FIXME : This makes it only print once for each BB, remove to print all 
-        // source lines per instruction.
-      }
+            DILocation loc(n);
+            if (loc.getLineNumber() != line || loc.getFilename() != file) {
+                line = loc.getLineNumber();
+                file = loc.getFilename();
+                DEBUG(errs() << "File " << file.str() << " line " << line
+                             << "\n");
+                break; // FIXME : This makes it only print once for each BB,
+                       // remove to print all
+                       // source lines per instruction.
+            }
+        }
     }
-  }
 }
 
 bool EPPDecode::runOnModule(Module &M) {
@@ -194,9 +195,9 @@ bool EPPDecode::runOnModule(Module &M) {
         } else {
             pathFail++;
         }
-        DEBUG(errs() << "Path ID: " << paths[i].id.toString(10, false) 
-               << " Freq: " << paths[i].count << "\n");
-        printPathSrc(bbSequences[i].second);  
+        DEBUG(errs() << "Path ID: " << paths[i].id.toString(10, false)
+                     << " Freq: " << paths[i].count << "\n");
+        printPathSrc(bbSequences[i].second);
         DEBUG(errs() << "\n");
     }
 
@@ -257,11 +258,11 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
         SelectedEdges.push_back(Select);
         Position = Select->tgt();
         pathID -= Wt;
-         DEBUG(errs() << pathID << "\n");
+        DEBUG(errs() << pathID << "\n");
     }
 
     // Only one path so it must be REAL
-    if(SelectedEdges.empty()) {
+    if (SelectedEdges.empty()) {
         return make_pair(RIRO, sequence);
     }
 

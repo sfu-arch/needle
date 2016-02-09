@@ -18,11 +18,13 @@
 #include <fstream>
 
 #include "GraphGrok.h"
+#include "MicroWorkloadExtract.h"
 
 using namespace std;
 using namespace llvm;
 using namespace llvm::sys;
 using namespace grok;
+using namespace mwe;
 
 namespace {
 cl::opt<string> InPath(cl::Positional, cl::desc("<Module to analyze>"),
@@ -70,11 +72,9 @@ int main(int argc, char **argv, const char **env) {
     PM.add(llvm::createPostDomTree());
     PM.add(new DominatorTreeWrapperPass());
     PM.add(new grok::GraphGrok(SeqFilePath, NumSeq));
+    //PM.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq));
     PM.run(*module);
 
-    // for(auto &V : Sequences)
-    // for(auto &E : V)
-    // errs() << E << "\n";
 
     return 0;
 }
