@@ -121,7 +121,7 @@ void printPathSrc(std::vector<llvm::BasicBlock *> &blocks) {
                 file = loc.getFilename();
                 DEBUG(errs() << "File " << file.str() << " line " << line
                              << "\n");
-                break; // FIXME : This makes it only print once for each BB,
+                // break; // FIXME : This makes it only print once for each BB,
                        // remove to print all
                        // source lines per instruction.
             }

@@ -16,7 +16,7 @@
 #include <unordered_map>
 #include <cassert>
 
-#define DEBUG_TYPE "peruse_epp"
+#define DEBUG_TYPE "epp_profile"
 
 using namespace llvm;
 using namespace epp;

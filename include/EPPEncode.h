@@ -9,6 +9,7 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/ADT/MapVector.h"
 
 #include <map>
 #include <unordered_map>
