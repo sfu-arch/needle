@@ -69,10 +69,10 @@ cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
                         cl::value_desc("filename"));
 
 cl::opt<string> profile("p", cl::desc("Path to path profiling results"),
-                        cl::value_desc("filename"), cl::init("path-profile-results.txt"));
+                        cl::value_desc("filename"));
 
 cl::opt<string> selfloop("s", cl::desc("Path to self loop path profiling results"),
-                        cl::value_desc("filename"), cl::init("self-loop.txt"));
+                        cl::value_desc("filename"));
 
 cl::opt<unsigned>
     numberOfPaths("n", cl::desc("Number of most frequent paths to compute"),
