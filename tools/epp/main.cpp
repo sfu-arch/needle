@@ -61,7 +61,6 @@ unique_ptr<T> make_unique(Args &&... args) {
     return unique_ptr<T>(new T(forward<Args>(args)...));
 }
 
-namespace {
 
 cl::opt<string> inPath(cl::Positional, cl::desc("<Module to analyze>"),
                        cl::value_desc("bitcode filename"), cl::Required);
@@ -70,7 +69,10 @@ cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
                         cl::value_desc("filename"));
 
 cl::opt<string> profile("p", cl::desc("Path to path profiling results"),
-                        cl::value_desc("filename"));
+                        cl::value_desc("filename"), cl::init("path-profile-results.txt"));
+
+cl::opt<string> selfloop("s", cl::desc("Path to self loop path profiling results"),
+                        cl::value_desc("filename"), cl::init("self-loop.txt"));
 
 cl::opt<unsigned>
     numberOfPaths("n", cl::desc("Number of most frequent paths to compute"),
@@ -92,7 +94,6 @@ cl::list<string> libraries("l", cl::Prefix,
 
 cl::list<string>
     linkM("b", cl::desc("Bitcode modules to merge (comma separated list)"));
-}
 
 static void compile(Module &m, string outputPath) {
     string err;

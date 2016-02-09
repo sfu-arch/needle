@@ -20,14 +20,16 @@ using namespace std;
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &, const cl::list<std::string> &);
 
-cl::opt<std::string> ProfileDumpFile(
-    "path-profile", cl::desc("File containing dynamic path profile data:"),
-    cl::value_desc("filename"), cl::init("path-profile-results.txt"));
+extern cl::opt<std::string> profile;
+extern cl::opt<std::string> selfloop;
+//cl::opt<std::string> ProfileDumpFile(
+    //"path-profile", cl::desc("File containing dynamic path profile data:"),
+    //cl::value_desc("filename"), cl::init("path-profile-results.txt"));
 
-cl::opt<std::string>
-    SelfLoopDumpFile("self-loop-profile",
-                     cl::desc("File containing dynamic path profile data:"),
-                     cl::value_desc("filename"), cl::init("self-loop.txt"));
+//cl::opt<std::string>
+    //SelfLoopDumpFile("self-loop-profile",
+                     //cl::desc("File containing dynamic path profile data:"),
+                     //cl::value_desc("filename"), cl::init("self-loop.txt"));
 
 void printPath(std::vector<llvm::BasicBlock *> &Blocks,
                std::ofstream &Outfile) {
@@ -131,7 +133,7 @@ void printPathSrc(std::vector<llvm::BasicBlock *> &blocks) {
 
 bool EPPDecode::runOnModule(Module &M) {
     // FILE *infile = fopen(ProfileDumpFile.c_str(), "r");
-    ifstream inFile(ProfileDumpFile.c_str(), ios::in);
+    ifstream inFile(profile.c_str(), ios::in);
     assert(inFile.is_open() && "Could not open file for reading");
 
     uint64_t totalPathCount;
@@ -158,7 +160,7 @@ bool EPPDecode::runOnModule(Module &M) {
 
     inFile.close();
 
-    ifstream inFile2(SelfLoopDumpFile.c_str(), ios::in);
+    ifstream inFile2(selfloop.c_str(), ios::in);
     assert(inFile2.is_open() && "Could not open file for reading");
     uint64_t SelfLoopId, Freq, totalSelfLoopCount;
     inFile2 >> totalSelfLoopCount;
