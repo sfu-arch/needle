@@ -42,7 +42,8 @@ static_assert(NUM_VERTEX_TYPES ==
 static_assert(NUM_EDGE_TYPES == sizeof(EdgeTypeStr) / sizeof(EdgeTypeStr[0]),
               "Unequal number of Edge Types and string descriptions");
 
-extern cl::opt<string> TargetFunction; 
+extern cl::list<std::string> FunctionList;
+extern bool isTargetFunction(const Function &, const cl::list<std::string> &);
 
 //cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to analyse"),
                          //cl::value_desc("Integer"), cl::init(10));
@@ -2562,7 +2563,8 @@ void GraphGrok::makeSeqGraph(Function &F) {
 
 bool GraphGrok::runOnModule(Module &M) {
     for (auto &F : M)
-        if (F.getName() == TargetFunction)
+        //if (F.getName() == TargetFunction)
+        if (isTargetFunction(F, FunctionList)) 
             makeSeqGraph(F);
 
     return false;

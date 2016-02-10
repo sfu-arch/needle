@@ -17,6 +17,8 @@
 #include <thread>
 #include <fstream>
 
+#include "AllInliner.h"
+#include "Namer.h"
 #include "GraphGrok.h"
 #include "MicroWorkloadExtract.h"
 
@@ -37,12 +39,26 @@ cl::opt<string> SeqFilePath("seq",
 cl::opt<int> NumSeq("num", cl::desc("Number of sequences to analyse"),
                     cl::value_desc("positive integer"), cl::init(3));
 
-cl::opt<string> TargetFunction("fn", cl::Required,
-                               cl::desc("Target function name"),
-                               cl::value_desc("string"));
+//cl::opt<string> TargetFunction("fn", cl::Required,
+                               //cl::desc("Target function name"),
+                               //cl::value_desc("string"));
 
 //cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to analyse"),
                          //cl::value_desc("Integer"), cl::init(10));
+                         
+cl::list<std::string> FunctionList("fn", cl::value_desc("String"),
+                                   cl::desc("List of functions to instrument"),
+                                   cl::OneOrMore, cl::CommaSeparated);
+
+bool isTargetFunction(const Function &f,
+                      const cl::list<std::string> &FunctionList) {
+    if (f.isDeclaration())
+        return false;
+    for (auto &fname : FunctionList)
+        if (fname == f.getName())
+            return true;
+    return false;
+}
 
 
 
@@ -79,6 +95,8 @@ int main(int argc, char **argv, const char **env) {
     PM.add(llvm::createPostDomTree());
     PM.add(new DominatorTreeWrapperPass());
     PM.add(llvm::createLoopSimplifyPass());
+    PM.add(new epp::PeruseInliner());
+    PM.add(new epp::Namer());
     PM.add(new grok::GraphGrok(SeqFilePath, NumSeq));
     //PM.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq));
     PM.run(*module);
