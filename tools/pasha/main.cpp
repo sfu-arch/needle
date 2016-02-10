@@ -78,6 +78,7 @@ int main(int argc, char **argv, const char **env) {
     PM.add(createTypeBasedAliasAnalysisPass());
     PM.add(llvm::createPostDomTree());
     PM.add(new DominatorTreeWrapperPass());
+    PM.add(llvm::createLoopSimplifyPass());
     PM.add(new grok::GraphGrok(SeqFilePath, NumSeq));
     //PM.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq));
     PM.run(*module);
