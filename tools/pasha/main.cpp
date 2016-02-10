@@ -81,7 +81,5 @@ int main(int argc, char **argv, const char **env) {
     PM.add(new grok::GraphGrok(SeqFilePath, NumSeq));
     //PM.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq));
     PM.run(*module);
-
-
     return 0;
 }
