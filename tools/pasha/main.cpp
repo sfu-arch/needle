@@ -90,11 +90,16 @@ int main(int argc, char **argv, const char **env) {
     }
 
     PassManager PM;
+    PM.add(new DataLayoutPass());
+    PM.add(new llvm::AssumptionCacheTracker());
+    PM.add(createLowerSwitchPass());
+    PM.add(llvm::createLoopSimplifyPass());
     PM.add(createBasicAliasAnalysisPass());
     PM.add(createTypeBasedAliasAnalysisPass());
+    PM.add(new LoopInfo());
+    PM.add(new llvm::CallGraphWrapperPass());
     PM.add(llvm::createPostDomTree());
     PM.add(new DominatorTreeWrapperPass());
-    PM.add(llvm::createLoopSimplifyPass());
     PM.add(new epp::PeruseInliner());
     PM.add(new epp::Namer());
     PM.add(new grok::GraphGrok(SeqFilePath, NumSeq));
