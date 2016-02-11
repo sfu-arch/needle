@@ -12,6 +12,7 @@
 #include "llvm/PassManager.h"
 #include "llvm/Pass.h"
 #include "llvm/Analysis/Passes.h"
+#include "llvm/IR/Verifier.h"
 
 #include <string>
 #include <thread>
@@ -19,6 +20,8 @@
 
 #include "GraphGrok.h"
 #include "MicroWorkloadExtract.h"
+#include "AllInliner.h"
+#include "Namer.h"
 
 using namespace std;
 using namespace llvm;
@@ -37,13 +40,26 @@ cl::opt<string> SeqFilePath("seq",
 cl::opt<int> NumSeq("num", cl::desc("Number of sequences to analyse"),
                     cl::value_desc("positive integer"), cl::init(3));
 
-cl::opt<string> TargetFunction("fn", cl::Required,
-                               cl::desc("Target function name"),
-                               cl::value_desc("string"));
+//cl::opt<string> TargetFunction("fn", cl::Required,
+                               //cl::desc("Target function name"),
+                               //cl::value_desc("string"));
 
 //cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to analyse"),
                          //cl::value_desc("Integer"), cl::init(10));
 
+cl::list<std::string> FunctionList("fn", cl::value_desc("String"),
+                                   cl::desc("List of functions to instrument"),
+                                   cl::OneOrMore, cl::CommaSeparated);
+
+bool isTargetFunction(const Function &f,
+                      const cl::list<std::string> &FunctionList) {
+    if (f.isDeclaration())
+        return false;
+    for (auto &fname : FunctionList)
+        if (fname == f.getName())
+            return true;
+    return false;
+}
 
 
 int main(int argc, char **argv, const char **env) {
@@ -73,13 +89,23 @@ int main(int argc, char **argv, const char **env) {
         return -1;
     }
 
-    PassManager PM;
-    PM.add(createBasicAliasAnalysisPass());
-    PM.add(createTypeBasedAliasAnalysisPass());
-    PM.add(llvm::createPostDomTree());
-    PM.add(new DominatorTreeWrapperPass());
-    PM.add(new grok::GraphGrok(SeqFilePath, NumSeq));
+    PassManager pm;
+    pm.add(new DataLayoutPass());
+    pm.add(new llvm::AssumptionCacheTracker());
+    pm.add(createLowerSwitchPass());
+    pm.add(createLoopSimplifyPass());
+    pm.add(createBasicAliasAnalysisPass());
+    pm.add(createTypeBasedAliasAnalysisPass());
+    pm.add(new LoopInfo());
+    pm.add(new llvm::CallGraphWrapperPass());
+    pm.add(new epp::PeruseInliner());
+    pm.add(new epp::Namer());
+    pm.add(llvm::createPostDomTree());
+    pm.add(new DominatorTreeWrapperPass());
+    pm.add(new grok::GraphGrok(SeqFilePath, NumSeq));
     //PM.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq));
-    PM.run(*module);
+    //pm.add(createVerifierPass());
+    pm.run(*module);
+
     return 0;
 }
