@@ -214,7 +214,7 @@ bool EPPDecode::runOnModule(Module &M) {
         Path.push_back(Enc->selfLoopMap[Id]);
         auto C = pathCheck(Path);
         if (C)
-            Outfile << (totalPathCount + 1 + Id) << " " << Count << " 4 " << C
+            Outfile << (totalPathCount + 1 + Id) << " " << Count << " 4 " << C << " "
                     << Path[0]->getName().str() << " \n";
     }
     return false;

@@ -12,6 +12,7 @@
 #include "llvm/PassManager.h"
 #include "llvm/Pass.h"
 #include "llvm/Analysis/Passes.h"
+#include "llvm/IR/Verifier.h"
 
 #include <string>
 #include <thread>
@@ -21,6 +22,8 @@
 #include "Namer.h"
 #include "GraphGrok.h"
 #include "MicroWorkloadExtract.h"
+#include "AllInliner.h"
+#include "Namer.h"
 
 using namespace std;
 using namespace llvm;
@@ -61,7 +64,6 @@ bool isTargetFunction(const Function &f,
 }
 
 
-
 int main(int argc, char **argv, const char **env) {
     // This boilerplate provides convenient stack traces and clean LLVM exit
     // handling. It also initializes the built in support for convenient
@@ -89,21 +91,23 @@ int main(int argc, char **argv, const char **env) {
         return -1;
     }
 
-    PassManager PM;
-    PM.add(new DataLayoutPass());
-    PM.add(new llvm::AssumptionCacheTracker());
-    PM.add(createLowerSwitchPass());
-    PM.add(llvm::createLoopSimplifyPass());
-    PM.add(createBasicAliasAnalysisPass());
-    PM.add(createTypeBasedAliasAnalysisPass());
-    PM.add(new LoopInfo());
-    PM.add(new llvm::CallGraphWrapperPass());
-    PM.add(llvm::createPostDomTree());
-    PM.add(new DominatorTreeWrapperPass());
-    PM.add(new epp::PeruseInliner());
-    PM.add(new epp::Namer());
-    PM.add(new grok::GraphGrok(SeqFilePath, NumSeq));
+    PassManager pm;
+    pm.add(new DataLayoutPass());
+    pm.add(new llvm::AssumptionCacheTracker());
+    pm.add(createLowerSwitchPass());
+    pm.add(createLoopSimplifyPass());
+    pm.add(createBasicAliasAnalysisPass());
+    pm.add(createTypeBasedAliasAnalysisPass());
+    pm.add(new LoopInfo());
+    pm.add(new llvm::CallGraphWrapperPass());
+    pm.add(new epp::PeruseInliner());
+    pm.add(new epp::Namer());
+    pm.add(llvm::createPostDomTree());
+    pm.add(new DominatorTreeWrapperPass());
+    pm.add(new grok::GraphGrok(SeqFilePath, NumSeq));
     //PM.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq));
-    PM.run(*module);
+    //pm.add(createVerifierPass());
+    pm.run(*module);
+
     return 0;
 }

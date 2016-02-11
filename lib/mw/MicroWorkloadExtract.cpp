@@ -593,9 +593,11 @@ static bool verifyChop(const DenseSet<BasicBlock *> Chop) {
     return true;
 }
 
-static void generateStaticGraphFromPath(const Path &P,
+static Function* 
+generateStaticGraphFromPath(const Path &P,
                                         map<string, BasicBlock *> &BlockMap,
-                                        PostDominatorTree *PDT) {
+                                        PostDominatorTree *PDT,
+                                        Module* Mod) {
 
     auto *StartBB = BlockMap[P.Seq.front()];
     auto *LastBB = BlockMap[P.Seq.back()];
@@ -626,7 +628,7 @@ static void generateStaticGraphFromPath(const Path &P,
     auto DataLayoutStr = StartBB->getDataLayout();
     auto TargetTripleStr = StartBB->getParent()->getParent()->getTargetTriple();
 
-    Module *Mod = new Module(P.Id + string("-static"), getGlobalContext());
+    //Module *Mod = new Module(P.Id + string("-static"), getGlobalContext());
     Mod->setDataLayout(DataLayoutStr);
     Mod->setTargetTriple(TargetTripleStr);
 
@@ -795,24 +797,27 @@ static void generateStaticGraphFromPath(const Path &P,
     Mod->print(File, nullptr);
     File.close();
 
-    PassManagerBuilder PMB;
-    PMB.OptLevel = 3;
-    PMB.SLPVectorize = false;
-    PMB.BBVectorize = false;
-    PassManager PM;
-    PMB.populateModulePassManager(PM);
-    PM.run(*Mod);
+    // FIXME : Disable O3 version for now
+    // PassManagerBuilder PMB;
+    // PMB.OptLevel = 3;
+    // PMB.SLPVectorize = false;
+    // PMB.BBVectorize = false;
+    // PassManager PM;
+    // PMB.populateModulePassManager(PM);
+    // PM.run(*Mod);
 
-    Name = (P.Id) + string(".static.O3.ll");
-    raw_fd_ostream File3(Name, EC, sys::fs::OpenFlags::F_RW);
-    Mod->print(File3, nullptr);
-    File3.close();
+    // Name = (P.Id) + string(".static.O3.ll");
+    // raw_fd_ostream File3(Name, EC, sys::fs::OpenFlags::F_RW);
+    // Mod->print(File3, nullptr);
+    // File3.close();
 
     DEBUG(errs() << "Verifying " << P.Id << "\n");
     // Dumbass verifyModule function returns false if no
     // errors are found. Ref "llvm/IR/Verifier.h":46
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
-    delete Mod;
+    //delete Mod;
+    
+    return StaticFunc;
 }
 
 void MicroWorkloadExtract::makeSeqGraph(Function &F) {
@@ -824,9 +829,17 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
         BlockMap[BB.getName().str()] = &BB;
 
     for (auto &P : Sequences) {
-        generateStaticGraphFromPath(P, BlockMap, PostDomTree);
-        break;
+        Module *Mod = new Module(P.Id + string("-static"), getGlobalContext());
+        auto *ExF = generateStaticGraphFromPath(P, BlockMap, PostDomTree, Mod);
+        delete Mod;
     }
+
+    // Generate block set
+    // a. Chop
+    // b. Unify
+    // c. Trace
+    // Extract function
+    // Reintegrate function
 }
 
 bool MicroWorkloadExtract::runOnModule(Module &M) {
