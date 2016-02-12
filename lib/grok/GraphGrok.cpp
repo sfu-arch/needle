@@ -83,7 +83,7 @@ void GraphGrok::readSequences(vector<Path> &S, map<int64_t, int64_t> &SM) {
         // c. If Path is FIRO, then range is +5, -1
         // d. If Path is RIFO, then range is +4, -2
         // e. If Path is FIFO, then range is +5, -2
-        // f. If Path is SELF, then range is +4, -0
+        // f. If Path is SELF, then range is +4, -1
         switch (P.PType) {
         case RIRO:
             move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
@@ -2395,7 +2395,10 @@ void GraphGrok::makeSeqGraph(Function &F) {
     typedef pair<BasicBlock *, BasicBlock *> Key;
     typedef pair<uint64_t, APInt> Val;
     auto PairCmp =
-        [](const Key &A, const Key &B) -> bool { return A.first < B.first; };
+        [](const Key &A, const Key &B) -> bool { 
+            return A.first < B.first || 
+                (A.first == B.first && A.second < B.second); 
+        };
     map<Key, Val, decltype(PairCmp)> FrequentChops(PairCmp);
     map<Key, vector<string>, decltype(PairCmp)> ChopTraceMap(PairCmp);
 
@@ -2432,6 +2435,7 @@ void GraphGrok::makeSeqGraph(Function &F) {
         // Update the chop histogram
         bool NewChop = false;
         if (GenerateTrace == "static") {
+            errs() << "--" << P.Seq.front() << "->" << P.Seq.back() << "\n";
             auto *ChopBegin = BlockMap[P.Seq.front()];
             auto *ChopEnd = BlockMap[P.Seq.back()];
 
