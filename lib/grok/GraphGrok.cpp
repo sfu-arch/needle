@@ -13,6 +13,7 @@
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/ADT/SmallVector.h"
@@ -1826,7 +1827,7 @@ void staticHelper(
                 continue;
             auto *NewI = I.clone();
             NewBB->getInstList().push_back(NewI);
-
+            //errs() << "Ins : " << *NewI << "\n";
             assert(VMap.count(&I) == 0 && "Need new values");
             VMap[&I] = NewI;
             CallSite CS(&I), TraceCS(NewI);
@@ -1898,17 +1899,51 @@ void staticHelper(
         }
     }
 
+    function<void(Value&)> handleOperands;
+    handleOperands = [&VMap, &handleOperands, &StaticFunc](Value& V) {
+        User &I = *cast<User>(&V); 
+        for (auto OI = I.op_begin(), E = I.op_end(); OI != E; ++OI) {
+            if(auto CE = dyn_cast<ConstantExpr>(*OI)) {
+                handleOperands(*CE);
+            }
+            if (auto *GV = dyn_cast<GlobalVariable>(*OI)) {
+                // Since we may have already patched the global
+                // don't try to patch it again.
+                if (VMap.count(GV) == 0) continue;
+                // Check if we came from a ConstantExpr
+                // This represents a case where a ConstantExpr contains a reference to a GlobalVariable
+                // Constants can be shared across modules, but GlobalVariables cannot. We need to
+                // create a new ConstantExpr which refers to the new GlobalVariable.
+                // The following example does *not* trigger the verifier if the GV is not 
+                // remapped. 
+                // %1 = getelementptr inbounds i32* getelementptr inbounds ([66 x i32]* @two_over_pi82, i32 0, i32 0), i32 %j.0352.i62.in
+                // This expression gets optimized to :
+                // %1 = getelementptr inbounds [66 x i32]* @two_over_pi82, i32 0, i32 %j.0352.i62.in
+                // which is caught by the Verifier.
+                if(auto CE = dyn_cast<ConstantExpr>(&V)) {
+                    int32_t OpIdx = -1;
+                    while(I.getOperand(++OpIdx) != GV);
+                    auto NCE = CE->getWithOperandReplaced(OpIdx, 
+                                         cast<Constant>(VMap[GV]));
+                    for(auto UI = CE->user_begin(), UE = CE->user_end();
+                            UI != UE; UI++) {
+                        // All users of ConstExpr should be instructions
+                        auto Ins = dyn_cast<Instruction>(*UI);
+                        if( Ins->getParent()->getParent() == StaticFunc) {
+                            Ins->replaceUsesOfWith(CE, NCE);
+                        }
+                    }             
+                } else {
+                    I.replaceUsesOfWith(GV, VMap[GV]);
+                }
+            }
+        }
+    };
+
     // Patch Globals
     for (auto &BB : *StaticFunc) {
         for (auto &I : BB) {
-            for (auto OI = I.op_begin(), E = I.op_end(); OI != E; ++OI) {
-                if (auto *GV = dyn_cast<GlobalVariable>(*OI)) {
-                    // Since we may have already patched the global
-                    // don't try to patch it again.
-                    if (VMap[GV])
-                        I.replaceUsesOfWith(GV, VMap[GV]);
-                }
-            }
+            handleOperands(I);
         }
     }
 
@@ -2366,6 +2401,8 @@ static void generateStaticGraphFromPath(const Path &P,
     Mod->print(File, nullptr);
     File.close();
 
+    assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
+
     PassManagerBuilder PMB;
     PMB.OptLevel = 3;
     PMB.SLPVectorize = false;
@@ -2435,7 +2472,6 @@ void GraphGrok::makeSeqGraph(Function &F) {
         // Update the chop histogram
         bool NewChop = false;
         if (GenerateTrace == "static") {
-            errs() << "--" << P.Seq.front() << "->" << P.Seq.back() << "\n";
             auto *ChopBegin = BlockMap[P.Seq.front()];
             auto *ChopEnd = BlockMap[P.Seq.back()];
 
