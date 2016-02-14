@@ -194,23 +194,24 @@ getChop(BasicBlock *StartBB, BasicBlock *LastBB,
     return Chop;
 }
 
-static void liveInHelperStatic(DenseSet<BasicBlock *> &Chop,
+static void liveInHelperStatic(SmallVector<BasicBlock *, 16> &RevTopoChop,
                                SmallVector<Value *, 16> &LiveIn,
                                DenseSet<Value *> &Globals, Value *Val) {
     if (auto Ins = dyn_cast<Instruction>(Val)) {
         for (auto OI = Ins->op_begin(), EI = Ins->op_end(); OI != EI; OI++) {
             if (auto OIns = dyn_cast<Instruction>(OI)) {
-                if (!Chop.count(OIns->getParent())) {
+                //if (!Chop.count(OIns->getParent())) {
+                if(find(RevTopoChop.begin(), RevTopoChop.end(), OIns->getParent()) == RevTopoChop.end()) {
                     LiveIn.push_back(OIns);
                 }
             } else
-                liveInHelperStatic(Chop, LiveIn, Globals, *OI);
+                liveInHelperStatic(RevTopoChop, LiveIn, Globals, *OI);
         }
     } else if (auto CE = dyn_cast<ConstantExpr>(Val)) {
         for (auto OI = CE->op_begin(), EI = CE->op_end(); OI != EI; OI++) {
             assert(!isa<Instruction>(OI) &&
                    "Don't expect operand of ConstExpr to be an Instruction");
-            liveInHelperStatic(Chop, LiveIn, Globals, *OI);
+            liveInHelperStatic(RevTopoChop, LiveIn, Globals, *OI);
         }
     } else if (auto Arg = dyn_cast<Argument>(Val))
         LiveIn.push_back(Arg);
@@ -611,7 +612,7 @@ static inline bool checkIntrinsic(Function *F) {
         return true;
 }
 
-static bool verifyChop(const DenseSet<BasicBlock *> Chop) {
+static bool verifyChop(const SmallVector<BasicBlock *,16> Chop) {
     for (auto &CB : Chop) {
         for (auto &I : *CB) {
             CallSite CS(&I);
@@ -666,11 +667,11 @@ generateStaticGraphFromPath(const Path &P,
 
     auto Chop = getChop(StartBB, LastBB, BackEdges);
 
-    assert(verifyChop(Chop) && "Invalid Region!");
-
     auto RevTopoChop = getTopoChop(Chop, StartBB, BackEdges);
 
-    auto handlePhis = [&LiveIn, &LiveOut, &Chop, &Globals, &StartBB, &BackEdges,
+    assert(verifyChop(RevTopoChop) && "Invalid Region!");
+
+    auto handlePhis = [&LiveIn, &LiveOut, &Globals, &StartBB, &BackEdges,
                        &PDT, &LastBB, &RevTopoChop](PHINode *Phi) -> int32_t {
 
         // Add uses of Phi before checking if it is LiveIn
@@ -748,13 +749,15 @@ generateStaticGraphFromPath(const Path &P,
     // Collect the live-ins and live-outs for the Chop
     uint32_t PhiLiveIn = 0;
     //for (auto &BB : Chop) {
+    // The order of iteration of blocks in this loop,
+    // does not matter. 
     for (auto &BB : RevTopoChop) {
         for (auto &I : *BB) {
             if (auto Phi = dyn_cast<PHINode>(&I)) {
                 PhiLiveIn += handlePhis(Phi);
                 continue;
             }
-            liveInHelperStatic(Chop, LiveIn, Globals, &I);
+            liveInHelperStatic(RevTopoChop, LiveIn, Globals, &I);
             // Live-Outs
             if (auto Ins = dyn_cast<Instruction>(&I)) {
                 for (auto UI = Ins->use_begin(), UE = Ins->use_end(); UI != UE;
