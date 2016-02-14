@@ -222,14 +222,27 @@ static void liveInHelperStatic(SmallVector<BasicBlock *, 16> &RevTopoChop,
     // in the trace.
 }
 
+static DenseSet<pair<const BasicBlock *, const BasicBlock *>> 
+getBackEdges(BasicBlock* StartBB) {
+    SmallVector<std::pair<const BasicBlock *, const BasicBlock *>, 8>
+        BackEdgesVec;
+    FindFunctionBackedges(*StartBB->getParent(), BackEdgesVec);
+    DenseSet<pair<const BasicBlock *, const BasicBlock *>> BackEdges;
+
+    for (auto &BE : BackEdgesVec) {
+        BackEdges.insert(BE);
+    }
+    return BackEdges;
+}
+
 void staticHelper(
     Function *StaticFunc, Function *GuardFunc, GlobalVariable *LOA,
     SmallVector<Value *, 16> &LiveIn, DenseSet<Value *> &LiveOut,
     DenseSet<Value *> &Globals, SmallVector<BasicBlock *, 16> &RevTopoChop,
-    DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges,
     LLVMContext &Context) {
 
     ValueToValueMapTy VMap;
+    DenseSet<pair<const BasicBlock *, const BasicBlock *>> BackEdges = getBackEdges(RevTopoChop.back());
 
     auto handleCallSites =
         [&VMap, &StaticFunc](CallSite &OrigCS, CallSite &StaticCS) {
@@ -633,45 +646,20 @@ static bool verifyChop(const SmallVector<BasicBlock *,16> Chop) {
     return true;
 }
 
-static DenseSet<pair<const BasicBlock *, const BasicBlock *>> 
-getBackEdges(BasicBlock* StartBB) {
-    SmallVector<std::pair<const BasicBlock *, const BasicBlock *>, 8>
-        BackEdgesVec;
-    FindFunctionBackedges(*StartBB->getParent(), BackEdgesVec);
-    DenseSet<pair<const BasicBlock *, const BasicBlock *>> BackEdges;
-
-    for (auto &BE : BackEdgesVec) {
-        BackEdges.insert(BE);
-    }
-    return BackEdges;
-}
-
 static Function* 
-generateStaticGraphFromPath(const Path &P,
-                            map<string, BasicBlock *> &BlockMap,
-                            PostDominatorTree *PDT,
-                            Module* Mod) {
+generateStaticGraphFromPath(PostDominatorTree *PDT,
+                            Module* Mod,
+                            SmallVector<BasicBlock*, 16> &RevTopoChop) {
 
-    auto *StartBB = BlockMap[P.Seq.front()];
-    auto *LastBB = BlockMap[P.Seq.back()];
-    auto DataLayoutStr = StartBB->getDataLayout();
-    auto TargetTripleStr = StartBB->getParent()->getParent()->getTargetTriple();
+    auto *StartBB = RevTopoChop.back(); 
+    auto *LastBB = RevTopoChop.front(); 
 
-    Mod->setDataLayout(DataLayoutStr);
-    Mod->setTargetTriple(TargetTripleStr);
+    assert(verifyChop(RevTopoChop) && "Invalid Region!");
 
     DenseSet<Value *> LiveOut, Globals;
     SmallVector<Value *, 16> LiveIn;
 
-    auto BackEdges = getBackEdges(StartBB);
-
-    auto Chop = getChop(StartBB, LastBB, BackEdges);
-
-    auto RevTopoChop = getTopoChop(Chop, StartBB, BackEdges);
-
-    assert(verifyChop(RevTopoChop) && "Invalid Region!");
-
-    auto handlePhis = [&LiveIn, &LiveOut, &Globals, &StartBB, &BackEdges,
+    auto handlePhis = [&LiveIn, &LiveOut, &Globals, &StartBB, 
                        &PDT, &LastBB, &RevTopoChop](PHINode *Phi) -> int32_t {
 
         // Add uses of Phi before checking if it is LiveIn
@@ -788,6 +776,11 @@ generateStaticGraphFromPath(const Path &P,
         }
     }
 
+    auto DataLayoutStr = StartBB->getDataLayout();
+    auto TargetTripleStr = StartBB->getParent()->getParent()->getTargetTriple();
+    Mod->setDataLayout(DataLayoutStr);
+    Mod->setTargetTriple(TargetTripleStr);
+
     auto VoidTy = Type::getVoidTy(Mod->getContext());
 
     std::vector<Type *> ParamTy;
@@ -828,11 +821,10 @@ generateStaticGraphFromPath(const Path &P,
     LOA->setAlignment(8);
 
     staticHelper(StaticFunc, GuardFunc, LOA, LiveIn, LiveOut, Globals,
-                 RevTopoChop, BackEdges, Mod->getContext());
+                 RevTopoChop, Mod->getContext());
 
     StripDebugInfo(*Mod);
 
-    DEBUG(errs() << "Verifying " << P.Id << "\n");
     // Dumbass verifyModule function returns false if no
     // errors are found. Ref "llvm/IR/Verifier.h":46
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
@@ -858,6 +850,18 @@ writeModule(Module* Mod, string Name) {
     File.close();
 }
 
+static SmallVector<BasicBlock*, 16> 
+getChopBlocks(Path &P, map<string, BasicBlock*>& BlockMap) {
+    auto *StartBB = BlockMap[P.Seq.front()];
+    auto *LastBB = BlockMap[P.Seq.back()];
+    auto BackEdges = getBackEdges(StartBB);
+    auto Chop = getChop(StartBB, LastBB, BackEdges);
+    auto RevTopoChop = getTopoChop(Chop, StartBB, BackEdges);
+    assert(StartBB == RevTopoChop.back() && 
+            LastBB == RevTopoChop.front() && "Sanity Check");
+    return RevTopoChop;
+}
+
 void MicroWorkloadExtract::makeSeqGraph(Function &F) {
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
     AA = &getAnalysis<AliasAnalysis>();
@@ -868,7 +872,8 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
 
     for (auto &P : Sequences) {
         Module *Mod = new Module(P.Id + string("-static"), getGlobalContext());
-        auto *ExF = generateStaticGraphFromPath(P, BlockMap, PostDomTree, Mod);
+        auto RTopoChop = getChopBlocks(P, BlockMap);
+        auto *ExF = generateStaticGraphFromPath(PostDomTree, Mod, RTopoChop);
         optimizeModule(Mod);
         writeModule(Mod, (P.Id) + string(".static.ll"));
         delete Mod;
