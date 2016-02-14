@@ -25,11 +25,14 @@ using namespace llvm;
 using namespace mwe;
 using namespace std;
 
-extern cl::opt<string> TargetFunction;
+//extern cl::opt<string> TargetFunction;
 
 //cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to analyse"),
                          //cl::value_desc("Integer"), cl::init(10));
 
+extern cl::list<std::string> FunctionList;
+extern bool isTargetFunction(const Function &f,
+                      const cl::list<std::string> &FunctionList);
 
 void MicroWorkloadExtract::readSequences(vector<Path> &S,
                                          map<int64_t, int64_t> &SM) {
@@ -342,17 +345,51 @@ void staticHelper(
         }
     }
 
+    function<void(Value&)> handleOperands;
+    handleOperands = [&VMap, &handleOperands, &StaticFunc](Value& V) {
+        User &I = *cast<User>(&V); 
+        for (auto OI = I.op_begin(), E = I.op_end(); OI != E; ++OI) {
+            if(auto CE = dyn_cast<ConstantExpr>(*OI)) {
+                handleOperands(*CE);
+            }
+            if (auto *GV = dyn_cast<GlobalVariable>(*OI)) {
+                // Since we may have already patched the global
+                // don't try to patch it again.
+                if (VMap.count(GV) == 0) continue;
+                // Check if we came from a ConstantExpr
+                // This represents a case where a ConstantExpr contains a reference to a GlobalVariable
+                // Constants can be shared across modules, but GlobalVariables cannot. We need to
+                // create a new ConstantExpr which refers to the new GlobalVariable.
+                // The following example does *not* trigger the verifier if the GV is not 
+                // remapped. 
+                // %1 = getelementptr inbounds i32* getelementptr inbounds ([66 x i32]* @two_over_pi82, i32 0, i32 0), i32 %j.0352.i62.in
+                // This expression gets optimized to :
+                // %1 = getelementptr inbounds [66 x i32]* @two_over_pi82, i32 0, i32 %j.0352.i62.in
+                // which is caught by the Verifier.
+                if(auto CE = dyn_cast<ConstantExpr>(&V)) {
+                    int32_t OpIdx = -1;
+                    while(I.getOperand(++OpIdx) != GV);
+                    auto NCE = CE->getWithOperandReplaced(OpIdx, 
+                                         cast<Constant>(VMap[GV]));
+                    for(auto UI = CE->user_begin(), UE = CE->user_end();
+                            UI != UE; UI++) {
+                        // All users of ConstExpr should be instructions
+                        auto Ins = dyn_cast<Instruction>(*UI);
+                        if( Ins->getParent()->getParent() == StaticFunc) {
+                            Ins->replaceUsesOfWith(CE, NCE);
+                        }
+                    }             
+                } else {
+                    I.replaceUsesOfWith(GV, VMap[GV]);
+                }
+            }
+        }
+    };
+
     // Patch Globals
     for (auto &BB : *StaticFunc) {
         for (auto &I : BB) {
-            for (auto OI = I.op_begin(), E = I.op_end(); OI != E; ++OI) {
-                if (auto *GV = dyn_cast<GlobalVariable>(*OI)) {
-                    // Since we may have already patched the global
-                    // don't try to patch it again.
-                    if (VMap[GV])
-                        I.replaceUsesOfWith(GV, VMap[GV]);
-                }
-            }
+            handleOperands(I);
         }
     }
 
@@ -580,11 +617,13 @@ static bool verifyChop(const DenseSet<BasicBlock *> Chop) {
             CallSite CS(&I);
             if (CS.isCall() || CS.isInvoke()) {
                 if (!CS.getCalledFunction()) {
+                    errs() << "Function Pointer\n";
                     return false;
                 } else {
                     if (CS.getCalledFunction()->isDeclaration() &&
                         checkIntrinsic(CS.getCalledFunction())) {
-                        return false;
+                        DEBUG(errs() << "External Call : " << CS.getCalledFunction()->getName() << "\n");
+                        return true;
                     }
                 }
             }
@@ -593,15 +632,8 @@ static bool verifyChop(const DenseSet<BasicBlock *> Chop) {
     return true;
 }
 
-static Function* 
-generateStaticGraphFromPath(const Path &P,
-                                        map<string, BasicBlock *> &BlockMap,
-                                        PostDominatorTree *PDT,
-                                        Module* Mod) {
-
-    auto *StartBB = BlockMap[P.Seq.front()];
-    auto *LastBB = BlockMap[P.Seq.back()];
-
+static DenseSet<pair<const BasicBlock *, const BasicBlock *>> 
+getBackEdges(BasicBlock* StartBB) {
     SmallVector<std::pair<const BasicBlock *, const BasicBlock *>, 8>
         BackEdgesVec;
     FindFunctionBackedges(*StartBB->getParent(), BackEdgesVec);
@@ -610,30 +642,31 @@ generateStaticGraphFromPath(const Path &P,
     for (auto &BE : BackEdgesVec) {
         BackEdges.insert(BE);
     }
+    return BackEdges;
+}
 
-    auto Chop = getChop(StartBB, LastBB, BackEdges);
+static Function* 
+generateStaticGraphFromPath(const Path &P,
+                            map<string, BasicBlock *> &BlockMap,
+                            PostDominatorTree *PDT,
+                            Module* Mod) {
 
-    DenseSet<const BasicBlock *> ConstChop;
-    for (auto &B : Chop)
-        ConstChop.insert(B);
-
-    uint32_t NumBackEdges = 0;
-    for (auto BE : BackEdges) {
-        if (ConstChop.count(BE.first) + ConstChop.count(BE.second) == 2)
-            NumBackEdges++;
-    }
-
-    assert(verifyChop(Chop) && "Invalid Chop");
-
+    auto *StartBB = BlockMap[P.Seq.front()];
+    auto *LastBB = BlockMap[P.Seq.back()];
     auto DataLayoutStr = StartBB->getDataLayout();
     auto TargetTripleStr = StartBB->getParent()->getParent()->getTargetTriple();
 
-    //Module *Mod = new Module(P.Id + string("-static"), getGlobalContext());
     Mod->setDataLayout(DataLayoutStr);
     Mod->setTargetTriple(TargetTripleStr);
 
     DenseSet<Value *> LiveOut, Globals;
     SmallVector<Value *, 16> LiveIn;
+
+    auto BackEdges = getBackEdges(StartBB);
+
+    auto Chop = getChop(StartBB, LastBB, BackEdges);
+
+    assert(verifyChop(Chop) && "Invalid Region!");
 
     auto RevTopoChop = getTopoChop(Chop, StartBB, BackEdges);
 
@@ -645,7 +678,8 @@ generateStaticGraphFromPath(const Path &P,
         for (auto UI = Phi->use_begin(), UE = Phi->use_end(); UI != UE; UI++) {
             if (auto UIns = dyn_cast<Instruction>(UI->getUser())) {
                 auto Tgt = UIns->getParent();
-                if (!Chop.count(Tgt)) {
+                //if (!Chop.count(Tgt)) {
+                if(find(RevTopoChop.begin(), RevTopoChop.end(), Tgt) == RevTopoChop.end()) {
                     // errs() << "Adding LO: " << *Ins << "\n";
                     if (!PDT->dominates(LastBB, UIns->getParent())) {
                         // Phi at the begining of path is a live-in,
@@ -691,9 +725,11 @@ generateStaticGraphFromPath(const Path &P,
         for (uint32_t I = 0; I < Phi->getNumIncomingValues(); I++) {
             auto *Blk = Phi->getIncomingBlock(I);
             auto *Val = Phi->getIncomingValue(I);
-            if (Chop.count(Blk)) {
+            //if (Chop.count(Blk)) {
+            if(find(RevTopoChop.begin(), RevTopoChop.end(), Blk) != RevTopoChop.end()) {
                 if (auto *VI = dyn_cast<Instruction>(Val)) {
-                    if (Chop.count(VI->getParent()) == 0) {
+                    //if (Chop.count(VI->getParent()) == 0) {
+                    if(find(RevTopoChop.begin(), RevTopoChop.end(), VI->getParent()) == RevTopoChop.end()) {
                         LiveIn.push_back(Val);
                         Num += 1;
                     }
@@ -711,7 +747,8 @@ generateStaticGraphFromPath(const Path &P,
 
     // Collect the live-ins and live-outs for the Chop
     uint32_t PhiLiveIn = 0;
-    for (auto &BB : Chop) {
+    //for (auto &BB : Chop) {
+    for (auto &BB : RevTopoChop) {
         for (auto &I : *BB) {
             if (auto Phi = dyn_cast<PHINode>(&I)) {
                 PhiLiveIn += handlePhis(Phi);
@@ -723,7 +760,8 @@ generateStaticGraphFromPath(const Path &P,
                 for (auto UI = Ins->use_begin(), UE = Ins->use_end(); UI != UE;
                      UI++) {
                     if (auto UIns = dyn_cast<Instruction>(UI->getUser())) {
-                        if (!Chop.count(UIns->getParent())) {
+                        //if (!Chop.count(UIns->getParent())) {
+                        if(find(RevTopoChop.begin(), RevTopoChop.end(), UIns->getParent()) == RevTopoChop.end()) {
                             // errs() << "Adding LO: " << *Ins << "\n";
                             // Need to reason about this check some more.
                             if (!PDT->dominates(LastBB, UIns->getParent()) &&
@@ -791,33 +829,30 @@ generateStaticGraphFromPath(const Path &P,
 
     StripDebugInfo(*Mod);
 
-    error_code EC;
-    string Name = (P.Id) + string(".static.ll");
-    raw_fd_ostream File(Name, EC, sys::fs::OpenFlags::F_RW);
-    Mod->print(File, nullptr);
-    File.close();
-
-    // FIXME : Disable O3 version for now
-    // PassManagerBuilder PMB;
-    // PMB.OptLevel = 3;
-    // PMB.SLPVectorize = false;
-    // PMB.BBVectorize = false;
-    // PassManager PM;
-    // PMB.populateModulePassManager(PM);
-    // PM.run(*Mod);
-
-    // Name = (P.Id) + string(".static.O3.ll");
-    // raw_fd_ostream File3(Name, EC, sys::fs::OpenFlags::F_RW);
-    // Mod->print(File3, nullptr);
-    // File3.close();
-
     DEBUG(errs() << "Verifying " << P.Id << "\n");
     // Dumbass verifyModule function returns false if no
     // errors are found. Ref "llvm/IR/Verifier.h":46
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
-    //delete Mod;
-    
     return StaticFunc;
+}
+
+static void 
+optimizeModule(Module* Mod) {
+    PassManagerBuilder PMB;
+    PMB.OptLevel = 3;
+    PMB.SLPVectorize = false;
+    PMB.BBVectorize = false;
+    PassManager PM;
+    PMB.populateModulePassManager(PM);
+    PM.run(*Mod);
+}
+
+static void
+writeModule(Module* Mod, string Name) {
+    error_code EC;
+    raw_fd_ostream File(Name, EC, sys::fs::OpenFlags::F_RW);
+    Mod->print(File, nullptr);
+    File.close();
 }
 
 void MicroWorkloadExtract::makeSeqGraph(Function &F) {
@@ -831,6 +866,8 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
     for (auto &P : Sequences) {
         Module *Mod = new Module(P.Id + string("-static"), getGlobalContext());
         auto *ExF = generateStaticGraphFromPath(P, BlockMap, PostDomTree, Mod);
+        optimizeModule(Mod);
+        writeModule(Mod, (P.Id) + string(".static.ll"));
         delete Mod;
     }
 
@@ -844,7 +881,8 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
 
 bool MicroWorkloadExtract::runOnModule(Module &M) {
     for (auto &F : M)
-        if (F.getName() == TargetFunction)
+        //if (F.getName() == TargetFunction)
+        if (isTargetFunction(F, FunctionList))
             makeSeqGraph(F);
 
     return false;
