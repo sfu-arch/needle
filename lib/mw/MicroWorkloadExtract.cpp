@@ -98,21 +98,6 @@ static bool isBlockInPath(const string &S, const Path &P) {
     return find(P.Seq.begin(), P.Seq.end(), S) != P.Seq.end();
 }
 
-// static inline bool isUnconditionalBranch(Instruction *I) {
-//     if (auto BRI = dyn_cast<BranchInst>(I))
-//         return BRI->isUnconditional();
-//     return false;
-// }
-//
-// static inline uint32_t getBlockIdx(const Path &P, BasicBlock *BB) {
-//     auto Name = BB->getName().str();
-//     uint32_t Idx = 0;
-//     for (; Idx < P.Seq.size(); Idx++)
-//         if (Name == P.Seq[Idx])
-//             return Idx;
-//     assert(false && "Should be Unreachable");
-// }
-
 static inline void bSliceDFSHelper(
     BasicBlock *BB, DenseSet<BasicBlock *> &BSlice,
     DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
@@ -371,24 +356,16 @@ void staticHelper(
                 // don't try to patch it again.
                 if (VMap.count(GV) == 0) continue;
                 // Check if we came from a ConstantExpr
-                // This represents a case where a ConstantExpr contains a reference to a GlobalVariable
-                // Constants can be shared across modules, but GlobalVariables cannot. We need to
-                // create a new ConstantExpr which refers to the new GlobalVariable.
-                // The following example does *not* trigger the verifier if the GV is not 
-                // remapped. 
-                // %1 = getelementptr inbounds i32* getelementptr inbounds ([66 x i32]* @two_over_pi82, i32 0, i32 0), i32 %j.0352.i62.in
-                // This expression gets optimized to :
-                // %1 = getelementptr inbounds [66 x i32]* @two_over_pi82, i32 0, i32 %j.0352.i62.in
-                // which is caught by the Verifier.
                 if(auto CE = dyn_cast<ConstantExpr>(&V)) {
                     int32_t OpIdx = -1;
                     while(I.getOperand(++OpIdx) != GV);
                     auto NCE = CE->getWithOperandReplaced(OpIdx, 
                                          cast<Constant>(VMap[GV]));
-                    for(auto UI = CE->user_begin(), UE = CE->user_end();
-                            UI != UE; UI++) {
+                    vector<User *> Users(CE->user_begin(), CE->user_end());
+                    for (auto U = Users.begin(),
+                              UE = Users.end(); U != UE; ++U) {
                         // All users of ConstExpr should be instructions
-                        auto Ins = dyn_cast<Instruction>(*UI);
+                        auto Ins = dyn_cast<Instruction>(*U);
                         if( Ins->getParent()->getParent() == StaticFunc) {
                             Ins->replaceUsesOfWith(CE, NCE);
                         }
