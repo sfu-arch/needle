@@ -1899,38 +1899,35 @@ void staticHelper(
         }
     }
 
+    // Patch Globals Lambda
     function<void(Value&)> handleOperands;
     handleOperands = [&VMap, &handleOperands, &StaticFunc](Value& V) {
         User &I = *cast<User>(&V); 
         for (auto OI = I.op_begin(), E = I.op_end(); OI != E; ++OI) {
             if(auto CE = dyn_cast<ConstantExpr>(*OI)) {
+                DEBUG(errs() << V << "\n is a ConstExpr\n");
                 handleOperands(*CE);
             }
             if (auto *GV = dyn_cast<GlobalVariable>(*OI)) {
                 // Since we may have already patched the global
                 // don't try to patch it again.
                 if (VMap.count(GV) == 0) continue;
+                DEBUG(errs() << " has unpatched global\n");
                 // Check if we came from a ConstantExpr
-                // This represents a case where a ConstantExpr contains a reference to a GlobalVariable
-                // Constants can be shared across modules, but GlobalVariables cannot. We need to
-                // create a new ConstantExpr which refers to the new GlobalVariable.
-                // The following example does *not* trigger the verifier if the GV is not 
-                // remapped. 
-                // %1 = getelementptr inbounds i32* getelementptr inbounds ([66 x i32]* @two_over_pi82, i32 0, i32 0), i32 %j.0352.i62.in
-                // This expression gets optimized to :
-                // %1 = getelementptr inbounds [66 x i32]* @two_over_pi82, i32 0, i32 %j.0352.i62.in
-                // which is caught by the Verifier.
                 if(auto CE = dyn_cast<ConstantExpr>(&V)) {
                     int32_t OpIdx = -1;
                     while(I.getOperand(++OpIdx) != GV);
                     auto NCE = CE->getWithOperandReplaced(OpIdx, 
                                          cast<Constant>(VMap[GV]));
-                    for(auto UI = CE->user_begin(), UE = CE->user_end();
-                            UI != UE; UI++) {
-                        // All users of ConstExpr should be instructions
-                        auto Ins = dyn_cast<Instruction>(*UI);
+                    DEBUG(errs() << "Num Uses: " << CE->getNumUses() << "\n");
+                    
+                    vector<User *> Users(CE->user_begin(), CE->user_end());
+                    for (auto U = Users.begin(),
+                              UE = Users.end(); U != UE; ++U) {
+                        auto Ins = dyn_cast<Instruction>(*U);
                         if( Ins->getParent()->getParent() == StaticFunc) {
                             Ins->replaceUsesOfWith(CE, NCE);
+                            DEBUG(errs() << "Patched: " << *Ins << "\n");
                         }
                     }             
                 } else {
