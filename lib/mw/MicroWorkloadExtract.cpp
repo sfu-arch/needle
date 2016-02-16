@@ -839,6 +839,17 @@ getChopBlocks(Path &P, map<string, BasicBlock*>& BlockMap) {
     return RevTopoChop;
 }
 
+static SmallVector<BasicBlock*, 16> 
+getTraceBlocks(Path &P, map<string, BasicBlock*>& BlockMap) {
+    SmallVector<BasicBlock*, 16> RPath;    
+    for(auto RB = P.Seq.rbegin(), RE = P.Seq.rend(); 
+                RB != RE; RB++) {
+        assert(BlockMap[*RB] && "Path does not exist");
+        RPath.push_back(BlockMap[*RB]);
+    }
+    return RPath;
+}
+
 void MicroWorkloadExtract::makeSeqGraph(Function &F) {
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
     AA = &getAnalysis<AliasAnalysis>();
@@ -849,7 +860,8 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
 
     for (auto &P : Sequences) {
         Module *Mod = new Module(P.Id + string("-static"), getGlobalContext());
-        auto RTopoChop = getChopBlocks(P, BlockMap);
+        //auto RTopoChop = getChopBlocks(P, BlockMap);
+        auto RTopoChop = getTraceBlocks(P, BlockMap); // ??
         auto *ExF = generateStaticGraphFromPath(PostDomTree, Mod, RTopoChop);
         optimizeModule(Mod);
         writeModule(Mod, (P.Id) + string(".static.ll"));
