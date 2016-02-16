@@ -2551,6 +2551,7 @@ void GraphGrok::makeSeqGraph(Function &F) {
             analyseTemporalSlack(P, SeqChain, BlockMap, Chains, StatsFile);
             analyseChains(P, SeqChain, BlockMap, Chains, StatsFile);
             analyseGeneral(P, SeqChain, BlockMap, StatsFile);
+            writeGraph(P, SeqChain, string("post"));
             StatsFile << "\"end\" : \"end\" }";
         } else if (GenerateTrace == "dynamic") {
             liveInLiveOut(PostDomTree, AA, P, SeqChain, BlockMap, StatsFile);
