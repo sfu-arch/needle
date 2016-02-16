@@ -13,6 +13,7 @@
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/ADT/SmallVector.h"
@@ -31,8 +32,8 @@ using namespace grok;
 using namespace std;
 
 const char *VertexTypeStr[NUM_VERTEX_TYPES] = {
-    "INT",     "FP",     "FUNC", "INTRIN", "GEP",      "UBR",
-    "CBR",     "SELECT", "PHI",  "MEM",    "BB_START", "RET",
+    "INT",     "FP",     "FUNC", "INTRIN", "GEP",    "UBR",      "CBR",
+    "SELECT",  "PHI",    "MEM",  "MEM_LD", "MEM_ST", "BB_START", "RET",
     "CONVERT", "VECTOR", "AGG",  "OTHER",  "CHAIN"};
 const char *EdgeTypeStr[NUM_EDGE_TYPES] = {"REG", "DATA"};
 
@@ -42,18 +43,21 @@ static_assert(NUM_VERTEX_TYPES ==
 static_assert(NUM_EDGE_TYPES == sizeof(EdgeTypeStr) / sizeof(EdgeTypeStr[0]),
               "Unequal number of Edge Types and string descriptions");
 
-cl::opt<string> TargetFunction("fn", cl::Required,
-                               cl::desc("Target function name"),
-                               cl::value_desc("string"), cl::init("main"));
+extern cl::list<std::string> FunctionList;
+extern bool isTargetFunction(const Function &f,
+                      const cl::list<std::string> &FunctionList);
 
-cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to analyse"),
-                         cl::value_desc("Integer"), cl::init(10));
+//extern cl::opt<string> TargetFunction; 
+
+//cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to analyse"),
+                         //cl::value_desc("Integer"), cl::init(10));
+                         
 cl::opt<string>
     GenerateTrace("trace", cl::desc("Generate bitcode trace from path graph"),
                   cl::value_desc("static/dynamic"), cl::init("unset"));
 
-cl::opt<string> OnlyPath("path", cl::desc("Run on only specified path"),
-                         cl::value_desc("String"), cl::init("na"));
+//cl::opt<string> OnlyPath("path", cl::desc("Run on only specified path"),
+                         //cl::value_desc("String"), cl::init("na"));
 
 VertexType getOpType(Instruction &I);
 
@@ -66,9 +70,6 @@ void GraphGrok::readSequences(vector<Path> &S, map<int64_t, int64_t> &SM) {
         std::vector<std::string> Tokens;
         boost::split(Tokens, Line, boost::is_any_of("\t "));
         P.Id = Tokens[0];
-
-        if (OnlyPath != "na" && OnlyPath != P.Id)
-            continue;
 
         P.Freq = stoull(Tokens[1]);
         P.PType = static_cast<PathType>(stoi(Tokens[2]));
@@ -83,7 +84,7 @@ void GraphGrok::readSequences(vector<Path> &S, map<int64_t, int64_t> &SM) {
         // c. If Path is FIRO, then range is +5, -1
         // d. If Path is RIFO, then range is +4, -2
         // e. If Path is FIFO, then range is +5, -2
-        // f. If Path is SELF, then range is +4, -0
+        // f. If Path is SELF, then range is +4, -1
         switch (P.PType) {
         case RIRO:
             move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
@@ -106,7 +107,7 @@ void GraphGrok::readSequences(vector<Path> &S, map<int64_t, int64_t> &SM) {
         S.push_back(P);
         // SM[P.Id] = Count;
         Count++;
-        if (Count == MaxNumPaths)
+        if (Count == NumSeq)
             break;
     }
     SeqFile.close();
@@ -1036,10 +1037,14 @@ void analyseGeneral(const Path &P, BoostGraph &BG,
                 IndirectCallCount++;
         }
         if (BG[V].Type == MEM) {
-            if (dyn_cast<LoadInst>(BG[V].Inst))
+            if (dyn_cast<LoadInst>(BG[V].Inst)) {
+                BG[V].Type = MEM_LD;
                 LoadCounter++;
-            if (dyn_cast<StoreInst>(BG[V].Inst))
+            }
+            if (dyn_cast<StoreInst>(BG[V].Inst)) {
+                BG[V].Type = MEM_ST;
                 StoreCounter++;
+            }
         }
     }
 
@@ -1822,7 +1827,7 @@ void staticHelper(
                 continue;
             auto *NewI = I.clone();
             NewBB->getInstList().push_back(NewI);
-
+            //errs() << "Ins : " << *NewI << "\n";
             assert(VMap.count(&I) == 0 && "Need new values");
             VMap[&I] = NewI;
             CallSite CS(&I), TraceCS(NewI);
@@ -1894,17 +1899,48 @@ void staticHelper(
         }
     }
 
+    // Patch Globals Lambda
+    function<void(Value&)> handleOperands;
+    handleOperands = [&VMap, &handleOperands, &StaticFunc](Value& V) {
+        User &I = *cast<User>(&V); 
+        for (auto OI = I.op_begin(), E = I.op_end(); OI != E; ++OI) {
+            if(auto CE = dyn_cast<ConstantExpr>(*OI)) {
+                DEBUG(errs() << V << "\n is a ConstExpr\n");
+                handleOperands(*CE);
+            }
+            if (auto *GV = dyn_cast<GlobalVariable>(*OI)) {
+                // Since we may have already patched the global
+                // don't try to patch it again.
+                if (VMap.count(GV) == 0) continue;
+                DEBUG(errs() << " has unpatched global\n");
+                // Check if we came from a ConstantExpr
+                if(auto CE = dyn_cast<ConstantExpr>(&V)) {
+                    int32_t OpIdx = -1;
+                    while(I.getOperand(++OpIdx) != GV);
+                    auto NCE = CE->getWithOperandReplaced(OpIdx, 
+                                         cast<Constant>(VMap[GV]));
+                    DEBUG(errs() << "Num Uses: " << CE->getNumUses() << "\n");
+                    
+                    vector<User *> Users(CE->user_begin(), CE->user_end());
+                    for (auto U = Users.begin(),
+                              UE = Users.end(); U != UE; ++U) {
+                        auto Ins = dyn_cast<Instruction>(*U);
+                        if( Ins->getParent()->getParent() == StaticFunc) {
+                            Ins->replaceUsesOfWith(CE, NCE);
+                            DEBUG(errs() << "Patched: " << *Ins << "\n");
+                        }
+                    }             
+                } else {
+                    I.replaceUsesOfWith(GV, VMap[GV]);
+                }
+            }
+        }
+    };
+
     // Patch Globals
     for (auto &BB : *StaticFunc) {
         for (auto &I : BB) {
-            for (auto OI = I.op_begin(), E = I.op_end(); OI != E; ++OI) {
-                if (auto *GV = dyn_cast<GlobalVariable>(*OI)) {
-                    // Since we may have already patched the global
-                    // don't try to patch it again.
-                    if (VMap[GV])
-                        I.replaceUsesOfWith(GV, VMap[GV]);
-                }
-            }
+            handleOperands(I);
         }
     }
 
@@ -2362,6 +2398,8 @@ static void generateStaticGraphFromPath(const Path &P,
     Mod->print(File, nullptr);
     File.close();
 
+    assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
+
     PassManagerBuilder PMB;
     PMB.OptLevel = 3;
     PMB.SLPVectorize = false;
@@ -2391,7 +2429,10 @@ void GraphGrok::makeSeqGraph(Function &F) {
     typedef pair<BasicBlock *, BasicBlock *> Key;
     typedef pair<uint64_t, APInt> Val;
     auto PairCmp =
-        [](const Key &A, const Key &B) -> bool { return A.first < B.first; };
+        [](const Key &A, const Key &B) -> bool { 
+            return A.first < B.first || 
+                (A.first == B.first && A.second < B.second); 
+        };
     map<Key, Val, decltype(PairCmp)> FrequentChops(PairCmp);
     map<Key, vector<string>, decltype(PairCmp)> ChopTraceMap(PairCmp);
 
@@ -2502,6 +2543,7 @@ void GraphGrok::makeSeqGraph(Function &F) {
             analyseTemporalSlack(P, SeqChain, BlockMap, Chains, StatsFile);
             analyseChains(P, SeqChain, BlockMap, Chains, StatsFile);
             analyseGeneral(P, SeqChain, BlockMap, StatsFile);
+            writeGraph(P, SeqChain, string("post"));
             StatsFile << "\"end\" : \"end\" }";
         } else if (GenerateTrace == "dynamic") {
             liveInLiveOut(PostDomTree, AA, P, SeqChain, BlockMap, StatsFile);
@@ -2562,7 +2604,8 @@ void GraphGrok::makeSeqGraph(Function &F) {
 
 bool GraphGrok::runOnModule(Module &M) {
     for (auto &F : M)
-        if (F.getName() == TargetFunction)
+        //if (F.getName() == TargetFunction)
+        if (isTargetFunction(F, FunctionList))
             makeSeqGraph(F);
 
     return false;

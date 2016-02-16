@@ -6,6 +6,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/ADT/SCCIterator.h"
+#include "llvm/ADT/SetVector.h"
 
 #include "EPPEncode.h"
 
@@ -20,7 +21,7 @@ using namespace llvm;
 using namespace epp;
 using namespace std;
 
-#define DEBUG_TYPE "peruse_epp"
+#define DEBUG_TYPE "epp_encode"
 
 bool EPPEncode::doInitialization(Module &m) { return false; }
 
@@ -283,7 +284,7 @@ void EPPEncode::releaseMemory() {
 void EPPEncode::encode(Function &F) {
     DEBUG(errs() << "Called Encode on " << F.getName() << "\n");
 
-    set<BasicBlock *> BackedgeTargets;
+    SetVector<BasicBlock *> BackedgeTargets;
     BasicBlock *LastTopoExit = nullptr;
 
     for (auto &POB : functionPostorderTraversal(F, LI)) {
@@ -371,12 +372,17 @@ void EPPEncode::encode(Function &F) {
 
     computeIncrement(&F.getEntryBlock(), LastTopoExit, Inc, Val, T);
 
+    DEBUG(errs() << "\nVals :\n");
+    for (auto &V : Val)
+        DEBUG(errs() << V.first->src()->getName() << " -> "
+                     << V.first->tgt()->getName() << " " << V.second << "\n");
+
     DEBUG(errs() << "\nIncrements :\n");
     for (auto &I : Inc)
         DEBUG(errs() << I.first->src()->getName() << " -> "
                      << I.first->tgt()->getName() << " " << I.second << "\n");
 
-    errs() << "NumPaths : " << numPaths[&F.getEntryBlock()] << "\n";
+    DEBUG(errs() << "NumPaths : " << numPaths[&F.getEntryBlock()] << "\n");
 }
 
 char EPPEncode::ID = 0;

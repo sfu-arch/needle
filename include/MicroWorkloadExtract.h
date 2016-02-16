@@ -1,5 +1,5 @@
-#ifndef GRAPHGROK_H
-#define GRAPHGROK_H
+#ifndef MICROWORKLOAD_H
+#define MICROWORKLOAD_H
 
 #include "llvm/ADT/Statistic.h"
 #include "llvm/IR/Function.h"
@@ -32,54 +32,8 @@
 #include <fstream>
 #include <set>
 #include <map>
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/breadth_first_search.hpp>
-#include <boost/graph/graphviz.hpp>
-#include <boost/bimap.hpp>
 
-namespace grok {
-
-enum VertexType {
-    INT,
-    FP,
-    FUNC,
-    INTRIN,
-    GEP,
-    UBR,
-    CBR,
-    SELECT,
-    PHI,
-    MEM,
-    MEM_LD,
-    MEM_ST,
-    BB_START,
-    RET,
-    CONVERT,
-    VECTOR,
-    AGG,
-    OTHER,
-    CHAIN,
-    NUM_VERTEX_TYPES
-};
-enum EdgeType { REG, DATA, NUM_EDGE_TYPES };
-
-// Graph Defs using bundled properties
-struct VertexProp {
-    uint32_t Level;
-    VertexType Type;
-    llvm::Instruction *Inst;
-    std::string Ops;
-    uint32_t MyLatency;
-};
-struct EdgeProp {
-    EdgeType Type;
-};
-typedef boost::adjacency_list<boost::listS, boost::vecS, boost::bidirectionalS,
-                              VertexProp, EdgeProp> BoostGraph;
-typedef boost::graph_traits<BoostGraph>::vertex_descriptor Vertex;
-typedef boost::graph_traits<BoostGraph>::edge_descriptor Edge;
-typedef boost::bimap<Vertex, llvm::Instruction *> bm_type;
-typedef boost::bimap<Vertex, llvm::Instruction *>::value_type bm_index;
+namespace mwe {
 
 // R=Real F=Fake I=In O=Out
 enum PathType { RIRO, FIRO, RIFO, FIFO, SELF };
@@ -92,7 +46,7 @@ struct Path {
     std::set<llvm::Value *> LiveIn, LiveOut, MemIn, MemOut, Globals;
 };
 
-struct GraphGrok : public llvm::ModulePass {
+struct MicroWorkloadExtract : public llvm::ModulePass {
     static char ID;
     std::string SeqFilePath;
     int NumSeq;
@@ -101,9 +55,8 @@ struct GraphGrok : public llvm::ModulePass {
     std::map<int64_t, int64_t> SequenceMap;
     llvm::PostDominatorTree *PostDomTree;
     llvm::AliasAnalysis *AA;
-    std::ofstream StatsFile;
 
-    GraphGrok(std::string S, int N)
+    MicroWorkloadExtract(std::string S, int N)
         : llvm::ModulePass(ID), SeqFilePath(S), NumSeq(N) {}
 
     virtual bool runOnModule(llvm::Module &M) override;
@@ -113,9 +66,6 @@ struct GraphGrok : public llvm::ModulePass {
     void readSequences(std::vector<Path> &S, std::map<int64_t, int64_t> &SM);
 
     void makeSeqGraph(llvm::Function &F);
-    void makeBBPDG(llvm::BasicBlock &BB);
-    void constructGraph(Path &P, BoostGraph &BG,
-                        std::map<std::string, llvm::BasicBlock *> &BlockMap);
 
     virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
         AU.addRequired<llvm::AliasAnalysis>();

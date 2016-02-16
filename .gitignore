@@ -2,3 +2,5 @@
 *.o
 *.ll
 *.bc
+*.pyc
+*.swp

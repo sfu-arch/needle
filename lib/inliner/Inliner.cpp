@@ -28,7 +28,6 @@ InlineCost PeruseInliner::getInlineCost(CallSite CS) {
 }
 
 bool PeruseInliner::runOnSCC(CallGraphSCC &SCC) {
-    ICA = &getAnalysis<InlineCostAnalysis>();
     bool Changed = false;
     while ((Changed = Inliner::runOnSCC(SCC)))
         ;
@@ -36,7 +35,6 @@ bool PeruseInliner::runOnSCC(CallGraphSCC &SCC) {
 }
 
 void PeruseInliner::getAnalysisUsage(AnalysisUsage &AU) const {
-    AU.addRequired<InlineCostAnalysis>();
     Inliner::getAnalysisUsage(AU);
 }
 

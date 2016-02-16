@@ -1,5 +1,6 @@
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/Support/raw_ostream.h"
@@ -14,19 +15,21 @@ using namespace llvm;
 using namespace epp;
 using namespace std;
 
-#define DEBUG_TYPE "peruse_epp"
+#define DEBUG_TYPE "epp_decode"
 
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &, const cl::list<std::string> &);
 
-cl::opt<std::string> ProfileDumpFile(
-    "path-profile", cl::desc("File containing dynamic path profile data:"),
-    cl::value_desc("filename"), cl::init("path-profile-results.txt"));
+extern cl::opt<std::string> profile;
+extern cl::opt<std::string> selfloop;
+//cl::opt<std::string> ProfileDumpFile(
+    //"path-profile", cl::desc("File containing dynamic path profile data:"),
+    //cl::value_desc("filename"), cl::init("path-profile-results.txt"));
 
-cl::opt<std::string>
-    SelfLoopDumpFile("self-loop-profile",
-                     cl::desc("File containing dynamic path profile data:"),
-                     cl::value_desc("filename"), cl::init("self-loop.txt"));
+//cl::opt<std::string>
+    //SelfLoopDumpFile("self-loop-profile",
+                     //cl::desc("File containing dynamic path profile data:"),
+                     //cl::value_desc("filename"), cl::init("self-loop.txt"));
 
 void printPath(std::vector<llvm::BasicBlock *> &Blocks,
                std::ofstream &Outfile) {
@@ -45,16 +48,6 @@ struct Path {
 
     // Path() : Func(nullptr), id(APInt(256, StringRef("0"), 10)), count(0) {}
 };
-
-// static bool isTargetFunction(const Function &f,
-// const cl::list<std::string> &FunctionList) {
-// if (f.isDeclaration())
-// return false;
-// for (auto &fname : FunctionList)
-// if (fname == f.getName())
-// return true;
-// return false;
-//}
 
 static bool isFunctionExiting(BasicBlock *BB) {
     if (BB->getTerminator()->getNumSuccessors() == 0)
@@ -98,9 +91,9 @@ static uint64_t pathCheck(vector<BasicBlock *> &Blocks) {
                 } else {
                     if (CS.getCalledFunction()->isDeclaration() &&
                         checkIntrinsic(CS.getCalledFunction())) {
-                        errs()
-                            << "LIB Call: " << CS.getCalledFunction()->getName()
-                            << "\n";
+                        DEBUG(errs() << "Lib Call: "
+                                     << CS.getCalledFunction()->getName()
+                                     << "\n");
                         return 0;
                     }
                 }
@@ -114,9 +107,33 @@ static uint64_t pathCheck(vector<BasicBlock *> &Blocks) {
     return NumIns;
 }
 
+void printPathSrc(std::vector<llvm::BasicBlock *> &blocks) {
+    unsigned line = 0;
+    llvm::StringRef file;
+    for (auto *bb : blocks) {
+        for (auto &instruction : *bb) {
+            MDNode *n = instruction.getMetadata("dbg");
+            if (!n) {
+                continue;
+            }
+
+            DILocation loc(n);
+            if (loc.getLineNumber() != line || loc.getFilename() != file) {
+                line = loc.getLineNumber();
+                file = loc.getFilename();
+                errs() << "File " << file.str() << " line " << line
+                             << "\n";
+                // break; // FIXME : This makes it only print once for each BB,
+                       // remove to print all
+                       // source lines per instruction.
+            }
+        }
+    }
+}
+
 bool EPPDecode::runOnModule(Module &M) {
     // FILE *infile = fopen(ProfileDumpFile.c_str(), "r");
-    ifstream inFile(ProfileDumpFile.c_str(), ios::in);
+    ifstream inFile(profile.c_str(), ios::in);
     assert(inFile.is_open() && "Could not open file for reading");
 
     uint64_t totalPathCount;
@@ -143,7 +160,7 @@ bool EPPDecode::runOnModule(Module &M) {
 
     inFile.close();
 
-    ifstream inFile2(SelfLoopDumpFile.c_str(), ios::in);
+    ifstream inFile2(selfloop.c_str(), ios::in);
     assert(inFile2.is_open() && "Could not open file for reading");
     uint64_t SelfLoopId, Freq, totalSelfLoopCount;
     inFile2 >> totalSelfLoopCount;
@@ -180,10 +197,13 @@ bool EPPDecode::runOnModule(Module &M) {
         } else {
             pathFail++;
         }
+        errs() << "Path ID: " << paths[i].id.toString(10, false)
+                     << " Freq: " << paths[i].count << "\n";
+        printPathSrc(bbSequences[i].second);
         DEBUG(errs() << "\n");
     }
 
-    errs() << "Path Check Fails : " << pathFail << "\n";
+    DEBUG(errs() << "Path Check Fails : " << pathFail << "\n");
 
     // Dump self loops (if any)
     for (auto KV : SelfProfileMap) {
@@ -194,7 +214,7 @@ bool EPPDecode::runOnModule(Module &M) {
         Path.push_back(Enc->selfLoopMap[Id]);
         auto C = pathCheck(Path);
         if (C)
-            Outfile << (totalPathCount + 1 + Id) << " " << Count << " 4 " << C
+            Outfile << (totalPathCount + 1 + Id) << " " << Count << " 4 " << C << " "
                     << Path[0]->getName().str() << " \n";
     }
     return false;
@@ -240,7 +260,12 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
         SelectedEdges.push_back(Select);
         Position = Select->tgt();
         pathID -= Wt;
-        // DEBUG(errs() << pathID << "\n");
+        DEBUG(errs() << pathID << "\n");
+    }
+
+    // Only one path so it must be REAL
+    if (SelectedEdges.empty()) {
+        return make_pair(RIRO, sequence);
     }
 
     if (SelectedEdges.front()->Type == EREAL &&
