@@ -624,7 +624,7 @@ static bool verifyChop(const SmallVector<BasicBlock *,16> Chop) {
 }
 
 static Function* 
-generateStaticGraphFromPath(PostDominatorTree *PDT,
+extractAsFunction(PostDominatorTree *PDT,
                             Module* Mod,
                             SmallVector<BasicBlock*, 16> &RevTopoChop) {
 
@@ -861,24 +861,17 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
     for (auto &P : Sequences) {
         Module *Mod = new Module(P.Id + string("-static"), getGlobalContext());
         //auto RTopoChop = getChopBlocks(P, BlockMap);
-        auto RTopoChop = getTraceBlocks(P, BlockMap); // ??
-        auto *ExF = generateStaticGraphFromPath(PostDomTree, Mod, RTopoChop);
+        auto RTopoChop = getTraceBlocks(P, BlockMap);
+        auto *ExF = extractAsFunction(PostDomTree, Mod, RTopoChop);
         optimizeModule(Mod);
         writeModule(Mod, (P.Id) + string(".static.ll"));
         delete Mod;
     }
 
-    // Generate block set
-    // a. Chop
-    // b. Unify
-    // c. Trace
-    // Extract function
-    // Reintegrate function
 }
 
 bool MicroWorkloadExtract::runOnModule(Module &M) {
     for (auto &F : M)
-        //if (F.getName() == TargetFunction)
         if (isTargetFunction(F, FunctionList))
             makeSeqGraph(F);
 
