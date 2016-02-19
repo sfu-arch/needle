@@ -15,6 +15,7 @@
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/IR/DerivedTypes.h"
 #include <cxxabi.h>
 
 #include <map>
@@ -757,7 +758,14 @@ extractAsFunction(PostDominatorTree *PDT,
     auto TargetTripleStr = StartBB->getParent()->getParent()->getTargetTriple();
     Mod->setDataLayout(DataLayoutStr);
     Mod->setTargetTriple(TargetTripleStr);
+    
+    SmallVector<Type*, 16> LiveOutTypes(LiveOut.size());
+    transform(LiveOut.begin(), LiveOut.end(), LiveOutTypes.begin(), 
+            [](const Value* V) -> Type * { return V->getType(); });
+    // Create a packed struct return type
+    auto StructTy = StructType::get(Mod->getContext(), LiveOutTypes, true);
 
+    // Void return type for extracted function
     auto VoidTy = Type::getVoidTy(Mod->getContext());
 
     std::vector<Type *> ParamTy;
@@ -860,14 +868,13 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
 
     for (auto &P : Sequences) {
         Module *Mod = new Module(P.Id + string("-static"), getGlobalContext());
-        //auto RTopoChop = getChopBlocks(P, BlockMap);
-        auto RTopoChop = getTraceBlocks(P, BlockMap);
+        auto RTopoChop = getChopBlocks(P, BlockMap);
+        //auto RTopoChop = getTraceBlocks(P, BlockMap);
         auto *ExF = extractAsFunction(PostDomTree, Mod, RTopoChop);
         optimizeModule(Mod);
         writeModule(Mod, (P.Id) + string(".static.ll"));
         delete Mod;
     }
-
 }
 
 bool MicroWorkloadExtract::runOnModule(Module &M) {
