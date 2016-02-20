@@ -186,20 +186,32 @@ bool EPPDecode::runOnModule(Module &M) {
     uint64_t pathFail = 0;
     // Dump paths
     for (size_t i = 0, e = bbSequences.size(); i < e; ++i) {
-        if (auto Count = pathCheck(bbSequences[i].second)) {
+        auto pType = bbSequences[i].first;
+        int start = 0, end = 0;
+        switch(pType){
+            case RIRO : break;
+            case FIRO : start = 1; break;
+            case RIFO : end = 1; break;
+            case FIFO : start = 1; end = 1;
+            // case SELF : break; // Does not exist yet.
+        }
+        vector<BasicBlock*> blocks(bbSequences[i].second.begin()+start, 
+                            bbSequences[i].second.end()-end); 
+
+        if (auto Count = pathCheck(blocks)) {
             DEBUG(errs() << i << " " << paths[i].count << " ");
             Outfile << paths[i].id.toString(10, false) << " " << paths[i].count
                     << " ";
-            Outfile << static_cast<int>(bbSequences[i].first) << " ";
+            Outfile << static_cast<int>(pType) << " ";
             Outfile << Count << " ";
-            printPath(bbSequences[i].second, Outfile);
+            printPath(blocks, Outfile);
             Outfile << "\n";
         } else {
             pathFail++;
         }
         errs() << "Path ID: " << paths[i].id.toString(10, false)
                      << " Freq: " << paths[i].count << "\n";
-        printPathSrc(bbSequences[i].second);
+        printPathSrc(blocks);
         DEBUG(errs() << "\n");
     }
 

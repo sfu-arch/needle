@@ -763,7 +763,9 @@ extractAsFunction(PostDominatorTree *PDT,
     transform(LiveOut.begin(), LiveOut.end(), LiveOutTypes.begin(), 
             [](const Value* V) -> Type * { return V->getType(); });
     // Create a packed struct return type
-    auto StructTy = StructType::get(Mod->getContext(), LiveOutTypes, true);
+    auto *StructTy = StructType::get(Mod->getContext(), LiveOutTypes, true);
+
+    errs() << *StructTy << "\n";
 
     // Void return type for extracted function
     auto VoidTy = Type::getVoidTy(Mod->getContext());
