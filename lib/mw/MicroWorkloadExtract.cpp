@@ -26,14 +26,15 @@ using namespace llvm;
 using namespace mwe;
 using namespace std;
 
-//extern cl::opt<string> TargetFunction;
+// extern cl::opt<string> TargetFunction;
 
-//cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to analyse"),
-                         //cl::value_desc("Integer"), cl::init(10));
+// cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to
+// analyse"),
+// cl::value_desc("Integer"), cl::init(10));
 
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
-                      const cl::list<std::string> &FunctionList);
+                             const cl::list<std::string> &FunctionList);
 
 void MicroWorkloadExtract::readSequences(vector<Path> &S,
                                          map<int64_t, int64_t> &SM) {
@@ -186,8 +187,9 @@ static void liveInHelperStatic(SmallVector<BasicBlock *, 16> &RevTopoChop,
     if (auto Ins = dyn_cast<Instruction>(Val)) {
         for (auto OI = Ins->op_begin(), EI = Ins->op_end(); OI != EI; OI++) {
             if (auto OIns = dyn_cast<Instruction>(OI)) {
-                //if (!Chop.count(OIns->getParent())) {
-                if(find(RevTopoChop.begin(), RevTopoChop.end(), OIns->getParent()) == RevTopoChop.end()) {
+                // if (!Chop.count(OIns->getParent())) {
+                if (find(RevTopoChop.begin(), RevTopoChop.end(),
+                         OIns->getParent()) == RevTopoChop.end()) {
                     LiveIn.push_back(OIns);
                 }
             } else
@@ -208,8 +210,8 @@ static void liveInHelperStatic(SmallVector<BasicBlock *, 16> &RevTopoChop,
     // in the trace.
 }
 
-static DenseSet<pair<const BasicBlock *, const BasicBlock *>> 
-getBackEdges(BasicBlock* StartBB) {
+static DenseSet<pair<const BasicBlock *, const BasicBlock *>>
+getBackEdges(BasicBlock *StartBB) {
     SmallVector<std::pair<const BasicBlock *, const BasicBlock *>, 8>
         BackEdgesVec;
     FindFunctionBackedges(*StartBB->getParent(), BackEdgesVec);
@@ -221,11 +223,11 @@ getBackEdges(BasicBlock* StartBB) {
     return BackEdges;
 }
 
-void staticHelper(
-    Function *StaticFunc, Function *GuardFunc, 
-    SmallVector<Value *, 16> &LiveIn, SetVector<Value *> &LiveOut,
-    SetVector<Value *> &Globals, SmallVector<BasicBlock *, 16> &RevTopoChop,
-    LLVMContext &Context) {
+void staticHelper(Function *StaticFunc, Function *GuardFunc,
+                  SmallVector<Value *, 16> &LiveIn, SetVector<Value *> &LiveOut,
+                  SetVector<Value *> &Globals,
+                  SmallVector<BasicBlock *, 16> &RevTopoChop,
+                  LLVMContext &Context) {
 
     ValueToValueMapTy VMap;
     auto BackEdges = getBackEdges(RevTopoChop.back());
@@ -345,32 +347,34 @@ void staticHelper(
         }
     }
 
-    function<void(Value&)> handleOperands;
-    handleOperands = [&VMap, &handleOperands, &StaticFunc](Value& V) {
-        User &I = *cast<User>(&V); 
+    function<void(Value &)> handleOperands;
+    handleOperands = [&VMap, &handleOperands, &StaticFunc](Value &V) {
+        User &I = *cast<User>(&V);
         for (auto OI = I.op_begin(), E = I.op_end(); OI != E; ++OI) {
-            if(auto CE = dyn_cast<ConstantExpr>(*OI)) {
+            if (auto CE = dyn_cast<ConstantExpr>(*OI)) {
                 handleOperands(*CE);
             }
             if (auto *GV = dyn_cast<GlobalVariable>(*OI)) {
                 // Since we may have already patched the global
                 // don't try to patch it again.
-                if (VMap.count(GV) == 0) continue;
+                if (VMap.count(GV) == 0)
+                    continue;
                 // Check if we came from a ConstantExpr
-                if(auto CE = dyn_cast<ConstantExpr>(&V)) {
+                if (auto CE = dyn_cast<ConstantExpr>(&V)) {
                     int32_t OpIdx = -1;
-                    while(I.getOperand(++OpIdx) != GV);
-                    auto NCE = CE->getWithOperandReplaced(OpIdx, 
-                                         cast<Constant>(VMap[GV]));
+                    while (I.getOperand(++OpIdx) != GV)
+                        ;
+                    auto NCE = CE->getWithOperandReplaced(
+                        OpIdx, cast<Constant>(VMap[GV]));
                     vector<User *> Users(CE->user_begin(), CE->user_end());
-                    for (auto U = Users.begin(),
-                              UE = Users.end(); U != UE; ++U) {
+                    for (auto U = Users.begin(), UE = Users.end(); U != UE;
+                         ++U) {
                         // All users of ConstExpr should be instructions
                         auto Ins = dyn_cast<Instruction>(*U);
-                        if( Ins->getParent()->getParent() == StaticFunc) {
+                        if (Ins->getParent()->getParent() == StaticFunc) {
                             Ins->replaceUsesOfWith(CE, NCE);
                         }
-                    }             
+                    }
                 } else {
                     I.replaceUsesOfWith(GV, VMap[GV]);
                 }
@@ -540,7 +544,6 @@ void staticHelper(
         }
     }
 
-    
     // Get the struct pointer from the argument list,
     // assume that output struct is always last arg
     auto StructPtr = --StaticFunc->arg_end();
@@ -549,16 +552,16 @@ void staticHelper(
     int32_t OutIndex = 0;
     Value *Idx[2];
     Idx[0] = Constant::getNullValue(Type::getInt32Ty(Context));
-    for(auto &L : LiveOut) {
+    for (auto &L : LiveOut) {
         Value *LO = VMap[L];
         assert(LO && "Live Out not remapped");
         auto *Block = cast<Instruction>(LO)->getParent();
-        Idx[1] = ConstantInt::get(Type::getInt32Ty(Context),OutIndex);
-        GetElementPtrInst *StructGEP = GetElementPtrInst::Create(StructPtr,
-                Idx, "", Block->getTerminator());
+        Idx[1] = ConstantInt::get(Type::getInt32Ty(Context), OutIndex);
+        GetElementPtrInst *StructGEP = GetElementPtrInst::Create(
+            StructPtr, Idx, "", Block->getTerminator());
         new StoreInst(LO, StructGEP, Block->getTerminator());
         OutIndex++;
-    } 
+    }
 
     // Add store instructions to write live-outs to
     // the char array.
@@ -568,7 +571,8 @@ void staticHelper(
     // ConstantInt *Zero = ConstantInt::get(Int32Ty, 0);
     // for (auto &L : LiveOut) {
     //     // errs() << "Storing LO: " << *L << "\n";
-    //     // FIXME : Sometimes L may not be in the block map since it could be a
+    //     // FIXME : Sometimes L may not be in the block map since it could be
+    //     a
     //     // self-loop (?)
     //     // if it is so then don't bother since all instructions are accounted
     //     // for.
@@ -580,7 +584,8 @@ void staticHelper(
     //         auto *GEP = GetElementPtrInst::Create(LOA, GEPIndices, "idx",
     //                                               Block->getTerminator());
     //         BitCastInst *BC =
-    //             new BitCastInst(GEP, PointerType::get(LO->getType(), 0), "cast",
+    //             new BitCastInst(GEP, PointerType::get(LO->getType(), 0),
+    //             "cast",
     //                             Block->getTerminator());
     //         new StoreInst(LO, BC, false, Block->getTerminator());
     //         OutIndex += DL->getTypeStoreSize(LO->getType());
@@ -623,7 +628,7 @@ static inline bool checkIntrinsic(Function *F) {
         return true;
 }
 
-static bool verifyChop(const SmallVector<BasicBlock *,16> Chop) {
+static bool verifyChop(const SmallVector<BasicBlock *, 16> Chop) {
     for (auto &CB : Chop) {
         for (auto &I : *CB) {
             CallSite CS(&I);
@@ -634,7 +639,9 @@ static bool verifyChop(const SmallVector<BasicBlock *,16> Chop) {
                 } else {
                     if (CS.getCalledFunction()->isDeclaration() &&
                         checkIntrinsic(CS.getCalledFunction())) {
-                        DEBUG(errs() << "External Call : " << CS.getCalledFunction()->getName() << "\n");
+                        DEBUG(errs() << "External Call : "
+                                     << CS.getCalledFunction()->getName()
+                                     << "\n");
                         return true;
                     }
                 }
@@ -644,99 +651,103 @@ static bool verifyChop(const SmallVector<BasicBlock *,16> Chop) {
     return true;
 }
 
-static Function* 
-extractAsFunction(PostDominatorTree *PDT,
-                            Module* Mod,
-                            SmallVector<BasicBlock*, 16> &RevTopoChop) {
+static Function *extractAsFunction(PostDominatorTree *PDT, Module *Mod,
+                                   SmallVector<BasicBlock *, 16> &RevTopoChop) {
 
-    auto *StartBB = RevTopoChop.back(); 
-    auto *LastBB = RevTopoChop.front(); 
+    auto *StartBB = RevTopoChop.back();
+    auto *LastBB = RevTopoChop.front();
 
     assert(verifyChop(RevTopoChop) && "Invalid Region!");
 
     SetVector<Value *> LiveOut, Globals;
     SmallVector<Value *, 16> LiveIn;
 
-    auto handlePhis = [&LiveIn, &LiveOut, &Globals, &StartBB, 
-                       &PDT, &LastBB, &RevTopoChop](PHINode *Phi) -> int32_t {
+    auto handlePhis =
+        [&LiveIn, &LiveOut, &Globals, &StartBB, &PDT, &LastBB, &RevTopoChop](
+            PHINode *Phi) -> int32_t {
 
-        // Add uses of Phi before checking if it is LiveIn
-        // What happens if this is promoted ot argument?
-        for (auto UI = Phi->use_begin(), UE = Phi->use_end(); UI != UE; UI++) {
-            if (auto UIns = dyn_cast<Instruction>(UI->getUser())) {
-                auto Tgt = UIns->getParent();
-                //if (!Chop.count(Tgt)) {
-                if(find(RevTopoChop.begin(), RevTopoChop.end(), Tgt) == RevTopoChop.end()) {
-                    // errs() << "Adding LO: " << *Ins << "\n";
-                    if (!PDT->dominates(LastBB, UIns->getParent())) {
-                        // Phi at the begining of path is a live-in,
-                        // if it is used outside then don't care as
-                        // the argument to the accelerated chop can be
-                        // sent to the consumer outside the chop.
-                        if (Phi->getParent() != StartBB) {
+            // Add uses of Phi before checking if it is LiveIn
+            // What happens if this is promoted ot argument?
+            for (auto UI = Phi->use_begin(), UE = Phi->use_end(); UI != UE;
+                 UI++) {
+                if (auto UIns = dyn_cast<Instruction>(UI->getUser())) {
+                    auto Tgt = UIns->getParent();
+                    // if (!Chop.count(Tgt)) {
+                    if (find(RevTopoChop.begin(), RevTopoChop.end(), Tgt) ==
+                        RevTopoChop.end()) {
+                        // errs() << "Adding LO: " << *Ins << "\n";
+                        if (!PDT->dominates(LastBB, UIns->getParent())) {
+                            // Phi at the begining of path is a live-in,
+                            // if it is used outside then don't care as
+                            // the argument to the accelerated chop can be
+                            // sent to the consumer outside the chop.
+                            if (Phi->getParent() != StartBB) {
+                                LiveOut.insert(Phi);
+                            }
+                        }
+                    } else {
+                        // Handle loop-back Phi's
+                        auto distance =
+                            [&RevTopoChop](SmallVector<BasicBlock *, 16> &SV,
+                                           BasicBlock *ToBB) -> uint32_t {
+                                uint32_t I = 0;
+                                for (auto &BB : RevTopoChop) {
+                                    if (BB == ToBB)
+                                        return I;
+                                    I++;
+                                }
+                                assert(false && "Unreachable");
+                            };
+                        // Find the topo position of Tgt
+                        // If it is topologically before the phi def, then it is
+                        // a
+                        // use
+                        // across a backedge which we must add as live-out
+                        auto PosTgt = distance(RevTopoChop, Tgt);
+                        auto PosPhi = distance(RevTopoChop, Phi->getParent());
+                        if (PosTgt > PosPhi) {
                             LiveOut.insert(Phi);
                         }
                     }
-                } else {
-                    // Handle loop-back Phi's
-                    auto distance =
-                        [&RevTopoChop](SmallVector<BasicBlock *, 16> &SV,
-                                       BasicBlock *ToBB) -> uint32_t {
-                            uint32_t I = 0;
-                            for (auto &BB : RevTopoChop) {
-                                if (BB == ToBB)
-                                    return I;
-                                I++;
-                            }
-                            assert(false && "Unreachable");
-                        };
-                    // Find the topo position of Tgt
-                    // If it is topologically before the phi def, then it is a
-                    // use
-                    // across a backedge which we must add as live-out
-                    auto PosTgt = distance(RevTopoChop, Tgt);
-                    auto PosPhi = distance(RevTopoChop, Phi->getParent());
-                    if (PosTgt > PosPhi) {
-                        LiveOut.insert(Phi);
-                    }
                 }
+            } // End of handling for LiveOut
+
+            if (Phi->getParent() == StartBB) {
+                LiveIn.push_back(Phi);
+                return 1;
             }
-        } // End of handling for LiveOut
 
-        if (Phi->getParent() == StartBB) {
-            LiveIn.push_back(Phi);
-            return 1;
-        }
-
-        uint32_t Num = 0;
-        for (uint32_t I = 0; I < Phi->getNumIncomingValues(); I++) {
-            auto *Blk = Phi->getIncomingBlock(I);
-            auto *Val = Phi->getIncomingValue(I);
-            //if (Chop.count(Blk)) {
-            if(find(RevTopoChop.begin(), RevTopoChop.end(), Blk) != RevTopoChop.end()) {
-                if (auto *VI = dyn_cast<Instruction>(Val)) {
-                    //if (Chop.count(VI->getParent()) == 0) {
-                    if(find(RevTopoChop.begin(), RevTopoChop.end(), VI->getParent()) == RevTopoChop.end()) {
-                        LiveIn.push_back(Val);
+            uint32_t Num = 0;
+            for (uint32_t I = 0; I < Phi->getNumIncomingValues(); I++) {
+                auto *Blk = Phi->getIncomingBlock(I);
+                auto *Val = Phi->getIncomingValue(I);
+                // if (Chop.count(Blk)) {
+                if (find(RevTopoChop.begin(), RevTopoChop.end(), Blk) !=
+                    RevTopoChop.end()) {
+                    if (auto *VI = dyn_cast<Instruction>(Val)) {
+                        // if (Chop.count(VI->getParent()) == 0) {
+                        if (find(RevTopoChop.begin(), RevTopoChop.end(),
+                                 VI->getParent()) == RevTopoChop.end()) {
+                            LiveIn.push_back(Val);
+                            Num += 1;
+                        }
+                    } else if (auto *AI = dyn_cast<Argument>(Val)) {
+                        LiveIn.push_back(AI);
                         Num += 1;
+                    } else if (auto *GV = dyn_cast<GlobalVariable>(Val)) {
+                        errs() << *GV << "\n";
+                        Globals.insert(GV);
                     }
-                } else if (auto *AI = dyn_cast<Argument>(Val)) {
-                    LiveIn.push_back(AI);
-                    Num += 1;
-                } else if (auto *GV = dyn_cast<GlobalVariable>(Val)) {
-                    errs() << *GV << "\n";
-                    Globals.insert(GV);
                 }
             }
-        }
-        return Num;
-    };
+            return Num;
+        };
 
     // Collect the live-ins and live-outs for the Chop
     uint32_t PhiLiveIn = 0;
-    //for (auto &BB : Chop) {
+    // for (auto &BB : Chop) {
     // The order of iteration of blocks in this loop,
-    // does not matter. 
+    // does not matter.
     for (auto &BB : RevTopoChop) {
         for (auto &I : *BB) {
             if (auto Phi = dyn_cast<PHINode>(&I)) {
@@ -749,8 +760,9 @@ extractAsFunction(PostDominatorTree *PDT,
                 for (auto UI = Ins->use_begin(), UE = Ins->use_end(); UI != UE;
                      UI++) {
                     if (auto UIns = dyn_cast<Instruction>(UI->getUser())) {
-                        //if (!Chop.count(UIns->getParent())) {
-                        if(find(RevTopoChop.begin(), RevTopoChop.end(), UIns->getParent()) == RevTopoChop.end()) {
+                        // if (!Chop.count(UIns->getParent())) {
+                        if (find(RevTopoChop.begin(), RevTopoChop.end(),
+                                 UIns->getParent()) == RevTopoChop.end()) {
                             // errs() << "Adding LO: " << *Ins << "\n";
                             // Need to reason about this check some more.
                             if (!PDT->dominates(LastBB, UIns->getParent()) &&
@@ -778,15 +790,15 @@ extractAsFunction(PostDominatorTree *PDT,
     auto TargetTripleStr = StartBB->getParent()->getParent()->getTargetTriple();
     Mod->setDataLayout(DataLayoutStr);
     Mod->setTargetTriple(TargetTripleStr);
-    
-    SmallVector<Type*, 16> LiveOutTypes(LiveOut.size());
-    transform(LiveOut.begin(), LiveOut.end(), LiveOutTypes.begin(), 
-            [](const Value* V) -> Type * { return V->getType(); });
+
+    SmallVector<Type *, 16> LiveOutTypes(LiveOut.size());
+    transform(LiveOut.begin(), LiveOut.end(), LiveOutTypes.begin(),
+              [](const Value *V) -> Type *{ return V->getType(); });
     // Create a packed struct return type
     auto *StructTy = StructType::get(Mod->getContext(), LiveOutTypes, true);
     auto *StructPtrTy = PointerType::getUnqual(StructTy);
 
-    errs() << *StructPtrTy << "\n";
+    // errs() << *StructPtrTy << "\n";
 
     // Void return type for extracted function
     auto VoidTy = Type::getVoidTy(Mod->getContext());
@@ -825,14 +837,15 @@ extractAsFunction(PostDominatorTree *PDT,
     //     ArrayType::get(IntegerType::get(Mod->getContext(), 8), LiveOutSize);
     // auto *Initializer = ConstantAggregateZero::get(CharArrTy);
     // GlobalVariable *LOA =
-    //     new GlobalVariable(*Mod, CharArrTy, false, GlobalValue::CommonLinkage,
+    //     new GlobalVariable(*Mod, CharArrTy, false,
+    //     GlobalValue::CommonLinkage,
     //                        Initializer, "__live_outs");
 
     // LOA->setAlignment(8);
 
-    //staticHelper(StaticFunc, GuardFunc, LOA, LiveIn, LiveOut, Globals,
-    staticHelper(StaticFunc, GuardFunc, LiveIn, LiveOut, Globals,
-                 RevTopoChop, Mod->getContext());
+    // staticHelper(StaticFunc, GuardFunc, LOA, LiveIn, LiveOut, Globals,
+    staticHelper(StaticFunc, GuardFunc, LiveIn, LiveOut, Globals, RevTopoChop,
+                 Mod->getContext());
 
     StripDebugInfo(*Mod);
 
@@ -842,8 +855,7 @@ extractAsFunction(PostDominatorTree *PDT,
     return StaticFunc;
 }
 
-static void 
-optimizeModule(Module* Mod) {
+static void optimizeModule(Module *Mod) {
     PassManagerBuilder PMB;
     PMB.OptLevel = 3;
     PMB.SLPVectorize = false;
@@ -853,31 +865,29 @@ optimizeModule(Module* Mod) {
     PM.run(*Mod);
 }
 
-static void
-writeModule(Module* Mod, string Name) {
+static void writeModule(Module *Mod, string Name) {
     error_code EC;
     raw_fd_ostream File(Name, EC, sys::fs::OpenFlags::F_RW);
     Mod->print(File, nullptr);
     File.close();
 }
 
-static SmallVector<BasicBlock*, 16> 
-getChopBlocks(Path &P, map<string, BasicBlock*>& BlockMap) {
+static SmallVector<BasicBlock *, 16>
+getChopBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
     auto *StartBB = BlockMap[P.Seq.front()];
     auto *LastBB = BlockMap[P.Seq.back()];
     auto BackEdges = getBackEdges(StartBB);
     auto Chop = getChop(StartBB, LastBB, BackEdges);
     auto RevTopoChop = getTopoChop(Chop, StartBB, BackEdges);
-    assert(StartBB == RevTopoChop.back() && 
-            LastBB == RevTopoChop.front() && "Sanity Check");
+    assert(StartBB == RevTopoChop.back() && LastBB == RevTopoChop.front() &&
+           "Sanity Check");
     return RevTopoChop;
 }
 
-static SmallVector<BasicBlock*, 16> 
-getTraceBlocks(Path &P, map<string, BasicBlock*>& BlockMap) {
-    SmallVector<BasicBlock*, 16> RPath;    
-    for(auto RB = P.Seq.rbegin(), RE = P.Seq.rend(); 
-                RB != RE; RB++) {
+static SmallVector<BasicBlock *, 16>
+getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
+    SmallVector<BasicBlock *, 16> RPath;
+    for (auto RB = P.Seq.rbegin(), RE = P.Seq.rend(); RB != RE; RB++) {
         assert(BlockMap[*RB] && "Path does not exist");
         RPath.push_back(BlockMap[*RB]);
     }
@@ -895,7 +905,7 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
     for (auto &P : Sequences) {
         Module *Mod = new Module(P.Id + string("-static"), getGlobalContext());
         auto RTopoChop = getChopBlocks(P, BlockMap);
-        //auto RTopoChop = getTraceBlocks(P, BlockMap);
+        // auto RTopoChop = getTraceBlocks(P, BlockMap);
         auto *ExF = extractAsFunction(PostDomTree, Mod, RTopoChop);
         optimizeModule(Mod);
         writeModule(Mod, (P.Id) + string(".static.ll"));

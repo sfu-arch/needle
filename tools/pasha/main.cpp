@@ -42,13 +42,14 @@ cl::opt<string> SeqFilePath("seq",
 cl::opt<int> NumSeq("num", cl::desc("Number of sequences to analyse"),
                     cl::value_desc("positive integer"), cl::init(3));
 
-//cl::opt<string> TargetFunction("fn", cl::Required,
-                               //cl::desc("Target function name"),
-                               //cl::value_desc("string"));
+// cl::opt<string> TargetFunction("fn", cl::Required,
+// cl::desc("Target function name"),
+// cl::value_desc("string"));
 
-//cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to analyse"),
-                         //cl::value_desc("Integer"), cl::init(10));
-                         
+// cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to
+// analyse"),
+// cl::value_desc("Integer"), cl::init(10));
+
 cl::list<std::string> FunctionList("fn", cl::value_desc("String"),
                                    cl::desc("List of functions to instrument"),
                                    cl::OneOrMore, cl::CommaSeparated);
@@ -62,7 +63,6 @@ bool isTargetFunction(const Function &f,
             return true;
     return false;
 }
-
 
 int main(int argc, char **argv, const char **env) {
     // This boilerplate provides convenient stack traces and clean LLVM exit
@@ -104,7 +104,7 @@ int main(int argc, char **argv, const char **env) {
     pm.add(new epp::Namer());
     pm.add(llvm::createPostDomTree());
     pm.add(new DominatorTreeWrapperPass());
-    //pm.add(new grok::GraphGrok(SeqFilePath, NumSeq));
+    // pm.add(new grok::GraphGrok(SeqFilePath, NumSeq));
     pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq));
     pm.add(createVerifierPass());
     pm.run(*module);

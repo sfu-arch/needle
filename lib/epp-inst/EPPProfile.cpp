@@ -36,7 +36,6 @@ bool isTargetFunction(const Function &f,
     return false;
 }
 
-
 bool EPPProfile::doInitialization(Module &m) {
     assert(FunctionList.size() == 1 &&
            "Only one function can be marked for profiling");
