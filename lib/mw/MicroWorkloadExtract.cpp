@@ -182,7 +182,7 @@ getChop(BasicBlock *StartBB, BasicBlock *LastBB,
 
 static void liveInHelperStatic(SmallVector<BasicBlock *, 16> &RevTopoChop,
                                SmallVector<Value *, 16> &LiveIn,
-                               DenseSet<Value *> &Globals, Value *Val) {
+                               SetVector<Value *> &Globals, Value *Val) {
     if (auto Ins = dyn_cast<Instruction>(Val)) {
         for (auto OI = Ins->op_begin(), EI = Ins->op_end(); OI != EI; OI++) {
             if (auto OIns = dyn_cast<Instruction>(OI)) {
@@ -222,13 +222,13 @@ getBackEdges(BasicBlock* StartBB) {
 }
 
 void staticHelper(
-    Function *StaticFunc, Function *GuardFunc, GlobalVariable *LOA,
-    SmallVector<Value *, 16> &LiveIn, DenseSet<Value *> &LiveOut,
-    DenseSet<Value *> &Globals, SmallVector<BasicBlock *, 16> &RevTopoChop,
+    Function *StaticFunc, Function *GuardFunc, 
+    SmallVector<Value *, 16> &LiveIn, SetVector<Value *> &LiveOut,
+    SetVector<Value *> &Globals, SmallVector<BasicBlock *, 16> &RevTopoChop,
     LLVMContext &Context) {
 
     ValueToValueMapTy VMap;
-    DenseSet<pair<const BasicBlock *, const BasicBlock *>> BackEdges = getBackEdges(RevTopoChop.back());
+    auto BackEdges = getBackEdges(RevTopoChop.back());
 
     auto handleCallSites =
         [&VMap, &StaticFunc](CallSite &OrigCS, CallSite &StaticCS) {
@@ -540,32 +540,52 @@ void staticHelper(
         }
     }
 
+    
+    // Get the struct pointer from the argument list,
+    // assume that output struct is always last arg
+    auto StructPtr = --StaticFunc->arg_end();
+
+    // Store the live-outs to the output struct
+    int32_t OutIndex = 0;
+    Value *Idx[2];
+    Idx[0] = Constant::getNullValue(Type::getInt32Ty(Context));
+    for(auto &L : LiveOut) {
+        Value *LO = VMap[L];
+        assert(LO && "Live Out not remapped");
+        auto *Block = cast<Instruction>(LO)->getParent();
+        Idx[1] = ConstantInt::get(Type::getInt32Ty(Context),OutIndex);
+        GetElementPtrInst *StructGEP = GetElementPtrInst::Create(StructPtr,
+                Idx, "", Block->getTerminator());
+        new StoreInst(LO, StructGEP, Block->getTerminator());
+        OutIndex++;
+    } 
+
     // Add store instructions to write live-outs to
     // the char array.
-    const DataLayout *DL = StaticFunc->getParent()->getDataLayout();
-    int32_t OutIndex = 0;
-    auto Int32Ty = IntegerType::getInt32Ty(Context);
-    ConstantInt *Zero = ConstantInt::get(Int32Ty, 0);
-    for (auto &L : LiveOut) {
-        // errs() << "Storing LO: " << *L << "\n";
-        // FIXME : Sometimes L may not be in the block map since it could be a
-        // self-loop (?)
-        // if it is so then don't bother since all instructions are accounted
-        // for.
-        // EG: primal_net_simplex in mcf2000
-        if (Value *LO = VMap[L]) {
-            auto *Block = cast<Instruction>(LO)->getParent();
-            ConstantInt *Index = ConstantInt::get(Int32Ty, OutIndex);
-            Value *GEPIndices[] = {Zero, Index};
-            auto *GEP = GetElementPtrInst::Create(LOA, GEPIndices, "idx",
-                                                  Block->getTerminator());
-            BitCastInst *BC =
-                new BitCastInst(GEP, PointerType::get(LO->getType(), 0), "cast",
-                                Block->getTerminator());
-            new StoreInst(LO, BC, false, Block->getTerminator());
-            OutIndex += DL->getTypeStoreSize(LO->getType());
-        }
-    }
+    // const DataLayout *DL = StaticFunc->getParent()->getDataLayout();
+    // OutIndex = 0;
+    // auto Int32Ty = IntegerType::getInt32Ty(Context);
+    // ConstantInt *Zero = ConstantInt::get(Int32Ty, 0);
+    // for (auto &L : LiveOut) {
+    //     // errs() << "Storing LO: " << *L << "\n";
+    //     // FIXME : Sometimes L may not be in the block map since it could be a
+    //     // self-loop (?)
+    //     // if it is so then don't bother since all instructions are accounted
+    //     // for.
+    //     // EG: primal_net_simplex in mcf2000
+    //     if (Value *LO = VMap[L]) {
+    //         auto *Block = cast<Instruction>(LO)->getParent();
+    //         ConstantInt *Index = ConstantInt::get(Int32Ty, OutIndex);
+    //         Value *GEPIndices[] = {Zero, Index};
+    //         auto *GEP = GetElementPtrInst::Create(LOA, GEPIndices, "idx",
+    //                                               Block->getTerminator());
+    //         BitCastInst *BC =
+    //             new BitCastInst(GEP, PointerType::get(LO->getType(), 0), "cast",
+    //                             Block->getTerminator());
+    //         new StoreInst(LO, BC, false, Block->getTerminator());
+    //         OutIndex += DL->getTypeStoreSize(LO->getType());
+    //     }
+    // }
 }
 
 static void getTopoChopHelper(
@@ -634,7 +654,7 @@ extractAsFunction(PostDominatorTree *PDT,
 
     assert(verifyChop(RevTopoChop) && "Invalid Region!");
 
-    DenseSet<Value *> LiveOut, Globals;
+    SetVector<Value *> LiveOut, Globals;
     SmallVector<Value *, 16> LiveIn;
 
     auto handlePhis = [&LiveIn, &LiveOut, &Globals, &StartBB, 
@@ -764,8 +784,9 @@ extractAsFunction(PostDominatorTree *PDT,
             [](const Value* V) -> Type * { return V->getType(); });
     // Create a packed struct return type
     auto *StructTy = StructType::get(Mod->getContext(), LiveOutTypes, true);
+    auto *StructPtrTy = PointerType::getUnqual(StructTy);
 
-    errs() << *StructTy << "\n";
+    errs() << *StructPtrTy << "\n";
 
     // Void return type for extracted function
     auto VoidTy = Type::getVoidTy(Mod->getContext());
@@ -775,6 +796,8 @@ extractAsFunction(PostDominatorTree *PDT,
     // to the function's argument list
     for (auto Val : LiveIn)
         ParamTy.push_back(Val->getType());
+
+    ParamTy.push_back(StructPtrTy);
 
     FunctionType *StFuncType = FunctionType::get(VoidTy, ParamTy, false);
 
@@ -792,22 +815,23 @@ extractAsFunction(PostDominatorTree *PDT,
         GuFuncType, GlobalValue::ExternalLinkage, "__guard_func", Mod);
 
     // // Create the Output Array as a global variable
-    uint32_t LiveOutSize = 0;
-    const DataLayout *DL = Mod->getDataLayout();
-    for_each(LiveOut.begin(), LiveOut.end(),
-             [&LiveOutSize, &DL](const Value *Val) {
-                 LiveOutSize += DL->getTypeStoreSize(Val->getType());
-             });
-    ArrayType *CharArrTy =
-        ArrayType::get(IntegerType::get(Mod->getContext(), 8), LiveOutSize);
-    auto *Initializer = ConstantAggregateZero::get(CharArrTy);
-    GlobalVariable *LOA =
-        new GlobalVariable(*Mod, CharArrTy, false, GlobalValue::CommonLinkage,
-                           Initializer, "__live_outs");
+    // uint32_t LiveOutSize = 0;
+    // const DataLayout *DL = Mod->getDataLayout();
+    // for_each(LiveOut.begin(), LiveOut.end(),
+    //          [&LiveOutSize, &DL](const Value *Val) {
+    //              LiveOutSize += DL->getTypeStoreSize(Val->getType());
+    //          });
+    // ArrayType *CharArrTy =
+    //     ArrayType::get(IntegerType::get(Mod->getContext(), 8), LiveOutSize);
+    // auto *Initializer = ConstantAggregateZero::get(CharArrTy);
+    // GlobalVariable *LOA =
+    //     new GlobalVariable(*Mod, CharArrTy, false, GlobalValue::CommonLinkage,
+    //                        Initializer, "__live_outs");
 
-    LOA->setAlignment(8);
+    // LOA->setAlignment(8);
 
-    staticHelper(StaticFunc, GuardFunc, LOA, LiveIn, LiveOut, Globals,
+    //staticHelper(StaticFunc, GuardFunc, LOA, LiveIn, LiveOut, Globals,
+    staticHelper(StaticFunc, GuardFunc, LiveIn, LiveOut, Globals,
                  RevTopoChop, Mod->getContext());
 
     StripDebugInfo(*Mod);
