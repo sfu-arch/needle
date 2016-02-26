@@ -67,6 +67,14 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
     void readSequences(std::vector<Path> &S, std::map<int64_t, int64_t> &SM);
 
     void makeSeqGraph(llvm::Function &F);
+    llvm::Function* extractAsFunction(llvm::PostDominatorTree* , llvm::Module*,
+                                   llvm::SmallVector<llvm::BasicBlock *, 16>&);
+    void 
+    staticHelper(llvm::Function *, llvm::Function *,
+                      llvm::SmallVector<llvm::Value *, 16> &LiveIn, llvm::SetVector<llvm::Value *>&,
+                      llvm::SetVector<llvm::Value *> &,
+                      llvm::SmallVector<llvm::BasicBlock *, 16> &,
+                      llvm::LLVMContext &); 
 
     virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
         AU.addRequired<llvm::AliasAnalysis>();

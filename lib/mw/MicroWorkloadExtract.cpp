@@ -26,12 +26,6 @@ using namespace llvm;
 using namespace mwe;
 using namespace std;
 
-// extern cl::opt<string> TargetFunction;
-
-// cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to
-// analyse"),
-// cl::value_desc("Integer"), cl::init(10));
-
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
@@ -223,7 +217,8 @@ getBackEdges(BasicBlock *StartBB) {
     return BackEdges;
 }
 
-void staticHelper(Function *StaticFunc, Function *GuardFunc,
+void 
+MicroWorkloadExtract::staticHelper(Function *StaticFunc, Function *GuardFunc,
                   SmallVector<Value *, 16> &LiveIn, SetVector<Value *> &LiveOut,
                   SetVector<Value *> &Globals,
                   SmallVector<BasicBlock *, 16> &RevTopoChop,
@@ -405,8 +400,6 @@ void staticHelper(Function *StaticFunc, Function *GuardFunc,
             CI->setIsNoInline();
         };
 
-    BasicBlock *SwitchTgt = nullptr;
-
     for (auto IT = next(RevTopoChop.begin()), IE = RevTopoChop.end(); IT != IE;
          IT++) {
         auto *NewBB = cast<BasicBlock>(VMap[*IT]);
@@ -422,36 +415,52 @@ void staticHelper(Function *StaticFunc, Function *GuardFunc,
             assert(false && "Switch instruction not handled, "
                     "use LowerSwitchPass to convert switch to if-else.");
         } else if (auto *BrInst = dyn_cast<BranchInst>(T)) {
-            auto NS = T->getNumSuccessors();
-            if (NS == 1) {
-                // Unconditional branch target *must* exist in chop
-                // since otherwith it would not be reachable from the
-                // last block in the path.
-                auto BJ = T->getSuccessor(0);
-                assert(VMap[BJ] && "Value not found in map");
-                T->setSuccessor(0, cast<BasicBlock>(VMap[BJ]));
-            } else {
-                SmallVector<BasicBlock *, 2> Targets;
-                for (unsigned I = 0; I < NS; I++) {
-                    auto BL = T->getSuccessor(I);
-                    if (inChop(BL) &&
-                        BackEdges.count(make_pair(*IT, BL)) == 0) {
-                        assert(VMap[BL] && "Value not found in map");
-                        Targets.push_back(cast<BasicBlock>(VMap[BL]));
+            if(extractAsChop) {
+                auto NS = T->getNumSuccessors();
+                if (NS == 1) {
+                    // Unconditional branch target *must* exist in chop
+                    // since otherwith it would not be reachable from the
+                    // last block in the path.
+                    auto BJ = T->getSuccessor(0);
+                    assert(VMap[BJ] && "Value not found in map");
+                    T->setSuccessor(0, cast<BasicBlock>(VMap[BJ]));
+                } else {
+                    SmallVector<BasicBlock *, 2> Targets;
+                    for (unsigned I = 0; I < NS; I++) {
+                        auto BL = T->getSuccessor(I);
+                        if (inChop(BL) &&
+                            BackEdges.count(make_pair(*IT, BL)) == 0) {
+                            assert(VMap[BL] && "Value not found in map");
+                            Targets.push_back(cast<BasicBlock>(VMap[BL]));
+                        }
+                    }
+
+                    assert(Targets.size() &&
+                           "At least one target should be in the chop");
+
+                    // auto *BrInst = dyn_cast<BranchInst>(T);
+                    if (Targets.size() == 2) {
+                        BrInst->setSuccessor(0, cast<BasicBlock>(Targets[0]));
+                        BrInst->setSuccessor(1, cast<BasicBlock>(Targets[1]));
+                    } else {
+                        insertGuardCall(BrInst, BrInst->getParent());
+                        T->eraseFromParent();
+                        BranchInst::Create(cast<BasicBlock>(Targets[0]), NewBB);
                     }
                 }
-
-                assert(Targets.size() &&
-                       "At least one target should be in the chop");
-
-                // auto *BrInst = dyn_cast<BranchInst>(T);
-                if (Targets.size() == 2) {
-                    BrInst->setSuccessor(0, cast<BasicBlock>(Targets[0]));
-                    BrInst->setSuccessor(1, cast<BasicBlock>(Targets[1]));
-                } else {
-                    insertGuardCall(BrInst, BrInst->getParent());
-                    T->eraseFromParent();
-                    BranchInst::Create(cast<BasicBlock>(Targets[0]), NewBB);
+            } else {
+                // Trace will replace the terminator inst with a direct branch to
+                // the successor, the DCE pass will remove the comparison and the 
+                // simplification with merge the basic blocks later.
+                if(T->getNumSuccessors() > 0) {
+                    auto *SuccBB = *prev(IT);
+                    vector<BasicBlock*> Succs(succ_begin(*IT), succ_end(*IT));
+                    assert(find(Succs.begin(), Succs.end(), SuccBB) != Succs.end() && 
+                            "Could not find successor!");
+                    assert(VMap[SuccBB] && "Successor not found in VMap");
+                    // Terminator is T, Block is NewBB             
+                    T->eraseFromParent(); 
+                    BranchInst::Create(cast<BasicBlock>(VMap[SuccBB]), NewBB);
                 }
             }
         } else {
@@ -459,12 +468,18 @@ void staticHelper(Function *StaticFunc, Function *GuardFunc,
         }
     }
 
-    auto handlePhis = [&VMap, &RevTopoChop, &LiveIn, &BackEdges](PHINode *Phi) {
+    auto handleChopPhis = [&VMap, &RevTopoChop, &BackEdges](PHINode *Phi, bool extractAsChop) {
         auto NV = Phi->getNumIncomingValues();
         vector<BasicBlock *> ToRemove;
         for (unsigned I = 0; I < NV; I++) {
             auto *Blk = Phi->getIncomingBlock(I);
             auto *Val = Phi->getIncomingValue(I);
+
+            if(!extractAsChop && 
+                    *next(find(RevTopoChop.begin(), RevTopoChop.end(), Phi->getParent())) != Blk) {
+                ToRemove.push_back(Blk);
+                continue;
+            }
 
             // Is this a backedge? Remove the incoming value
             // Is this predicated on a block outside the chop? Remove
@@ -499,7 +514,7 @@ void staticHelper(Function *StaticFunc, Function *GuardFunc,
          BB != BE; BB++) {
         for (auto &Ins : **BB) {
             if (auto *Phi = dyn_cast<PHINode>(&Ins)) {
-                handlePhis(Phi);
+                handleChopPhis(Phi, extractAsChop);
             }
         }
     }
@@ -611,7 +626,8 @@ static bool verifyChop(const SmallVector<BasicBlock *, 16> Chop) {
     return true;
 }
 
-static Function *extractAsFunction(PostDominatorTree *PDT, Module *Mod,
+Function *
+MicroWorkloadExtract::extractAsFunction(PostDominatorTree *PDT, Module *Mod,
                                    SmallVector<BasicBlock *, 16> &RevTopoChop) {
 
     auto *StartBB = RevTopoChop.back();
@@ -864,9 +880,12 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
 
     for (auto &P : Sequences) {
         Module *Mod = new Module(P.Id + string("-static"), getGlobalContext());
-        auto RTopoChop = getChopBlocks(P, BlockMap);
-        // auto RTopoChop = getTraceBlocks(P, BlockMap);
-        auto *ExF = extractAsFunction(PostDomTree, Mod, RTopoChop);
+        SmallVector<BasicBlock*, 16> Blocks;
+        if(extractAsChop)
+            Blocks = getChopBlocks(P, BlockMap);
+        else
+            Blocks = getTraceBlocks(P, BlockMap);
+        auto *ExF = extractAsFunction(PostDomTree, Mod, Blocks);
         optimizeModule(Mod);
         writeModule(Mod, (P.Id) + string(".static.ll"));
         delete Mod;
