@@ -391,7 +391,7 @@ MicroWorkloadExtract::staticHelper(Function *StaticFunc, Function *GuardFunc,
     ReturnInst::Create(Context, BB);
 
     auto insertGuardCall =
-        [&GuardFunc, &VMap](const BranchInst *CBR, BasicBlock *Blk) {
+        [&GuardFunc](const BranchInst *CBR, BasicBlock *Blk) {
             Value *Arg = CBR->getCondition();
             auto CI = CallInst::Create(GuardFunc, {Arg}, "", Blk);
             // Add a ReadNone+NoInline attribute to the CallSite, which
@@ -458,7 +458,8 @@ MicroWorkloadExtract::staticHelper(Function *StaticFunc, Function *GuardFunc,
                     assert(find(Succs.begin(), Succs.end(), SuccBB) != Succs.end() && 
                             "Could not find successor!");
                     assert(VMap[SuccBB] && "Successor not found in VMap");
-                    // Terminator is T, Block is NewBB             
+                    if(T->getNumSuccessors() == 2) 
+                        insertGuardCall(dyn_cast<BranchInst>(T), NewBB);
                     T->eraseFromParent(); 
                     BranchInst::Create(cast<BasicBlock>(VMap[SuccBB]), NewBB);
                 }
@@ -881,10 +882,8 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
     for (auto &P : Sequences) {
         Module *Mod = new Module(P.Id + string("-static"), getGlobalContext());
         SmallVector<BasicBlock*, 16> Blocks;
-        if(extractAsChop)
-            Blocks = getChopBlocks(P, BlockMap);
-        else
-            Blocks = getTraceBlocks(P, BlockMap);
+        if(extractAsChop) Blocks = getChopBlocks(P, BlockMap);
+        else Blocks = getTraceBlocks(P, BlockMap);
         auto *ExF = extractAsFunction(PostDomTree, Mod, Blocks);
         optimizeModule(Mod);
         writeModule(Mod, (P.Id) + string(".static.ll"));
