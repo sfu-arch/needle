@@ -407,7 +407,6 @@ void staticHelper(Function *StaticFunc, Function *GuardFunc,
 
     BasicBlock *SwitchTgt = nullptr;
 
-    uint64_t GuardChecks = 0;
     for (auto IT = next(RevTopoChop.begin()), IE = RevTopoChop.end(); IT != IE;
          IT++) {
         auto *NewBB = cast<BasicBlock>(VMap[*IT]);
@@ -428,38 +427,40 @@ void staticHelper(Function *StaticFunc, Function *GuardFunc,
         assert(!isa<UnreachableInst>(T) && "Should not occur");
 
         if (auto *SI = dyn_cast<SwitchInst>(T)) {
+            assert(false && "Switch instruction not handled, "
+                    "use LowerSwitchPass to convert switch to if-else.");
             // Idea is to create a new basic block which will
             // only contain the guard call with false passed
             // as argument if the target block is not in the
             // chop.
-            vector<uint32_t> ToPatch;
-            for (uint32_t I = 0; I < SI->getNumSuccessors(); I++) {
-                auto Tgt = SI->getSuccessor(I);
-                if (!inChop(Tgt)) {
-                    ToPatch.push_back(I);
-                } else {
-                    assert(VMap[Tgt] && "Switch target not found");
-                    SI->setSuccessor(I, cast<BasicBlock>(VMap[Tgt]));
-                }
-            }
+            // vector<uint32_t> ToPatch;
+            // for (uint32_t I = 0; I < SI->getNumSuccessors(); I++) {
+            //     auto Tgt = SI->getSuccessor(I);
+            //     if (!inChop(Tgt)) {
+            //         ToPatch.push_back(I);
+            //     } else {
+            //         assert(VMap[Tgt] && "Switch target not found");
+            //         SI->setSuccessor(I, cast<BasicBlock>(VMap[Tgt]));
+            //     }
+            // }
 
-            if (ToPatch.size()) {
-                // Create a guard block if it does not exist
-                // already.
-                if (!SwitchTgt) {
-                    SwitchTgt = BasicBlock::Create(Context, "switch_guard",
-                                                   StaticFunc, nullptr);
-                    auto BoolType = IntegerType::getInt1Ty(Context);
-                    Value *Arg = ConstantInt::get(BoolType, 0, false);
-                    auto CI = CallInst::Create(GuardFunc, {Arg}, "", SwitchTgt);
-                    CI->setDoesNotAccessMemory();
-                    CI->setIsNoInline();
-                    ReturnInst::Create(Context, SwitchTgt);
-                }
-                for (auto P : ToPatch) {
-                    SI->setSuccessor(P, SwitchTgt);
-                }
-            }
+            // if (ToPatch.size()) {
+            //     // Create a guard block if it does not exist
+            //     // already.
+            //     if (!SwitchTgt) {
+            //         SwitchTgt = BasicBlock::Create(Context, "switch_guard",
+            //                                        StaticFunc, nullptr);
+            //         auto BoolType = IntegerType::getInt1Ty(Context);
+            //         Value *Arg = ConstantInt::get(BoolType, 0, false);
+            //         auto CI = CallInst::Create(GuardFunc, {Arg}, "", SwitchTgt);
+            //         CI->setDoesNotAccessMemory();
+            //         CI->setIsNoInline();
+            //         ReturnInst::Create(Context, SwitchTgt);
+            //     }
+            //     for (auto P : ToPatch) {
+            //         SI->setSuccessor(P, SwitchTgt);
+            //     }
+            // }
         } else if (auto *BrInst = dyn_cast<BranchInst>(T)) {
             auto NS = T->getNumSuccessors();
             if (NS == 1) {
@@ -488,7 +489,6 @@ void staticHelper(Function *StaticFunc, Function *GuardFunc,
                     BrInst->setSuccessor(0, cast<BasicBlock>(Targets[0]));
                     BrInst->setSuccessor(1, cast<BasicBlock>(Targets[1]));
                 } else {
-                    GuardChecks++;
                     insertGuardCall(BrInst, BrInst->getParent());
                     T->eraseFromParent();
                     BranchInst::Create(cast<BasicBlock>(Targets[0]), NewBB);
