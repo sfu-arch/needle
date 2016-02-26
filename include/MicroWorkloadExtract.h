@@ -55,9 +55,10 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
     std::map<int64_t, int64_t> SequenceMap;
     llvm::PostDominatorTree *PostDomTree;
     llvm::AliasAnalysis *AA;
+    bool extractAsChop;
 
-    MicroWorkloadExtract(std::string S, int N)
-        : llvm::ModulePass(ID), SeqFilePath(S), NumSeq(N) {}
+    MicroWorkloadExtract(std::string S, int N, int C)
+        : llvm::ModulePass(ID), SeqFilePath(S), NumSeq(N), extractAsChop(C) {}
 
     virtual bool runOnModule(llvm::Module &M) override;
     virtual bool doInitialization(llvm::Module &M) override;

@@ -31,6 +31,17 @@ using namespace llvm::sys;
 using namespace grok;
 using namespace mwe;
 
+enum ExtractType {
+    trace, chop
+};
+
+// MWE-only options
+
+cl::opt<ExtractType> ExtractAs(cl::desc("Choose extract type, trace / chop"),
+        cl::values( clEnumVal(trace, "Extract as trace"),
+                    clEnumVal(chop, "Extract as chop"),
+                    clEnumValEnd ), cl::Required);
+
 cl::opt<string> InPath(cl::Positional, cl::desc("<Module to analyze>"),
                        cl::value_desc("bitcode filename"), cl::Required);
 
@@ -41,14 +52,6 @@ cl::opt<string> SeqFilePath("seq",
 
 cl::opt<int> NumSeq("num", cl::desc("Number of sequences to analyse"),
                     cl::value_desc("positive integer"), cl::init(3));
-
-// cl::opt<string> TargetFunction("fn", cl::Required,
-// cl::desc("Target function name"),
-// cl::value_desc("string"));
-
-// cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to
-// analyse"),
-// cl::value_desc("Integer"), cl::init(10));
 
 cl::list<std::string> FunctionList("fn", cl::value_desc("String"),
                                    cl::desc("List of functions to instrument"),
@@ -105,7 +108,7 @@ int main(int argc, char **argv, const char **env) {
     pm.add(llvm::createPostDomTree());
     pm.add(new DominatorTreeWrapperPass());
     // pm.add(new grok::GraphGrok(SeqFilePath, NumSeq));
-    pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq));
+    pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq, ExtractAs));
     pm.add(createVerifierPass());
     pm.run(*module);
 

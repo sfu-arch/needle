@@ -412,14 +412,6 @@ void staticHelper(Function *StaticFunc, Function *GuardFunc,
         auto *NewBB = cast<BasicBlock>(VMap[*IT]);
         auto T = NewBB->getTerminator();
 
-        // LLVM 3.7+
-        // assert(!isa<CatchEndPadInst>(T) && "Not handled");
-        // assert(!isa<CatchPadInst>(T) && "Not handled");
-        // assert(!isa<CatchReturnInst>(T) && "Not handled");
-        // assert(!isa<CleanupEndPadInst>(T) && "Not handled");
-        // assert(!isa<CleanupReturnInst>(T) && "Not handled");
-        // assert(!isa<TerminatePadInst>(T) && "Not handled");
-
         assert(!isa<IndirectBrInst>(T) && "Not handled");
         assert(!isa<InvokeInst>(T) && "Not handled");
         assert(!isa<ResumeInst>(T) && "Not handled");
@@ -429,38 +421,6 @@ void staticHelper(Function *StaticFunc, Function *GuardFunc,
         if (auto *SI = dyn_cast<SwitchInst>(T)) {
             assert(false && "Switch instruction not handled, "
                     "use LowerSwitchPass to convert switch to if-else.");
-            // Idea is to create a new basic block which will
-            // only contain the guard call with false passed
-            // as argument if the target block is not in the
-            // chop.
-            // vector<uint32_t> ToPatch;
-            // for (uint32_t I = 0; I < SI->getNumSuccessors(); I++) {
-            //     auto Tgt = SI->getSuccessor(I);
-            //     if (!inChop(Tgt)) {
-            //         ToPatch.push_back(I);
-            //     } else {
-            //         assert(VMap[Tgt] && "Switch target not found");
-            //         SI->setSuccessor(I, cast<BasicBlock>(VMap[Tgt]));
-            //     }
-            // }
-
-            // if (ToPatch.size()) {
-            //     // Create a guard block if it does not exist
-            //     // already.
-            //     if (!SwitchTgt) {
-            //         SwitchTgt = BasicBlock::Create(Context, "switch_guard",
-            //                                        StaticFunc, nullptr);
-            //         auto BoolType = IntegerType::getInt1Ty(Context);
-            //         Value *Arg = ConstantInt::get(BoolType, 0, false);
-            //         auto CI = CallInst::Create(GuardFunc, {Arg}, "", SwitchTgt);
-            //         CI->setDoesNotAccessMemory();
-            //         CI->setIsNoInline();
-            //         ReturnInst::Create(Context, SwitchTgt);
-            //     }
-            //     for (auto P : ToPatch) {
-            //         SI->setSuccessor(P, SwitchTgt);
-            //     }
-            // }
         } else if (auto *BrInst = dyn_cast<BranchInst>(T)) {
             auto NS = T->getNumSuccessors();
             if (NS == 1) {
@@ -914,6 +874,7 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
 }
 
 bool MicroWorkloadExtract::runOnModule(Module &M) {
+
     for (auto &F : M)
         if (isTargetFunction(F, FunctionList))
             makeSeqGraph(F);
