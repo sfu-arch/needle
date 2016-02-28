@@ -384,12 +384,12 @@ MicroWorkloadExtract::staticHelper(Function *StaticFunc, Function *GuardFunc,
         }
     }
 
-    // Patch branches
-
+    // Add return true for last block
     auto *BB = cast<BasicBlock>(VMap[RevTopoChop.front()]);
     BB->getTerminator()->eraseFromParent();
-    ReturnInst::Create(Context, BB);
+    ReturnInst::Create(Context, ConstantInt::getTrue(Context), BB);
 
+    // Patch branches
     auto insertGuardCall =
         [&GuardFunc](const BranchInst *CBR, BasicBlock *Blk) {
             Value *Arg = CBR->getCondition();
@@ -468,8 +468,10 @@ MicroWorkloadExtract::staticHelper(Function *StaticFunc, Function *GuardFunc,
             assert(false && "Unknown TerminatorInst");
         }
     }
-
-    auto handleChopPhis = [&VMap, &RevTopoChop, &BackEdges](PHINode *Phi, bool extractAsChop) {
+    
+    // FIXME : At a higher level, induction variable Phi's should become 
+    // live-in which is then supplied by the wrapper in a loop.
+    auto handlePhis = [&VMap, &RevTopoChop, &BackEdges](PHINode *Phi, bool extractAsChop) {
         auto NV = Phi->getNumIncomingValues();
         vector<BasicBlock *> ToRemove;
         for (unsigned I = 0; I < NV; I++) {
@@ -515,7 +517,7 @@ MicroWorkloadExtract::staticHelper(Function *StaticFunc, Function *GuardFunc,
          BB != BE; BB++) {
         for (auto &Ins : **BB) {
             if (auto *Phi = dyn_cast<PHINode>(&Ins)) {
-                handleChopPhis(Phi, extractAsChop);
+                handlePhis(Phi, extractAsChop);
             }
         }
     }
@@ -777,8 +779,9 @@ MicroWorkloadExtract::extractAsFunction(PostDominatorTree *PDT, Module *Mod,
 
     // errs() << *StructPtrTy << "\n";
 
-    // Void return type for extracted function
+    // Bool return type for extracted function
     auto VoidTy = Type::getVoidTy(Mod->getContext());
+    auto Int1Ty = IntegerType::getInt1Ty(Mod->getContext());
 
     std::vector<Type *> ParamTy;
     // Add the types of the input values
@@ -788,7 +791,7 @@ MicroWorkloadExtract::extractAsFunction(PostDominatorTree *PDT, Module *Mod,
 
     ParamTy.push_back(StructPtrTy);
 
-    FunctionType *StFuncType = FunctionType::get(VoidTy, ParamTy, false);
+    FunctionType *StFuncType = FunctionType::get(Int1Ty, ParamTy, false);
 
     // Create the trace function
     Function *StaticFunc = Function::Create(
@@ -796,7 +799,6 @@ MicroWorkloadExtract::extractAsFunction(PostDominatorTree *PDT, Module *Mod,
 
     // Create an external function which is used to
     // model all guard checks.
-    auto Int1Ty = IntegerType::getInt1Ty(Mod->getContext());
     FunctionType *GuFuncType = FunctionType::get(VoidTy, Int1Ty, false);
 
     // Create the guard function
