@@ -4,6 +4,7 @@
 #include "llvm/Transforms/Utils/CodeExtractor.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/PassManager.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -391,9 +392,13 @@ MicroWorkloadExtract::staticHelper(Function *StaticFunc, Function *GuardFunc,
 
     // Patch branches
     auto insertGuardCall =
-        [&GuardFunc](const BranchInst *CBR, BasicBlock *Blk) {
+        [&GuardFunc, &Context](BranchInst *CBR, bool FreqCondition) {
+            auto *Blk = CBR->getParent();
             Value *Arg = CBR->getCondition();
-            auto CI = CallInst::Create(GuardFunc, {Arg}, "", Blk);
+            Value *Dom = FreqCondition ? ConstantInt::getTrue(Context) 
+                                : ConstantInt::getFalse(Context);
+            vector<Value*> Params = {Arg, Dom};
+            auto CI = CallInst::Create(GuardFunc, Params, "", Blk);
             // Add a ReadNone+NoInline attribute to the CallSite, which
             // will hopefully help the optimizer.
             CI->setDoesNotAccessMemory();
@@ -443,7 +448,10 @@ MicroWorkloadExtract::staticHelper(Function *StaticFunc, Function *GuardFunc,
                         BrInst->setSuccessor(0, cast<BasicBlock>(Targets[0]));
                         BrInst->setSuccessor(1, cast<BasicBlock>(Targets[1]));
                     } else {
-                        insertGuardCall(BrInst, BrInst->getParent());
+                        if(inChop(T->getSuccessor(0)))
+                            insertGuardCall(BrInst, true);
+                        else 
+                            insertGuardCall(BrInst, false);
                         T->eraseFromParent();
                         BranchInst::Create(cast<BasicBlock>(Targets[0]), NewBB);
                     }
@@ -458,8 +466,12 @@ MicroWorkloadExtract::staticHelper(Function *StaticFunc, Function *GuardFunc,
                     assert(find(Succs.begin(), Succs.end(), SuccBB) != Succs.end() && 
                             "Could not find successor!");
                     assert(VMap[SuccBB] && "Successor not found in VMap");
-                    if(T->getNumSuccessors() == 2) 
-                        insertGuardCall(dyn_cast<BranchInst>(T), NewBB);
+                    if(T->getNumSuccessors() == 2) {
+                        if(inChop(T->getSuccessor(0)))
+                            insertGuardCall(BrInst, true);
+                        else 
+                            insertGuardCall(BrInst, false);
+                    }
                     T->eraseFromParent(); 
                     BranchInst::Create(cast<BasicBlock>(VMap[SuccBB]), NewBB);
                 }
@@ -798,8 +810,13 @@ MicroWorkloadExtract::extractAsFunction(PostDominatorTree *PDT, Module *Mod,
         StFuncType, GlobalValue::ExternalLinkage, "__static_func", Mod);
 
     // Create an external function which is used to
-    // model all guard checks.
-    FunctionType *GuFuncType = FunctionType::get(VoidTy, Int1Ty, false);
+    // model all guard checks. First arg is the condition, second is whether 
+    // the condition is dominant as true or as false. This 
+    // guard func is later replaced by a branch and return statement.
+    // we use this as placeholder to create a superblock and enable
+    // optimizations.
+    ParamTy.clear(); ParamTy = {Int1Ty, Int1Ty};
+    FunctionType *GuFuncType = FunctionType::get(VoidTy, ParamTy, false);
 
     // Create the guard function
     Function *GuardFunc = Function::Create(
@@ -873,6 +890,48 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
     return RPath;
 }
 
+static bool
+replaceGuardsHelper(Function& F,
+                    BasicBlock* RetBlock,
+                    Pass* P) {
+    for(auto &BB : F) {
+        for(auto &I : BB) {
+            if(auto *CI = dyn_cast<CallInst>(&I)) {
+                if(CI->getCalledFunction()->getName().equals("__guard_func")) {
+                    // Arg 0 : The value to branch on
+                    // Arg 1 : The dominant side of the branch (true or false)
+                    Value *Arg0 = CI->getArgOperand(0);
+                    auto *Arg1 = cast<ConstantInt>(CI->getArgOperand(1));
+                    auto *NewBlock = SplitBlock(&BB, CI, P);
+                    CI->eraseFromParent();
+                    BB.getTerminator()->eraseFromParent();
+                    if(Arg1->isOne()) {
+                        BranchInst::Create(NewBlock, RetBlock, Arg0, &BB);
+                    } else {
+                        BranchInst::Create(RetBlock, NewBlock, Arg0, &BB);
+                    }
+                    return true;
+                }
+            }
+        } 
+    }
+    return false;
+}
+
+void
+MicroWorkloadExtract::replaceGuards(Function& F) {
+    auto &Context = F.getContext();
+    auto *RetFalseBlock = BasicBlock::Create(Context, "ret.fail", &F);
+    ReturnInst::Create(Context, ConstantInt::getFalse(Context), RetFalseBlock);
+
+    bool changed = false;
+    while(replaceGuardsHelper(F, RetFalseBlock, this)) changed = true;
+
+    // No guard functions were found, so remove the basic
+    // block we made.
+    if(!changed) RetFalseBlock->eraseFromParent();
+}
+
 void MicroWorkloadExtract::makeSeqGraph(Function &F) {
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
     AA = &getAnalysis<AliasAnalysis>();
@@ -888,6 +947,7 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
         else Blocks = getTraceBlocks(P, BlockMap);
         auto *ExF = extractAsFunction(PostDomTree, Mod, Blocks);
         optimizeModule(Mod);
+        replaceGuards(*ExF);
         writeModule(Mod, (P.Id) + string(".static.ll"));
         delete Mod;
     }
