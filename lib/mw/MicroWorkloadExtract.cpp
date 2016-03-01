@@ -549,7 +549,9 @@ MicroWorkloadExtract::staticHelper(Function *StaticFunc, Function *GuardFunc,
         Idx[1] = ConstantInt::get(Type::getInt32Ty(Context), OutIndex);
         GetElementPtrInst *StructGEP = GetElementPtrInst::Create(
             StructPtr, Idx, "", Block->getTerminator());
-        new StoreInst(LO, StructGEP, Block->getTerminator());
+        auto *SI = new StoreInst(LO, StructGEP, Block->getTerminator());
+        MDNode* N = MDNode::get(Context, MDString::get(Context, "true"));
+        SI->setMetadata("LO", N);
         OutIndex++;
     }
 
@@ -932,6 +934,56 @@ MicroWorkloadExtract::replaceGuards(Function& F) {
     if(!changed) RetFalseBlock->eraseFromParent();
 }
 
+static void
+addUndoLog(Function& F) {
+    // Get all the stores in the function minus the stores into 
+    // the struct needed for live outs.
+    // Create a new global variable, 2 words per store (addr+data)
+    // save the address and data for each store. 
+    // add a new function to the module which will flush 
+    // the undo log
+    Module *Mod = F.getParent();
+    SmallVector<StoreInst*, 16> Stores;
+
+    // Get the struct pointer from the argument list,
+    // assume that output struct is always last arg
+    auto StructPtr = --F.arg_end();
+
+    for(auto &BB : F) {
+        for(auto &I : BB) {
+            if(auto *SI = dyn_cast<StoreInst>(&I)) {
+                // Filter out the stores added due to live outs
+                // being returned as a struct by reference.
+                if(SI->getMetadata("LO") == nullptr)
+                    Stores.push_back(SI);
+            }
+        }
+    }
+
+    // TODO : Convert to topological order store collection
+    // and use alias analysis to only save the first unique 
+    // store location.
+    
+    // Create the Undo Log as a global variable
+    ArrayType *LogArrTy =
+        ArrayType::get(IntegerType::get(Mod->getContext(), 64), Stores.size()*2);
+    auto *Initializer = ConstantAggregateZero::get(LogArrTy);
+    GlobalVariable *ULog =
+        new GlobalVariable(*Mod, LogArrTy, false,
+        GlobalValue::CommonLinkage,
+                           Initializer, "__undo_log");
+    ULog->setAlignment(64);
+
+    // Instrument the stores : 
+    // a) Get the value from the load
+    // b) Store the value into the undo_log
+    
+    for(auto &SI : Stores) {
+       auto* Ptr = SI->getPointerOperand();
+       //errs() << *Ptr << "\n";
+    }
+}
+
 void MicroWorkloadExtract::makeSeqGraph(Function &F) {
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
     AA = &getAnalysis<AliasAnalysis>();
@@ -941,14 +993,15 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
         BlockMap[BB.getName().str()] = &BB;
 
     for (auto &P : Sequences) {
-        Module *Mod = new Module(P.Id + string("-static"), getGlobalContext());
+        Module *Mod = new Module(P.Id, getGlobalContext());
         SmallVector<BasicBlock*, 16> Blocks;
         if(extractAsChop) Blocks = getChopBlocks(P, BlockMap);
         else Blocks = getTraceBlocks(P, BlockMap);
-        auto *ExF = extractAsFunction(PostDomTree, Mod, Blocks);
+        Function *ExF = extractAsFunction(PostDomTree, Mod, Blocks);
         optimizeModule(Mod);
         replaceGuards(*ExF);
-        writeModule(Mod, (P.Id) + string(".static.ll"));
+        addUndoLog(*ExF);
+        writeModule(Mod, (P.Id) + string(".ll"));
         delete Mod;
     }
 }
