@@ -19,8 +19,8 @@
 #include "llvm/IR/DerivedTypes.h"
 #include <cxxabi.h>
 
-#include <map>
-#include <set>
+//#include <map>
+//#include <set>
 #define DEBUG_TYPE "mw"
 
 using namespace llvm;
@@ -978,10 +978,28 @@ addUndoLog(Function& F) {
     // a) Get the value from the load
     // b) Store the value into the undo_log
     
+    uint32_t LogIndex = 0;
+    Value* Idx[2];
+    Idx[0] = ConstantInt::getNullValue(Type::getInt32Ty(Mod->getContext()));
+    auto Int64Ty = Type::getInt64Ty(Mod->getContext());
+    //auto Int8PtrTy = Type::getInt8PtrTy(Mod->getContext());
     for(auto &SI : Stores) {
-       auto* Ptr = SI->getPointerOperand();
-       //errs() << *Ptr << "\n";
+       auto *Ptr = SI->getPointerOperand();
+       auto *LI = new LoadInst(Ptr, "undo", SI);
+       Idx[1] = ConstantInt::get(Type::getInt32Ty(Mod->getContext()), LogIndex);
+       LogIndex++;
+       GetElementPtrInst *AddrGEP = GetElementPtrInst::Create(ULog, Idx, "", SI);
+       auto *AddrBI = new PtrToIntInst(Ptr, Int64Ty, "", SI );
+       new StoreInst(AddrBI, AddrGEP, SI);
+
+       //Idx[1] = ConstantInt::get(Type::getInt32Ty(Mod->getContext()), LogIndex);
+       //LogIndex++;
+       //GetElementPtrInst *ValGEP = GetElementPtrInst::Create(ULog, Idx, "", SI);
+       //auto *ValBI = new BitCastInst(LI, Int64Ty, "", SI);
+       //new StoreInst(ValBI, ValGEP, SI);
     }
+
+    assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
 }
 
 void MicroWorkloadExtract::makeSeqGraph(Function &F) {
@@ -998,9 +1016,9 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
         if(extractAsChop) Blocks = getChopBlocks(P, BlockMap);
         else Blocks = getTraceBlocks(P, BlockMap);
         Function *ExF = extractAsFunction(PostDomTree, Mod, Blocks);
-        optimizeModule(Mod);
-        replaceGuards(*ExF);
         addUndoLog(*ExF);
+        optimizeModule(Mod);
+        //replaceGuards(*ExF);
         writeModule(Mod, (P.Id) + string(".ll"));
         delete Mod;
     }
