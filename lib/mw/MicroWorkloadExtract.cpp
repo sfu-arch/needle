@@ -949,13 +949,29 @@ createFlushBufferFunction(Module* Mod, GlobalVariable* ULog) {
 
     // Entry contents
     auto *Int64Ty = Type::getInt64Ty(Ctx);
-    auto *Counter = new AllocaInst(Int64Ty, "ctr", Entry);
-    auto *CounterTy = cast<SequentialType>(Counter->getType())->getElementType();
-    auto *Zero      = ConstantInt::get(CounterTy, 0, false);
-    new StoreInst(Zero, Counter, Entry);
-    BranchInst::Create(Body, Entry );
+    BranchInst::Create(Body, Entry);
 
     // Body block
+    auto *Counter = PHINode::Create(Int64Ty, 2, "ctr", Body);
+    auto *Zero = ConstantInt::get(Int64Ty, 0, false);
+    auto *One = ConstantInt::get(Int64Ty, 1, false);
+    auto *Eight = ConstantInt::get(Int64Ty, 8, false);
+    Counter->addIncoming(Zero, Entry);
+   
+    Value * AddrIdx[] = {Zero, Counter};
+    auto* AddrGEP = GetElementPtrInst::Create(ULog, AddrIdx, "addr_gep", Body);
+    auto* AddrBC = new BitCastInst(AddrGEP, PointerType::get(Int64Ty, 0), "", Body);
+    auto* Addr = new LoadInst(AddrBC, "addr_ld", Body);
+  
+    auto* CounterPlusEight = BinaryOperator::CreateAdd(Counter, Eight, "", Body);
+    Value *ValIdx[] = {Zero, CounterPlusEight};
+    auto* ValGEP = GetElementPtrInst::Create(ULog, ValIdx, "val_gep", Body);
+    auto* ValBC = new BitCastInst(ValGEP, PointerType::get(Int64Ty, 0), "", Body);
+    auto* Val = new LoadInst(ValBC, "val_ld", Body);
+
+    // If Addr == 0 then branch to exit, else flush the store,
+    // increment the counter and branch back to this block.
+
     BranchInst::Create(Exit, Body);
 
     // Exit block contents
