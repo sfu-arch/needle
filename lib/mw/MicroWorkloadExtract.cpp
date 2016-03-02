@@ -935,6 +935,35 @@ MicroWorkloadExtract::replaceGuards(Function& F) {
 }
 
 static void
+createFlushBufferFunction(Module* Mod, GlobalVariable* ULog) {
+    auto &Ctx = Mod->getContext();
+    auto *VoidTy = Type::getVoidTy(Ctx);      
+
+    auto *FlushTy = FunctionType::get(VoidTy, {}, false);
+    auto *FlushFunc = Function::Create(FlushTy, GlobalValue::ExternalLinkage, 
+                        "__flush_undo_log", Mod);
+
+    auto *Entry = BasicBlock::Create(Ctx, "entry", FlushFunc, nullptr);
+    auto *Exit = BasicBlock::Create(Ctx, "exit", FlushFunc, nullptr);
+    auto *Body = BasicBlock::Create(Ctx, "body", FlushFunc, nullptr);
+
+    // Entry contents
+    auto *Int64Ty = Type::getInt64Ty(Ctx);
+    auto *Counter = new AllocaInst(Int64Ty, "ctr", Entry);
+    auto *CounterTy = cast<SequentialType>(Counter->getType())->getElementType();
+    auto *Zero      = ConstantInt::get(CounterTy, 0, false);
+    new StoreInst(Zero, Counter, Entry);
+    BranchInst::Create(Body, Entry );
+
+    // Body block
+    BranchInst::Create(Exit, Body);
+
+    // Exit block contents
+    ReturnInst::Create(Ctx, nullptr, Exit);
+    
+}
+
+static void
 addUndoLog(Function& F) {
     // Get all the stores in the function minus the stores into 
     // the struct needed for live outs.
@@ -972,11 +1001,11 @@ addUndoLog(Function& F) {
         new GlobalVariable(*Mod, LogArrTy, false,
         GlobalValue::CommonLinkage,
                            Initializer, "__undo_log");
-    ULog->setAlignment(64);
+    ULog->setAlignment(8);
 
     // Instrument the stores : 
     // a) Get the value from the load
-    // b) Store the value into the undo_log
+    // b) Store the value+addr into the undo_log buffer
     
     uint32_t LogIndex = 0;
     Value* Idx[2];
@@ -998,6 +1027,9 @@ addUndoLog(Function& F) {
        new StoreInst(LI, ValBI, false, SI);
     }
 
+    // Create a function to flush the undo log buffer
+    createFlushBufferFunction(Mod, ULog);
+
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
 }
 
@@ -1016,7 +1048,7 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
         else Blocks = getTraceBlocks(P, BlockMap);
         Function *ExF = extractAsFunction(PostDomTree, Mod, Blocks);
         addUndoLog(*ExF);
-        optimizeModule(Mod);
+        //optimizeModule(Mod);
         //replaceGuards(*ExF);
         writeModule(Mod, (P.Id) + string(".ll"));
         delete Mod;
