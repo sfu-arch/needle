@@ -966,7 +966,7 @@ addUndoLog(Function& F) {
     
     // Create the Undo Log as a global variable
     ArrayType *LogArrTy =
-        ArrayType::get(IntegerType::get(Mod->getContext(), 64), Stores.size()*2);
+        ArrayType::get(IntegerType::get(Mod->getContext(), 8), Stores.size()*2*8);
     auto *Initializer = ConstantAggregateZero::get(LogArrTy);
     GlobalVariable *ULog =
         new GlobalVariable(*Mod, LogArrTy, false,
@@ -981,22 +981,21 @@ addUndoLog(Function& F) {
     uint32_t LogIndex = 0;
     Value* Idx[2];
     Idx[0] = ConstantInt::getNullValue(Type::getInt32Ty(Mod->getContext()));
-    auto Int64Ty = Type::getInt64Ty(Mod->getContext());
-    //auto Int8PtrTy = Type::getInt8PtrTy(Mod->getContext());
+    auto Int8Ty = Type::getInt8Ty(Mod->getContext());
     for(auto &SI : Stores) {
        auto *Ptr = SI->getPointerOperand();
        auto *LI = new LoadInst(Ptr, "undo", SI);
-       Idx[1] = ConstantInt::get(Type::getInt32Ty(Mod->getContext()), LogIndex);
+       Idx[1] = ConstantInt::get(Type::getInt32Ty(Mod->getContext()), LogIndex*8);
        LogIndex++;
        GetElementPtrInst *AddrGEP = GetElementPtrInst::Create(ULog, Idx, "", SI);
-       auto *AddrBI = new PtrToIntInst(Ptr, Int64Ty, "", SI );
+       auto *AddrBI = new PtrToIntInst(Ptr, Int8Ty, "", SI );
        new StoreInst(AddrBI, AddrGEP, SI);
 
-       //Idx[1] = ConstantInt::get(Type::getInt32Ty(Mod->getContext()), LogIndex);
-       //LogIndex++;
-       //GetElementPtrInst *ValGEP = GetElementPtrInst::Create(ULog, Idx, "", SI);
-       //auto *ValBI = new BitCastInst(LI, Int64Ty, "", SI);
-       //new StoreInst(ValBI, ValGEP, SI);
+       Idx[1] = ConstantInt::get(Type::getInt32Ty(Mod->getContext()), LogIndex*8);
+       LogIndex++;
+       GetElementPtrInst *ValGEP = GetElementPtrInst::Create(ULog, Idx, "", SI);
+       auto *ValBI = new BitCastInst(ValGEP, PointerType::get(LI->getType(), 0), "", SI);
+       new StoreInst(LI, ValBI, false, SI);
     }
 
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
