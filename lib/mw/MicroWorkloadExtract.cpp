@@ -31,8 +31,7 @@ extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
 
-void MicroWorkloadExtract::readSequences(vector<Path> &S,
-                                         map<int64_t, int64_t> &SM) {
+void MicroWorkloadExtract::readSequences() {
     ifstream SeqFile(SeqFilePath.c_str(), ios::in);
     assert(SeqFile.is_open() && "Could not open file");
     string Line;
@@ -75,8 +74,7 @@ void MicroWorkloadExtract::readSequences(vector<Path> &S,
         default:
             assert(false && "Unknown path type");
         }
-        S.push_back(P);
-        // SM[P.Id] = Count;
+        Sequences.push_back(P);
         Count++;
         if (Count == NumSeq)
             break;
@@ -85,7 +83,7 @@ void MicroWorkloadExtract::readSequences(vector<Path> &S,
 }
 
 bool MicroWorkloadExtract::doInitialization(Module &M) {
-    readSequences(Sequences, SequenceMap);
+    readSequences();
     return false;
 }
 
@@ -921,20 +919,24 @@ replaceGuardsHelper(Function& F,
 }
 
 void
-MicroWorkloadExtract::replaceGuards(Function& F) {
+replaceGuards(Function& F, Pass* P) {
     auto &Context = F.getContext();
     auto *RetFalseBlock = BasicBlock::Create(Context, "ret.fail", &F);
     ReturnInst::Create(Context, ConstantInt::getFalse(Context), RetFalseBlock);
 
     bool changed = false;
-    while(replaceGuardsHelper(F, RetFalseBlock, this)) changed = true;
+    while(replaceGuardsHelper(F, RetFalseBlock, P)) changed = true;
 
     // No guard functions were found, so remove the basic
     // block we made.
     if(!changed) RetFalseBlock->eraseFromParent();
+
+    auto *GuardFunc = F.getParent()->getFunction("__guard_func");
+    assert(GuardFunc && "Guard Function definition not found");
+    GuardFunc->eraseFromParent();
 }
 
-static void
+static Function* 
 createFlushBufferFunction(Module* Mod, GlobalVariable* ULog) {
     auto &Ctx = Mod->getContext();
     auto *VoidTy = Type::getVoidTy(Ctx);      
@@ -990,9 +992,10 @@ createFlushBufferFunction(Module* Mod, GlobalVariable* ULog) {
     // Exit block contents
     ReturnInst::Create(Ctx, nullptr, Exit);
     
+    return FlushFunc;
 }
 
-static void
+static Function* 
 addUndoLog(Function& F) {
     // Get all the stores in the function minus the stores into 
     // the struct needed for live outs.
@@ -1058,12 +1061,44 @@ addUndoLog(Function& F) {
     }
 
     // Create a function to flush the undo log buffer
-    createFlushBufferFunction(Mod, ULog);
-
+    auto *Func = createFlushBufferFunction(Mod, ULog);
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
+
+    return Func;
 }
 
-void MicroWorkloadExtract::makeSeqGraph(Function &F) {
+static void
+instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
+                    Function* ExtractFunc, Function* FlushFunc) {
+    BasicBlock* StartBB = Blocks.back(), *LastBB = Blocks.front();
+    // map<string, BasicBlock *> BlockMap;
+    // for (auto &BB : F)
+    //     BlockMap[BB.getName().str()] = &BB;
+
+    // for(auto &BName : P.Seq) {
+    //     if(BlockMap.count(BName) == 0) assert(false && "Block not found in cloned module");
+    // }
+
+}
+
+static void
+instrumentModule(Module* Mod, Path& P, StringRef FunctionName,
+                Function *ExtractFunc, Function *FlushFunc, bool extractAsChop) {
+    for(auto &F : *Mod) {
+        if(F.getName() == FunctionName) {
+            map<string, BasicBlock *> BlockMap;
+            for (auto &BB : F)
+                BlockMap[BB.getName().str()] = &BB;
+            SmallVector<BasicBlock*, 16> Blocks = extractAsChop ? 
+                        getChopBlocks(P, BlockMap) : getTraceBlocks(P, BlockMap);
+            instrumentFunction(F, Blocks, ExtractFunc, FlushFunc);
+            return;
+        }
+    }
+    assert(false && "Unreachable");
+}
+
+void MicroWorkloadExtract::process(Function &F) {
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
     AA = &getAnalysis<AliasAnalysis>();
 
@@ -1072,15 +1107,30 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
         BlockMap[BB.getName().str()] = &BB;
 
     for (auto &P : Sequences) {
+
         Module *Mod = new Module(P.Id, getGlobalContext());
-        SmallVector<BasicBlock*, 16> Blocks;
-        if(extractAsChop) Blocks = getChopBlocks(P, BlockMap);
-        else Blocks = getTraceBlocks(P, BlockMap);
-        Function *ExF = extractAsFunction(PostDomTree, Mod, Blocks);
-        addUndoLog(*ExF);
-        //optimizeModule(Mod);
-        //replaceGuards(*ExF);
+        SmallVector<BasicBlock*, 16> Blocks = extractAsChop ? 
+                    getChopBlocks(P, BlockMap) : getTraceBlocks(P, BlockMap);
+
+        // Extract the blocks and create a new function
+        // Add undo log instrumentation and rollback function
+        Function *ExtractFunc = extractAsFunction(PostDomTree, Mod, Blocks);
+        Function *FlushFunc = addUndoLog(*ExtractFunc);
+        optimizeModule(Mod);
+        replaceGuards(*ExtractFunc, this);
         writeModule(Mod, (P.Id) + string(".ll"));
+
+
+        // Instrument a copy of the module and write
+        // out the bitcode which grafts the extracted function
+        // back inside the copied module.
+        
+        auto InstMod = CloneModule(F.getParent());
+        StripDebugInfo(*InstMod);
+        instrumentModule(InstMod, P, F.getName(), ExtractFunc, 
+                            FlushFunc, extractAsChop);
+        writeModule(InstMod, string("main.inst.ll"));
+        // Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);
         delete Mod;
     }
 }
@@ -1089,7 +1139,7 @@ bool MicroWorkloadExtract::runOnModule(Module &M) {
 
     for (auto &F : M)
         if (isTargetFunction(F, FunctionList))
-            makeSeqGraph(F);
+            process(F);
 
     return false;
 }
