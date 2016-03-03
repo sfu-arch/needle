@@ -946,12 +946,14 @@ createFlushBufferFunction(Module* Mod, GlobalVariable* ULog) {
     auto *Entry = BasicBlock::Create(Ctx, "entry", FlushFunc, nullptr);
     auto *Exit = BasicBlock::Create(Ctx, "exit", FlushFunc, nullptr);
     auto *Body = BasicBlock::Create(Ctx, "body", FlushFunc, nullptr);
+    auto *Tail = BasicBlock::Create(Ctx, "tail", FlushFunc, nullptr);
 
     // Entry contents
     auto *Int64Ty = Type::getInt64Ty(Ctx);
     BranchInst::Create(Body, Entry);
 
     // Body block
+    // TODO : This entire thing can be vectorized?
     auto *Counter = PHINode::Create(Int64Ty, 2, "ctr", Body);
     auto *Zero = ConstantInt::get(Int64Ty, 0, false);
     auto *One = ConstantInt::get(Int64Ty, 1, false);
@@ -971,8 +973,18 @@ createFlushBufferFunction(Module* Mod, GlobalVariable* ULog) {
 
     // If Addr == 0 then branch to exit, else flush the store,
     // increment the counter and branch back to this block.
+    
+    auto* Cond = new ICmpInst(*Body, ICmpInst::ICMP_EQ, Zero, Addr, "");
+    BranchInst::Create(Exit, Tail, Cond, Body);
 
-    BranchInst::Create(Exit, Body);
+    // Tail Block
+    auto* CounterPlusSixteen = BinaryOperator::CreateAdd(CounterPlusEight, Eight, "", Tail);
+    auto* StAddr = new IntToPtrInst(Addr, PointerType::get(Int64Ty, 0), "", Tail);
+    auto* StGEP = GetElementPtrInst::Create(StAddr, {0}, "st_gep", Tail);
+    BranchInst::Create(Body, Tail);
+
+    // Update incoming for Phi
+    Counter->addIncoming(CounterPlusSixteen, Tail);
 
     // Exit block contents
     ReturnInst::Create(Ctx, nullptr, Exit);
