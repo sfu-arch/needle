@@ -980,7 +980,8 @@ createFlushBufferFunction(Module* Mod, GlobalVariable* ULog) {
     // Tail Block
     auto* CounterPlusSixteen = BinaryOperator::CreateAdd(CounterPlusEight, Eight, "", Tail);
     auto* StAddr = new IntToPtrInst(Addr, PointerType::get(Int64Ty, 0), "", Tail);
-    auto* StGEP = GetElementPtrInst::Create(StAddr, {0}, "st_gep", Tail);
+    auto* StGEP = GetElementPtrInst::Create(StAddr, {Zero}, "st_gep", Tail);
+    new StoreInst(Val, StGEP, Tail);
     BranchInst::Create(Body, Tail);
 
     // Update incoming for Phi
@@ -1034,6 +1035,7 @@ addUndoLog(Function& F) {
     // Instrument the stores : 
     // a) Get the value from the load
     // b) Store the value+addr into the undo_log buffer
+    // c) Possible optimization, only save to log if value being written differs ? Does this happen
     
     uint32_t LogIndex = 0;
     Value* Idx[2];
