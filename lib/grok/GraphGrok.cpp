@@ -33,7 +33,7 @@ using namespace std;
 
 const char *VertexTypeStr[NUM_VERTEX_TYPES] = {
     "INT",     "FP",     "FUNC", "INTRIN", "GEP",    "UBR",      "CBR",
-    "SELECT",  "PHI",    "MEM",  "MEM_LD", "MEM_ST", "BB_START", "RET",
+    "SELECT",  "PHI",    "MEM_OTHER", "MEM_ALLOCA", "MEM_LD", "MEM_ST", "BB_START", "RET",
     "CONVERT", "VECTOR", "AGG",  "OTHER",  "CHAIN"};
 const char *EdgeTypeStr[NUM_EDGE_TYPES] = {"REG", "DATA"};
 
@@ -1012,7 +1012,8 @@ void analyseChains(const Path &P, BoostGraph &BG,
 
 void analyseGeneral(const Path &P, BoostGraph &BG,
                     const map<string, BasicBlock *> &BlockMap, ofstream &Out) {
-    uint32_t AllocCounter = 0;
+    uint32_t MallocCounter = 0;
+    uint32_t AllocaCounter = 0;
     uint32_t LoadCounter = 0;
     uint32_t StoreCounter = 0;
     uint32_t IndirectCallCount = 0;
@@ -1030,28 +1031,35 @@ void analyseGeneral(const Path &P, BoostGraph &BG,
                     if ((Name.find("malloc") & Name.find("calloc") &
                          Name.find("operator new") & Name.find("alloca")) !=
                         string::npos)
-                        AllocCounter++;
+                        MallocCounter++;
                     free(Ptr);
                 }
             } else
                 IndirectCallCount++;
         }
-        if (BG[V].Type == MEM) {
-            if (dyn_cast<LoadInst>(BG[V].Inst)) {
-                BG[V].Type = MEM_LD;
-                LoadCounter++;
-            }
-            if (dyn_cast<StoreInst>(BG[V].Inst)) {
-                BG[V].Type = MEM_ST;
-                StoreCounter++;
-            }
+        
+        switch(BG[V].Type) {
+            case MEM_LD: LoadCounter++; break;
+            case MEM_ST: StoreCounter++; break;
+            case MEM_ALLOCA: AllocaCounter++; break;
         }
+        // if (BG[V].Type == MEM) {
+        //     if (dyn_cast<LoadInst>(BG[V].Inst)) {
+        //         BG[V].Type = MEM_LD;
+        //         LoadCounter++;
+        //     }
+        //     if (dyn_cast<StoreInst>(BG[V].Inst)) {
+        //         BG[V].Type = MEM_ST;
+        //         StoreCounter++;
+        //     }
+        // }
     }
 
     // TODO : Alias Analysis
     Out << "\"load_count\" : " << LoadCounter << ",\n";
     Out << "\"store_count\" : " << StoreCounter << ",\n";
-    Out << "\"alloc_count\" : " << AllocCounter << ",\n";
+    Out << "\"alloca_count\" : " << AllocaCounter << ",\n";
+    Out << "\"malloc_count\" : " << MallocCounter << ",\n";
     Out << "\"indirect_count\" : " << IndirectCallCount << ",\n";
     Out << "\"num_called_funcs\" : " << CalledFunctions.size() << ",\n";
     Out << "\"called_funcs\" : [";
@@ -2662,12 +2670,15 @@ VertexType getOpType(Instruction &I) {
 
     // Memory instructions...
     case Instruction::Alloca:
+        return VertexType::MEM_ALLOCA;
     case Instruction::Load:
+        return VertexType::MEM_LD;
     case Instruction::Store:
+        return VertexType::MEM_ST;
     case Instruction::AtomicCmpXchg:
     case Instruction::AtomicRMW:
     case Instruction::Fence:
-        return VertexType::MEM;
+        return VertexType::MEM_OTHER;
 
     case Instruction::GetElementPtr:
         return VertexType::GEP;

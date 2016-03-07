@@ -105,8 +105,8 @@ int main(int argc, char **argv, const char **env) {
     pm.add(llvm::createPostDomTree());
     pm.add(new DominatorTreeWrapperPass());
     pm.add(new grok::GraphGrok(SeqFilePath, NumSeq));
-    //PM.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq));
-    //pm.add(createVerifierPass());
+    //pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq));
+    pm.add(createVerifierPass());
     pm.run(*module);
 
     return 0;

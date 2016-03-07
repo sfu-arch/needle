@@ -15,6 +15,7 @@
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/IR/DerivedTypes.h"
 #include <cxxabi.h>
 
 #include <map>
@@ -25,11 +26,14 @@ using namespace llvm;
 using namespace mwe;
 using namespace std;
 
-extern cl::opt<string> TargetFunction;
+//extern cl::opt<string> TargetFunction;
 
 //cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to analyse"),
                          //cl::value_desc("Integer"), cl::init(10));
 
+extern cl::list<std::string> FunctionList;
+extern bool isTargetFunction(const Function &f,
+                      const cl::list<std::string> &FunctionList);
 
 void MicroWorkloadExtract::readSequences(vector<Path> &S,
                                          map<int64_t, int64_t> &SM) {
@@ -94,21 +98,6 @@ bool MicroWorkloadExtract::doFinalization(Module &M) { return false; }
 static bool isBlockInPath(const string &S, const Path &P) {
     return find(P.Seq.begin(), P.Seq.end(), S) != P.Seq.end();
 }
-
-// static inline bool isUnconditionalBranch(Instruction *I) {
-//     if (auto BRI = dyn_cast<BranchInst>(I))
-//         return BRI->isUnconditional();
-//     return false;
-// }
-//
-// static inline uint32_t getBlockIdx(const Path &P, BasicBlock *BB) {
-//     auto Name = BB->getName().str();
-//     uint32_t Idx = 0;
-//     for (; Idx < P.Seq.size(); Idx++)
-//         if (Name == P.Seq[Idx])
-//             return Idx;
-//     assert(false && "Should be Unreachable");
-// }
 
 static inline void bSliceDFSHelper(
     BasicBlock *BB, DenseSet<BasicBlock *> &BSlice,
@@ -191,23 +180,24 @@ getChop(BasicBlock *StartBB, BasicBlock *LastBB,
     return Chop;
 }
 
-static void liveInHelperStatic(DenseSet<BasicBlock *> &Chop,
+static void liveInHelperStatic(SmallVector<BasicBlock *, 16> &RevTopoChop,
                                SmallVector<Value *, 16> &LiveIn,
                                DenseSet<Value *> &Globals, Value *Val) {
     if (auto Ins = dyn_cast<Instruction>(Val)) {
         for (auto OI = Ins->op_begin(), EI = Ins->op_end(); OI != EI; OI++) {
             if (auto OIns = dyn_cast<Instruction>(OI)) {
-                if (!Chop.count(OIns->getParent())) {
+                //if (!Chop.count(OIns->getParent())) {
+                if(find(RevTopoChop.begin(), RevTopoChop.end(), OIns->getParent()) == RevTopoChop.end()) {
                     LiveIn.push_back(OIns);
                 }
             } else
-                liveInHelperStatic(Chop, LiveIn, Globals, *OI);
+                liveInHelperStatic(RevTopoChop, LiveIn, Globals, *OI);
         }
     } else if (auto CE = dyn_cast<ConstantExpr>(Val)) {
         for (auto OI = CE->op_begin(), EI = CE->op_end(); OI != EI; OI++) {
             assert(!isa<Instruction>(OI) &&
                    "Don't expect operand of ConstExpr to be an Instruction");
-            liveInHelperStatic(Chop, LiveIn, Globals, *OI);
+            liveInHelperStatic(RevTopoChop, LiveIn, Globals, *OI);
         }
     } else if (auto Arg = dyn_cast<Argument>(Val))
         LiveIn.push_back(Arg);
@@ -218,14 +208,27 @@ static void liveInHelperStatic(DenseSet<BasicBlock *> &Chop,
     // in the trace.
 }
 
+static DenseSet<pair<const BasicBlock *, const BasicBlock *>> 
+getBackEdges(BasicBlock* StartBB) {
+    SmallVector<std::pair<const BasicBlock *, const BasicBlock *>, 8>
+        BackEdgesVec;
+    FindFunctionBackedges(*StartBB->getParent(), BackEdgesVec);
+    DenseSet<pair<const BasicBlock *, const BasicBlock *>> BackEdges;
+
+    for (auto &BE : BackEdgesVec) {
+        BackEdges.insert(BE);
+    }
+    return BackEdges;
+}
+
 void staticHelper(
     Function *StaticFunc, Function *GuardFunc, GlobalVariable *LOA,
     SmallVector<Value *, 16> &LiveIn, DenseSet<Value *> &LiveOut,
     DenseSet<Value *> &Globals, SmallVector<BasicBlock *, 16> &RevTopoChop,
-    DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges,
     LLVMContext &Context) {
 
     ValueToValueMapTy VMap;
+    DenseSet<pair<const BasicBlock *, const BasicBlock *>> BackEdges = getBackEdges(RevTopoChop.back());
 
     auto handleCallSites =
         [&VMap, &StaticFunc](CallSite &OrigCS, CallSite &StaticCS) {
@@ -342,17 +345,43 @@ void staticHelper(
         }
     }
 
+    function<void(Value&)> handleOperands;
+    handleOperands = [&VMap, &handleOperands, &StaticFunc](Value& V) {
+        User &I = *cast<User>(&V); 
+        for (auto OI = I.op_begin(), E = I.op_end(); OI != E; ++OI) {
+            if(auto CE = dyn_cast<ConstantExpr>(*OI)) {
+                handleOperands(*CE);
+            }
+            if (auto *GV = dyn_cast<GlobalVariable>(*OI)) {
+                // Since we may have already patched the global
+                // don't try to patch it again.
+                if (VMap.count(GV) == 0) continue;
+                // Check if we came from a ConstantExpr
+                if(auto CE = dyn_cast<ConstantExpr>(&V)) {
+                    int32_t OpIdx = -1;
+                    while(I.getOperand(++OpIdx) != GV);
+                    auto NCE = CE->getWithOperandReplaced(OpIdx, 
+                                         cast<Constant>(VMap[GV]));
+                    vector<User *> Users(CE->user_begin(), CE->user_end());
+                    for (auto U = Users.begin(),
+                              UE = Users.end(); U != UE; ++U) {
+                        // All users of ConstExpr should be instructions
+                        auto Ins = dyn_cast<Instruction>(*U);
+                        if( Ins->getParent()->getParent() == StaticFunc) {
+                            Ins->replaceUsesOfWith(CE, NCE);
+                        }
+                    }             
+                } else {
+                    I.replaceUsesOfWith(GV, VMap[GV]);
+                }
+            }
+        }
+    };
+
     // Patch Globals
     for (auto &BB : *StaticFunc) {
         for (auto &I : BB) {
-            for (auto OI = I.op_begin(), E = I.op_end(); OI != E; ++OI) {
-                if (auto *GV = dyn_cast<GlobalVariable>(*OI)) {
-                    // Since we may have already patched the global
-                    // don't try to patch it again.
-                    if (VMap[GV])
-                        I.replaceUsesOfWith(GV, VMap[GV]);
-                }
-            }
+            handleOperands(I);
         }
     }
 
@@ -574,17 +603,19 @@ static inline bool checkIntrinsic(Function *F) {
         return true;
 }
 
-static bool verifyChop(const DenseSet<BasicBlock *> Chop) {
+static bool verifyChop(const SmallVector<BasicBlock *,16> Chop) {
     for (auto &CB : Chop) {
         for (auto &I : *CB) {
             CallSite CS(&I);
             if (CS.isCall() || CS.isInvoke()) {
                 if (!CS.getCalledFunction()) {
+                    errs() << "Function Pointer\n";
                     return false;
                 } else {
                     if (CS.getCalledFunction()->isDeclaration() &&
                         checkIntrinsic(CS.getCalledFunction())) {
-                        return false;
+                        DEBUG(errs() << "External Call : " << CS.getCalledFunction()->getName() << "\n");
+                        return true;
                     }
                 }
             }
@@ -594,50 +625,19 @@ static bool verifyChop(const DenseSet<BasicBlock *> Chop) {
 }
 
 static Function* 
-generateStaticGraphFromPath(const Path &P,
-                                        map<string, BasicBlock *> &BlockMap,
-                                        PostDominatorTree *PDT,
-                                        Module* Mod) {
+extractAsFunction(PostDominatorTree *PDT,
+                            Module* Mod,
+                            SmallVector<BasicBlock*, 16> &RevTopoChop) {
 
-    auto *StartBB = BlockMap[P.Seq.front()];
-    auto *LastBB = BlockMap[P.Seq.back()];
+    auto *StartBB = RevTopoChop.back(); 
+    auto *LastBB = RevTopoChop.front(); 
 
-    SmallVector<std::pair<const BasicBlock *, const BasicBlock *>, 8>
-        BackEdgesVec;
-    FindFunctionBackedges(*StartBB->getParent(), BackEdgesVec);
-    DenseSet<pair<const BasicBlock *, const BasicBlock *>> BackEdges;
-
-    for (auto &BE : BackEdgesVec) {
-        BackEdges.insert(BE);
-    }
-
-    auto Chop = getChop(StartBB, LastBB, BackEdges);
-
-    DenseSet<const BasicBlock *> ConstChop;
-    for (auto &B : Chop)
-        ConstChop.insert(B);
-
-    uint32_t NumBackEdges = 0;
-    for (auto BE : BackEdges) {
-        if (ConstChop.count(BE.first) + ConstChop.count(BE.second) == 2)
-            NumBackEdges++;
-    }
-
-    assert(verifyChop(Chop) && "Invalid Chop");
-
-    auto DataLayoutStr = StartBB->getDataLayout();
-    auto TargetTripleStr = StartBB->getParent()->getParent()->getTargetTriple();
-
-    //Module *Mod = new Module(P.Id + string("-static"), getGlobalContext());
-    Mod->setDataLayout(DataLayoutStr);
-    Mod->setTargetTriple(TargetTripleStr);
+    assert(verifyChop(RevTopoChop) && "Invalid Region!");
 
     DenseSet<Value *> LiveOut, Globals;
     SmallVector<Value *, 16> LiveIn;
 
-    auto RevTopoChop = getTopoChop(Chop, StartBB, BackEdges);
-
-    auto handlePhis = [&LiveIn, &LiveOut, &Chop, &Globals, &StartBB, &BackEdges,
+    auto handlePhis = [&LiveIn, &LiveOut, &Globals, &StartBB, 
                        &PDT, &LastBB, &RevTopoChop](PHINode *Phi) -> int32_t {
 
         // Add uses of Phi before checking if it is LiveIn
@@ -645,7 +645,8 @@ generateStaticGraphFromPath(const Path &P,
         for (auto UI = Phi->use_begin(), UE = Phi->use_end(); UI != UE; UI++) {
             if (auto UIns = dyn_cast<Instruction>(UI->getUser())) {
                 auto Tgt = UIns->getParent();
-                if (!Chop.count(Tgt)) {
+                //if (!Chop.count(Tgt)) {
+                if(find(RevTopoChop.begin(), RevTopoChop.end(), Tgt) == RevTopoChop.end()) {
                     // errs() << "Adding LO: " << *Ins << "\n";
                     if (!PDT->dominates(LastBB, UIns->getParent())) {
                         // Phi at the begining of path is a live-in,
@@ -691,9 +692,11 @@ generateStaticGraphFromPath(const Path &P,
         for (uint32_t I = 0; I < Phi->getNumIncomingValues(); I++) {
             auto *Blk = Phi->getIncomingBlock(I);
             auto *Val = Phi->getIncomingValue(I);
-            if (Chop.count(Blk)) {
+            //if (Chop.count(Blk)) {
+            if(find(RevTopoChop.begin(), RevTopoChop.end(), Blk) != RevTopoChop.end()) {
                 if (auto *VI = dyn_cast<Instruction>(Val)) {
-                    if (Chop.count(VI->getParent()) == 0) {
+                    //if (Chop.count(VI->getParent()) == 0) {
+                    if(find(RevTopoChop.begin(), RevTopoChop.end(), VI->getParent()) == RevTopoChop.end()) {
                         LiveIn.push_back(Val);
                         Num += 1;
                     }
@@ -711,19 +714,23 @@ generateStaticGraphFromPath(const Path &P,
 
     // Collect the live-ins and live-outs for the Chop
     uint32_t PhiLiveIn = 0;
-    for (auto &BB : Chop) {
+    //for (auto &BB : Chop) {
+    // The order of iteration of blocks in this loop,
+    // does not matter. 
+    for (auto &BB : RevTopoChop) {
         for (auto &I : *BB) {
             if (auto Phi = dyn_cast<PHINode>(&I)) {
                 PhiLiveIn += handlePhis(Phi);
                 continue;
             }
-            liveInHelperStatic(Chop, LiveIn, Globals, &I);
+            liveInHelperStatic(RevTopoChop, LiveIn, Globals, &I);
             // Live-Outs
             if (auto Ins = dyn_cast<Instruction>(&I)) {
                 for (auto UI = Ins->use_begin(), UE = Ins->use_end(); UI != UE;
                      UI++) {
                     if (auto UIns = dyn_cast<Instruction>(UI->getUser())) {
-                        if (!Chop.count(UIns->getParent())) {
+                        //if (!Chop.count(UIns->getParent())) {
+                        if(find(RevTopoChop.begin(), RevTopoChop.end(), UIns->getParent()) == RevTopoChop.end()) {
                             // errs() << "Adding LO: " << *Ins << "\n";
                             // Need to reason about this check some more.
                             if (!PDT->dominates(LastBB, UIns->getParent()) &&
@@ -747,6 +754,20 @@ generateStaticGraphFromPath(const Path &P,
         }
     }
 
+    auto DataLayoutStr = StartBB->getDataLayout();
+    auto TargetTripleStr = StartBB->getParent()->getParent()->getTargetTriple();
+    Mod->setDataLayout(DataLayoutStr);
+    Mod->setTargetTriple(TargetTripleStr);
+    
+    SmallVector<Type*, 16> LiveOutTypes(LiveOut.size());
+    transform(LiveOut.begin(), LiveOut.end(), LiveOutTypes.begin(), 
+            [](const Value* V) -> Type * { return V->getType(); });
+    // Create a packed struct return type
+    auto *StructTy = StructType::get(Mod->getContext(), LiveOutTypes, true);
+
+    errs() << *StructTy << "\n";
+
+    // Void return type for extracted function
     auto VoidTy = Type::getVoidTy(Mod->getContext());
 
     std::vector<Type *> ParamTy;
@@ -787,37 +808,56 @@ generateStaticGraphFromPath(const Path &P,
     LOA->setAlignment(8);
 
     staticHelper(StaticFunc, GuardFunc, LOA, LiveIn, LiveOut, Globals,
-                 RevTopoChop, BackEdges, Mod->getContext());
+                 RevTopoChop, Mod->getContext());
 
     StripDebugInfo(*Mod);
 
-    error_code EC;
-    string Name = (P.Id) + string(".static.ll");
-    raw_fd_ostream File(Name, EC, sys::fs::OpenFlags::F_RW);
-    Mod->print(File, nullptr);
-    File.close();
-
-    // FIXME : Disable O3 version for now
-    // PassManagerBuilder PMB;
-    // PMB.OptLevel = 3;
-    // PMB.SLPVectorize = false;
-    // PMB.BBVectorize = false;
-    // PassManager PM;
-    // PMB.populateModulePassManager(PM);
-    // PM.run(*Mod);
-
-    // Name = (P.Id) + string(".static.O3.ll");
-    // raw_fd_ostream File3(Name, EC, sys::fs::OpenFlags::F_RW);
-    // Mod->print(File3, nullptr);
-    // File3.close();
-
-    DEBUG(errs() << "Verifying " << P.Id << "\n");
     // Dumbass verifyModule function returns false if no
     // errors are found. Ref "llvm/IR/Verifier.h":46
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
-    //delete Mod;
-    
     return StaticFunc;
+}
+
+static void 
+optimizeModule(Module* Mod) {
+    PassManagerBuilder PMB;
+    PMB.OptLevel = 3;
+    PMB.SLPVectorize = false;
+    PMB.BBVectorize = false;
+    PassManager PM;
+    PMB.populateModulePassManager(PM);
+    PM.run(*Mod);
+}
+
+static void
+writeModule(Module* Mod, string Name) {
+    error_code EC;
+    raw_fd_ostream File(Name, EC, sys::fs::OpenFlags::F_RW);
+    Mod->print(File, nullptr);
+    File.close();
+}
+
+static SmallVector<BasicBlock*, 16> 
+getChopBlocks(Path &P, map<string, BasicBlock*>& BlockMap) {
+    auto *StartBB = BlockMap[P.Seq.front()];
+    auto *LastBB = BlockMap[P.Seq.back()];
+    auto BackEdges = getBackEdges(StartBB);
+    auto Chop = getChop(StartBB, LastBB, BackEdges);
+    auto RevTopoChop = getTopoChop(Chop, StartBB, BackEdges);
+    assert(StartBB == RevTopoChop.back() && 
+            LastBB == RevTopoChop.front() && "Sanity Check");
+    return RevTopoChop;
+}
+
+static SmallVector<BasicBlock*, 16> 
+getTraceBlocks(Path &P, map<string, BasicBlock*>& BlockMap) {
+    SmallVector<BasicBlock*, 16> RPath;    
+    for(auto RB = P.Seq.rbegin(), RE = P.Seq.rend(); 
+                RB != RE; RB++) {
+        assert(BlockMap[*RB] && "Path does not exist");
+        RPath.push_back(BlockMap[*RB]);
+    }
+    return RPath;
 }
 
 void MicroWorkloadExtract::makeSeqGraph(Function &F) {
@@ -830,21 +870,18 @@ void MicroWorkloadExtract::makeSeqGraph(Function &F) {
 
     for (auto &P : Sequences) {
         Module *Mod = new Module(P.Id + string("-static"), getGlobalContext());
-        auto *ExF = generateStaticGraphFromPath(P, BlockMap, PostDomTree, Mod);
+        auto RTopoChop = getChopBlocks(P, BlockMap);
+        //auto RTopoChop = getTraceBlocks(P, BlockMap);
+        auto *ExF = extractAsFunction(PostDomTree, Mod, RTopoChop);
+        optimizeModule(Mod);
+        writeModule(Mod, (P.Id) + string(".static.ll"));
         delete Mod;
     }
-
-    // Generate block set
-    // a. Chop
-    // b. Unify
-    // c. Trace
-    // Extract function
-    // Reintegrate function
 }
 
 bool MicroWorkloadExtract::runOnModule(Module &M) {
     for (auto &F : M)
-        if (F.getName() == TargetFunction)
+        if (isTargetFunction(F, FunctionList))
             makeSeqGraph(F);
 
     return false;
