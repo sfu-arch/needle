@@ -19,8 +19,6 @@
 #include "llvm/IR/DerivedTypes.h"
 #include <cxxabi.h>
 
-//#include <map>
-//#include <set>
 #define DEBUG_TYPE "mw"
 
 using namespace llvm;
@@ -217,7 +215,7 @@ getBackEdges(BasicBlock *StartBB) {
 }
 
 void 
-MicroWorkloadExtract::staticHelper(Function *StaticFunc, Function *GuardFunc,
+MicroWorkloadExtract::extractHelper(Function *StaticFunc, Function *GuardFunc,
                   SmallVector<Value *, 16> &LiveIn, SetVector<Value *> &LiveOut,
                   SetVector<Value *> &Globals,
                   SmallVector<BasicBlock *, 16> &RevTopoChop,
@@ -642,7 +640,7 @@ static bool verifyChop(const SmallVector<BasicBlock *, 16> Chop) {
 }
 
 Function *
-MicroWorkloadExtract::extractAsFunction(PostDominatorTree *PDT, Module *Mod,
+MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
                                    SmallVector<BasicBlock *, 16> &RevTopoChop) {
 
     auto *StartBB = RevTopoChop.back();
@@ -840,7 +838,7 @@ MicroWorkloadExtract::extractAsFunction(PostDominatorTree *PDT, Module *Mod,
     // LOA->setAlignment(8);
 
     // staticHelper(StaticFunc, GuardFunc, LOA, LiveIn, LiveOut, Globals,
-    staticHelper(StaticFunc, GuardFunc, LiveIn, LiveOut, Globals, RevTopoChop,
+    extractHelper(StaticFunc, GuardFunc, LiveIn, LiveOut, Globals, RevTopoChop,
                  Mod->getContext());
 
     StripDebugInfo(*Mod);
@@ -1114,9 +1112,16 @@ instrumentModule(Module* Mod, Path& P, StringRef FunctionName,
     assert(false && "Unreachable");
 }
 
+static void
+runHelperPasses(Function* Offload, Module* Generated) {
+    PassManager PM;
+    PM.add(createBasicAliasAnalysisPass());
+    PM.add(new MicroWorkloadHelper(Offload));
+    PM.run(*Generated);
+}
+
 void MicroWorkloadExtract::process(Function &F) {
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
-    AA = &getAnalysis<AliasAnalysis>();
 
     map<string, BasicBlock *> BlockMap;
     for (auto &BB : F)
@@ -1130,8 +1135,11 @@ void MicroWorkloadExtract::process(Function &F) {
 
         // Extract the blocks and create a new function
         // Add undo log instrumentation and rollback function
-        Function *ExtractFunc = extractAsFunction(PostDomTree, Mod, Blocks);
-        Function *FlushFunc = addUndoLog(*ExtractFunc);
+        Function *Offload = extract(PostDomTree, Mod, Blocks);
+
+        runHelperPasses(Offload, Mod);
+
+        Function *FlushFunc = addUndoLog(*Offload);
         //optimizeModule(Mod);
         //replaceGuards(*ExtractFunc, this);
         writeModule(Mod, (P.Id) + string(".ll"));
@@ -1143,7 +1151,7 @@ void MicroWorkloadExtract::process(Function &F) {
         
         auto InstMod = CloneModule(F.getParent());
         StripDebugInfo(*InstMod);
-        instrumentModule(InstMod, P, F.getName(), ExtractFunc, 
+        instrumentModule(InstMod, P, F.getName(), Offload, 
                             FlushFunc, extractAsChop);
         writeModule(InstMod, string("main.inst.ll"));
         // Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);
