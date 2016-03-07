@@ -32,9 +32,10 @@ using namespace grok;
 using namespace std;
 
 const char *VertexTypeStr[NUM_VERTEX_TYPES] = {
-    "INT",     "FP",     "FUNC", "INTRIN", "GEP",    "UBR",      "CBR",
-    "SELECT",  "PHI",    "MEM_OTHER", "MEM_ALLOCA", "MEM_LD", "MEM_ST", "BB_START", "RET",
-    "CONVERT", "VECTOR", "AGG",  "OTHER",  "CHAIN"};
+    "INT",        "FP",     "FUNC",   "INTRIN",   "GEP",
+    "UBR",        "CBR",    "SELECT", "PHI",      "MEM_OTHER",
+    "MEM_ALLOCA", "MEM_LD", "MEM_ST", "BB_START", "RET",
+    "CONVERT",    "VECTOR", "AGG",    "OTHER",    "CHAIN"};
 const char *EdgeTypeStr[NUM_EDGE_TYPES] = {"REG", "DATA"};
 
 static_assert(NUM_VERTEX_TYPES ==
@@ -45,19 +46,20 @@ static_assert(NUM_EDGE_TYPES == sizeof(EdgeTypeStr) / sizeof(EdgeTypeStr[0]),
 
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
-                      const cl::list<std::string> &FunctionList);
+                             const cl::list<std::string> &FunctionList);
 
-//extern cl::opt<string> TargetFunction; 
+// extern cl::opt<string> TargetFunction;
 
-//cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to analyse"),
-                         //cl::value_desc("Integer"), cl::init(10));
-                         
+// cl::opt<int> MaxNumPaths("max", cl::desc("Maximum number of paths to
+// analyse"),
+// cl::value_desc("Integer"), cl::init(10));
+
 cl::opt<string>
     GenerateTrace("trace", cl::desc("Generate bitcode trace from path graph"),
                   cl::value_desc("static/dynamic"), cl::init("unset"));
 
-//cl::opt<string> OnlyPath("path", cl::desc("Run on only specified path"),
-                         //cl::value_desc("String"), cl::init("na"));
+// cl::opt<string> OnlyPath("path", cl::desc("Run on only specified path"),
+// cl::value_desc("String"), cl::init("na"));
 
 VertexType getOpType(Instruction &I);
 
@@ -1037,11 +1039,17 @@ void analyseGeneral(const Path &P, BoostGraph &BG,
             } else
                 IndirectCallCount++;
         }
-        
-        switch(BG[V].Type) {
-            case MEM_LD: LoadCounter++; break;
-            case MEM_ST: StoreCounter++; break;
-            case MEM_ALLOCA: AllocaCounter++; break;
+
+        switch (BG[V].Type) {
+        case MEM_LD:
+            LoadCounter++;
+            break;
+        case MEM_ST:
+            StoreCounter++;
+            break;
+        case MEM_ALLOCA:
+            AllocaCounter++;
+            break;
         }
         // if (BG[V].Type == MEM) {
         //     if (dyn_cast<LoadInst>(BG[V].Inst)) {
@@ -1835,7 +1843,7 @@ void staticHelper(
                 continue;
             auto *NewI = I.clone();
             NewBB->getInstList().push_back(NewI);
-            //errs() << "Ins : " << *NewI << "\n";
+            // errs() << "Ins : " << *NewI << "\n";
             assert(VMap.count(&I) == 0 && "Need new values");
             VMap[&I] = NewI;
             CallSite CS(&I), TraceCS(NewI);
@@ -1908,36 +1916,38 @@ void staticHelper(
     }
 
     // Patch Globals Lambda
-    function<void(Value&)> handleOperands;
-    handleOperands = [&VMap, &handleOperands, &StaticFunc](Value& V) {
-        User &I = *cast<User>(&V); 
+    function<void(Value &)> handleOperands;
+    handleOperands = [&VMap, &handleOperands, &StaticFunc](Value &V) {
+        User &I = *cast<User>(&V);
         for (auto OI = I.op_begin(), E = I.op_end(); OI != E; ++OI) {
-            if(auto CE = dyn_cast<ConstantExpr>(*OI)) {
+            if (auto CE = dyn_cast<ConstantExpr>(*OI)) {
                 DEBUG(errs() << V << "\n is a ConstExpr\n");
                 handleOperands(*CE);
             }
             if (auto *GV = dyn_cast<GlobalVariable>(*OI)) {
                 // Since we may have already patched the global
                 // don't try to patch it again.
-                if (VMap.count(GV) == 0) continue;
+                if (VMap.count(GV) == 0)
+                    continue;
                 DEBUG(errs() << " has unpatched global\n");
                 // Check if we came from a ConstantExpr
-                if(auto CE = dyn_cast<ConstantExpr>(&V)) {
+                if (auto CE = dyn_cast<ConstantExpr>(&V)) {
                     int32_t OpIdx = -1;
-                    while(I.getOperand(++OpIdx) != GV);
-                    auto NCE = CE->getWithOperandReplaced(OpIdx, 
-                                         cast<Constant>(VMap[GV]));
+                    while (I.getOperand(++OpIdx) != GV)
+                        ;
+                    auto NCE = CE->getWithOperandReplaced(
+                        OpIdx, cast<Constant>(VMap[GV]));
                     DEBUG(errs() << "Num Uses: " << CE->getNumUses() << "\n");
-                    
+
                     vector<User *> Users(CE->user_begin(), CE->user_end());
-                    for (auto U = Users.begin(),
-                              UE = Users.end(); U != UE; ++U) {
+                    for (auto U = Users.begin(), UE = Users.end(); U != UE;
+                         ++U) {
                         auto Ins = dyn_cast<Instruction>(*U);
-                        if( Ins->getParent()->getParent() == StaticFunc) {
+                        if (Ins->getParent()->getParent() == StaticFunc) {
                             Ins->replaceUsesOfWith(CE, NCE);
                             DEBUG(errs() << "Patched: " << *Ins << "\n");
                         }
-                    }             
+                    }
                 } else {
                     I.replaceUsesOfWith(GV, VMap[GV]);
                 }
@@ -2436,11 +2446,9 @@ void GraphGrok::makeSeqGraph(Function &F) {
 
     typedef pair<BasicBlock *, BasicBlock *> Key;
     typedef pair<uint64_t, APInt> Val;
-    auto PairCmp =
-        [](const Key &A, const Key &B) -> bool { 
-            return A.first < B.first || 
-                (A.first == B.first && A.second < B.second); 
-        };
+    auto PairCmp = [](const Key &A, const Key &B) -> bool {
+        return A.first < B.first || (A.first == B.first && A.second < B.second);
+    };
     map<Key, Val, decltype(PairCmp)> FrequentChops(PairCmp);
     map<Key, vector<string>, decltype(PairCmp)> ChopTraceMap(PairCmp);
 
@@ -2612,7 +2620,7 @@ void GraphGrok::makeSeqGraph(Function &F) {
 
 bool GraphGrok::runOnModule(Module &M) {
     for (auto &F : M)
-        //if (F.getName() == TargetFunction)
+        // if (F.getName() == TargetFunction)
         if (isTargetFunction(F, FunctionList))
             makeSeqGraph(F);
 

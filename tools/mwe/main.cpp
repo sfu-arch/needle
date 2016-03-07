@@ -20,14 +20,25 @@
 
 #include "AllInliner.h"
 #include "Namer.h"
-#include "GraphGrok.h"
+#include "MicroWorkloadExtract.h"
 #include "AllInliner.h"
 #include "Namer.h"
 
 using namespace std;
 using namespace llvm;
 using namespace llvm::sys;
-using namespace grok;
+using namespace mwe;
+
+enum ExtractType {
+    trace, chop
+};
+
+// MWE-only options
+
+cl::opt<ExtractType> ExtractAs(cl::desc("Choose extract type, trace / chop"),
+        cl::values( clEnumVal(trace, "Extract as trace"),
+                    clEnumVal(chop, "Extract as chop"),
+                    clEnumValEnd ), cl::Required);
 
 cl::opt<string> InPath(cl::Positional, cl::desc("<Module to analyze>"),
                        cl::value_desc("bitcode filename"), cl::Required);
@@ -94,7 +105,7 @@ int main(int argc, char **argv, const char **env) {
     pm.add(new epp::Namer());
     pm.add(llvm::createPostDomTree());
     pm.add(new DominatorTreeWrapperPass());
-    pm.add(new grok::GraphGrok(SeqFilePath, NumSeq));
+    pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq, ExtractAs));
     pm.add(createVerifierPass());
     pm.run(*module);
 

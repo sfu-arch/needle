@@ -16,6 +16,7 @@
 #include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopIterator.h"
 #include "llvm/Analysis/ScalarEvolution.h"
@@ -51,21 +52,29 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
     std::string SeqFilePath;
     int NumSeq;
     std::vector<Path> Sequences;
-    // Sequence ID to Position in vector
-    std::map<int64_t, int64_t> SequenceMap;
     llvm::PostDominatorTree *PostDomTree;
     llvm::AliasAnalysis *AA;
+    bool extractAsChop;
 
-    MicroWorkloadExtract(std::string S, int N)
-        : llvm::ModulePass(ID), SeqFilePath(S), NumSeq(N) {}
+    MicroWorkloadExtract(std::string S, int N, int C)
+        : llvm::ModulePass(ID), SeqFilePath(S), NumSeq(N), extractAsChop(C) {}
 
     virtual bool runOnModule(llvm::Module &M) override;
     virtual bool doInitialization(llvm::Module &M) override;
     virtual bool doFinalization(llvm::Module &M) override;
 
-    void readSequences(std::vector<Path> &S, std::map<int64_t, int64_t> &SM);
+    void readSequences();
 
-    void makeSeqGraph(llvm::Function &F);
+    void process(llvm::Function &F);
+    llvm::Function* extractAsFunction(llvm::PostDominatorTree* , llvm::Module*,
+                                   llvm::SmallVector<llvm::BasicBlock *, 16>&);
+    
+    void 
+    staticHelper(llvm::Function *, llvm::Function *,
+                      llvm::SmallVector<llvm::Value *, 16> &LiveIn, llvm::SetVector<llvm::Value *>&,
+                      llvm::SetVector<llvm::Value *> &,
+                      llvm::SmallVector<llvm::BasicBlock *, 16> &,
+                      llvm::LLVMContext &); 
 
     virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
         AU.addRequired<llvm::AliasAnalysis>();

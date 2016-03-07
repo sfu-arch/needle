@@ -61,7 +61,6 @@ unique_ptr<T> make_unique(Args &&... args) {
     return unique_ptr<T>(new T(forward<Args>(args)...));
 }
 
-
 cl::opt<string> inPath(cl::Positional, cl::desc("<Module to analyze>"),
                        cl::value_desc("bitcode filename"), cl::Required);
 
@@ -71,8 +70,9 @@ cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
 cl::opt<string> profile("p", cl::desc("Path to path profiling results"),
                         cl::value_desc("filename"));
 
-cl::opt<string> selfloop("s", cl::desc("Path to self loop path profiling results"),
-                        cl::value_desc("filename"));
+cl::opt<string> selfloop("s",
+                         cl::desc("Path to self loop path profiling results"),
+                         cl::value_desc("filename"));
 
 cl::opt<unsigned>
     numberOfPaths("n", cl::desc("Number of most frequent paths to compute"),

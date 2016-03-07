@@ -22,14 +22,14 @@ extern bool isTargetFunction(const Function &, const cl::list<std::string> &);
 
 extern cl::opt<std::string> profile;
 extern cl::opt<std::string> selfloop;
-//cl::opt<std::string> ProfileDumpFile(
-    //"path-profile", cl::desc("File containing dynamic path profile data:"),
-    //cl::value_desc("filename"), cl::init("path-profile-results.txt"));
+// cl::opt<std::string> ProfileDumpFile(
+//"path-profile", cl::desc("File containing dynamic path profile data:"),
+// cl::value_desc("filename"), cl::init("path-profile-results.txt"));
 
-//cl::opt<std::string>
-    //SelfLoopDumpFile("self-loop-profile",
-                     //cl::desc("File containing dynamic path profile data:"),
-                     //cl::value_desc("filename"), cl::init("self-loop.txt"));
+// cl::opt<std::string>
+// SelfLoopDumpFile("self-loop-profile",
+// cl::desc("File containing dynamic path profile data:"),
+// cl::value_desc("filename"), cl::init("self-loop.txt"));
 
 void printPath(std::vector<llvm::BasicBlock *> &Blocks,
                std::ofstream &Outfile) {
@@ -121,11 +121,10 @@ void printPathSrc(std::vector<llvm::BasicBlock *> &blocks) {
             if (loc.getLineNumber() != line || loc.getFilename() != file) {
                 line = loc.getLineNumber();
                 file = loc.getFilename();
-                errs() << "File " << file.str() << " line " << line
-                             << "\n";
+                errs() << "File " << file.str() << " line " << line << "\n";
                 // break; // FIXME : This makes it only print once for each BB,
-                       // remove to print all
-                       // source lines per instruction.
+                // remove to print all
+                // source lines per instruction.
             }
         }
     }
@@ -188,15 +187,22 @@ bool EPPDecode::runOnModule(Module &M) {
     for (size_t i = 0, e = bbSequences.size(); i < e; ++i) {
         auto pType = bbSequences[i].first;
         int start = 0, end = 0;
-        switch(pType){
-            case RIRO : break;
-            case FIRO : start = 1; break;
-            case RIFO : end = 1; break;
-            case FIFO : start = 1; end = 1;
+        switch (pType) {
+        case RIRO:
+            break;
+        case FIRO:
+            start = 1;
+            break;
+        case RIFO:
+            end = 1;
+            break;
+        case FIFO:
+            start = 1;
+            end = 1;
             // case SELF : break; // Does not exist yet.
         }
-        vector<BasicBlock*> blocks(bbSequences[i].second.begin()+start, 
-                            bbSequences[i].second.end()-end); 
+        vector<BasicBlock *> blocks(bbSequences[i].second.begin() + start,
+                                    bbSequences[i].second.end() - end);
 
         if (auto Count = pathCheck(blocks)) {
             DEBUG(errs() << i << " " << paths[i].count << " ");
@@ -210,7 +216,7 @@ bool EPPDecode::runOnModule(Module &M) {
             pathFail++;
         }
         errs() << "Path ID: " << paths[i].id.toString(10, false)
-                     << " Freq: " << paths[i].count << "\n";
+               << " Freq: " << paths[i].count << "\n";
         printPathSrc(blocks);
         DEBUG(errs() << "\n");
     }
@@ -226,8 +232,8 @@ bool EPPDecode::runOnModule(Module &M) {
         Path.push_back(Enc->selfLoopMap[Id]);
         auto C = pathCheck(Path);
         if (C)
-            Outfile << (totalPathCount + 1 + Id) << " " << Count << " 4 " << C << " "
-                    << Path[0]->getName().str() << " \n";
+            Outfile << (totalPathCount + 1 + Id) << " " << Count << " 4 " << C
+                    << " " << Path[0]->getName().str() << " \n";
     }
     return false;
 }
