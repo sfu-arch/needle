@@ -594,7 +594,7 @@ static void getTopoChopHelper(
     Order.push_back(BB);
 }
 
-static SmallVector<BasicBlock *, 16>
+SmallVector<BasicBlock *, 16>
 getTopoChop(DenseSet<BasicBlock *> &Chop, BasicBlock *StartBB,
             DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
     SmallVector<BasicBlock *, 16> Order;
@@ -849,15 +849,6 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
     return StaticFunc;
 }
 
-static void optimizeModule(Module *Mod) {
-    PassManagerBuilder PMB;
-    PMB.OptLevel = 3;
-    PMB.SLPVectorize = false;
-    PMB.BBVectorize = false;
-    PassManager PM;
-    PMB.populateModulePassManager(PM);
-    PM.run(*Mod);
-}
 
 static void writeModule(Module *Mod, string Name) {
     error_code EC;
@@ -888,198 +879,6 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
     return RPath;
 }
 
-static bool
-replaceGuardsHelper(Function& F,
-                    BasicBlock* RetBlock,
-                    Pass* P) {
-    for(auto &BB : F) {
-        for(auto &I : BB) {
-            if(auto *CI = dyn_cast<CallInst>(&I)) {
-                if(CI->getCalledFunction()->getName().equals("__guard_func")) {
-                    // Arg 0 : The value to branch on
-                    // Arg 1 : The dominant side of the branch (true or false)
-                    Value *Arg0 = CI->getArgOperand(0);
-                    auto *Arg1 = cast<ConstantInt>(CI->getArgOperand(1));
-                    auto *NewBlock = SplitBlock(&BB, CI, P);
-                    CI->eraseFromParent();
-                    BB.getTerminator()->eraseFromParent();
-                    if(Arg1->isOne()) {
-                        BranchInst::Create(NewBlock, RetBlock, Arg0, &BB);
-                    } else {
-                        BranchInst::Create(RetBlock, NewBlock, Arg0, &BB);
-                    }
-                    return true;
-                }
-            }
-        } 
-    }
-    return false;
-}
-
-void
-replaceGuards(Function& F, Pass* P) {
-    auto &Context = F.getContext();
-    auto *RetFalseBlock = BasicBlock::Create(Context, "ret.fail", &F);
-    ReturnInst::Create(Context, ConstantInt::getFalse(Context), RetFalseBlock);
-
-    bool changed = false;
-    while(replaceGuardsHelper(F, RetFalseBlock, P)) changed = true;
-
-    // No guard functions were found, so remove the basic
-    // block we made.
-    if(!changed) RetFalseBlock->eraseFromParent();
-
-    auto *GuardFunc = F.getParent()->getFunction("__guard_func");
-    assert(GuardFunc && "Guard Function definition not found");
-    GuardFunc->eraseFromParent();
-}
-
-static Function* 
-createInitBufferFunction(Module* Mod, GlobalVariable* ULog, uint32_t Size) {
-
-}
-
-static Function* 
-createFlushBufferFunction(Module* Mod, GlobalVariable* ULog, uint32_t Size) {
-    auto &Ctx = Mod->getContext();
-    auto *VoidTy = Type::getVoidTy(Ctx);      
-
-    auto *FlushTy = FunctionType::get(VoidTy, {}, false);
-    auto *FlushFunc = Function::Create(FlushTy, GlobalValue::ExternalLinkage, 
-                        "__flush_undo_log", Mod);
-
-    auto *Entry = BasicBlock::Create(Ctx, "entry", FlushFunc, nullptr);
-    auto *Exit = BasicBlock::Create(Ctx, "exit", FlushFunc, nullptr);
-    auto *Body = BasicBlock::Create(Ctx, "body", FlushFunc, nullptr);
-    auto *Tail = BasicBlock::Create(Ctx, "tail", FlushFunc, nullptr);
-
-    // Entry contents
-    auto *Int64Ty = Type::getInt64Ty(Ctx);
-    BranchInst::Create(Body, Entry);
-
-    // Body block
-    // TODO : This entire thing can be vectorized?
-    auto *Counter = PHINode::Create(Int64Ty, 2, "ctr", Body);
-    auto *Zero = ConstantInt::get(Int64Ty, 0, false);
-    //auto *One = ConstantInt::get(Int64Ty, 1, false);
-    auto *Eight = ConstantInt::get(Int64Ty, 8, false);
-    auto *Max = ConstantInt::get(Int64Ty, 2*8*Size);
-    Counter->addIncoming(Zero, Entry);
-   
-    Value * AddrIdx[] = {Zero, Counter};
-    auto* AddrGEP = GetElementPtrInst::Create(ULog, AddrIdx, "addr_gep", Body);
-    auto* AddrBC = new BitCastInst(AddrGEP, PointerType::get(Int64Ty, 0), "", Body);
-    auto* Addr = new LoadInst(AddrBC, "addr_ld", Body);
-  
-    auto* CounterPlusEight = BinaryOperator::CreateAdd(Counter, Eight, "", Body);
-    Value *ValIdx[] = {Zero, CounterPlusEight};
-    auto* ValGEP = GetElementPtrInst::Create(ULog, ValIdx, "val_gep", Body);
-    auto* ValBC = new BitCastInst(ValGEP, PointerType::get(Int64Ty, 0), "", Body);
-    auto* Val = new LoadInst(ValBC, "val_ld", Body);
-
-    auto* CounterPlusSixteen = BinaryOperator::CreateAdd(CounterPlusEight, Eight, "", Body);
-    auto* Cond = new ICmpInst(*Body, ICmpInst::ICMP_ULT, Max, CounterPlusSixteen, "");
-    BranchInst::Create(Exit, Tail, Cond, Body);
-    Counter->addIncoming(CounterPlusSixteen, Tail);
-
-    // Tail Block
-    auto* StAddr = new IntToPtrInst(Addr, PointerType::get(Int64Ty, 0), "", Tail);
-    auto* StGEP = GetElementPtrInst::Create(StAddr, {Zero}, "st_gep", Tail);
-    new StoreInst(Val, StGEP, Tail);
-    BranchInst::Create(Body, Tail);
-
-    // Exit block contents
-    ReturnInst::Create(Ctx, nullptr, Exit);
-    
-    return FlushFunc;
-}
-
-static SmallVector<BasicBlock*, 16>
-getFunctionRPO(Function& F) {
-    DenseSet<BasicBlock*> Blocks;
-    for(auto &BB : F) Blocks.insert(&BB);
-    DenseSet<pair<const BasicBlock *, const BasicBlock *>> BackEdges;
-    auto *StartBB = &F.getEntryBlock();
-    
-    auto RevOrder = getTopoChop(Blocks, StartBB, BackEdges);
-    reverse(RevOrder.begin(), RevOrder.end());
-    return RevOrder;
-}
-
-static Function* 
-addUndoLog(Function& F) {
-    // Get all the stores in the function minus the stores into 
-    // the struct needed for live outs.
-    // Create a new global variable, 2 words per store (addr+data)
-    // save the address and data for each store. 
-    // add a new function to the module which will flush 
-    // the undo log
-    Module *Mod = F.getParent();
-    SmallVector<StoreInst*, 16> Stores;
-
-    // Get the struct pointer from the argument list,
-    // assume that output struct is always last arg
-    auto StructPtr = --F.arg_end();
-
-    auto TopoBlocks = getFunctionRPO(F);
-
-    // TODO : Running Alias Analysis on the new module means 
-    // I have to create a pass manager, move all of this
-    // code into a new pass, schedule the passes and then 
-    // run the transformations.
-
-    for(auto &BB : TopoBlocks) {
-        for(auto &I : *BB) {
-            if(auto *SI = dyn_cast<StoreInst>(&I)) {
-                // Filter out the stores added due to live outs
-                // being returned as a struct by reference.
-                if(SI->getMetadata("LO") == nullptr)
-                    Stores.push_back(SI);
-            }
-        }
-    }
-
-    // Create the Undo Log as a global variable
-    ArrayType *LogArrTy =
-        ArrayType::get(IntegerType::get(Mod->getContext(), 8), Stores.size()*2*8);
-    auto *Initializer = ConstantAggregateZero::get(LogArrTy);
-    GlobalVariable *ULog =
-        new GlobalVariable(*Mod, LogArrTy, false,
-        GlobalValue::CommonLinkage,
-                           Initializer, "__undo_log");
-    ULog->setAlignment(8);
-
-    // Instrument the stores : 
-    // a) Get the value from the load
-    // b) Store the value+addr into the undo_log buffer
-    // c) Possible optimization, only save to log if value being written differs ? Does this happen
-    
-    uint32_t LogIndex = 0;
-    Value* Idx[2];
-    Idx[0] = ConstantInt::getNullValue(Type::getInt32Ty(Mod->getContext()));
-    auto Int8Ty = Type::getInt8Ty(Mod->getContext());
-    for(auto &SI : Stores) {
-       auto *Ptr = SI->getPointerOperand();
-       auto *LI = new LoadInst(Ptr, "undo", SI);
-       Idx[1] = ConstantInt::get(Type::getInt32Ty(Mod->getContext()), LogIndex*8);
-       LogIndex++;
-       GetElementPtrInst *AddrGEP = GetElementPtrInst::Create(ULog, Idx, "", SI);
-       auto *AddrBI = new PtrToIntInst(Ptr, Int8Ty, "", SI );
-       new StoreInst(AddrBI, AddrGEP, SI);
-
-       Idx[1] = ConstantInt::get(Type::getInt32Ty(Mod->getContext()), LogIndex*8);
-       LogIndex++;
-       GetElementPtrInst *ValGEP = GetElementPtrInst::Create(ULog, Idx, "", SI);
-       auto *ValBI = new BitCastInst(ValGEP, PointerType::get(LI->getType(), 0), "", SI);
-       new StoreInst(LI, ValBI, false, SI);
-    }
-
-    // Create a function to flush the undo log buffer
-    auto *Func = createFlushBufferFunction(Mod, ULog, Stores.size());
-    assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
-
-    return Func;
-}
 
 static void
 instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
@@ -1113,14 +912,16 @@ instrumentModule(Module* Mod, Path& P, StringRef FunctionName,
 }
 
 static void
-runHelperPasses(Function* Offload, Module* Generated) {
+runHelperPasses(Function* Offload, Function *Undo, Module* Generated) {
     PassManager PM;
     PM.add(createBasicAliasAnalysisPass());
-    PM.add(new MicroWorkloadHelper(Offload));
+    PM.add(createTypeBasedAliasAnalysisPass());
+    PM.add(new MicroWorkloadHelper(Offload, Undo));
     PM.run(*Generated);
 }
 
-void MicroWorkloadExtract::process(Function &F) {
+void 
+MicroWorkloadExtract::process(Function &F) {
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
 
     map<string, BasicBlock *> BlockMap;
@@ -1134,26 +935,22 @@ void MicroWorkloadExtract::process(Function &F) {
                     getChopBlocks(P, BlockMap) : getTraceBlocks(P, BlockMap);
 
         // Extract the blocks and create a new function
-        // Add undo log instrumentation and rollback function
         Function *Offload = extract(PostDomTree, Mod, Blocks);
-
-        runHelperPasses(Offload, Mod);
-
-        Function *FlushFunc = addUndoLog(*Offload);
-        //optimizeModule(Mod);
-        //replaceGuards(*ExtractFunc, this);
+        // Creating a definition of the Undo function here and 
+        // then creating the body inside the pass causes LLVM to 
+        // crash thus nullptr is passed.
+        runHelperPasses(Offload, nullptr, Mod);
         writeModule(Mod, (P.Id) + string(".ll"));
-
 
         // Instrument a copy of the module and write
         // out the bitcode which grafts the extracted function
         // back inside the copied module.
         
-        auto InstMod = CloneModule(F.getParent());
-        StripDebugInfo(*InstMod);
-        instrumentModule(InstMod, P, F.getName(), Offload, 
-                            FlushFunc, extractAsChop);
-        writeModule(InstMod, string("main.inst.ll"));
+        //auto InstMod = CloneModule(F.getParent());
+        //StripDebugInfo(*InstMod);
+        //instrumentModule(InstMod, P, F.getName(), Offload, 
+                            //nullptr, extractAsChop);
+        //writeModule(InstMod, string("main.inst.ll"));
         // Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);
         delete Mod;
     }

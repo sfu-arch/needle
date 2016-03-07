@@ -86,12 +86,18 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
 
 struct MicroWorkloadHelper : public llvm::ModulePass {
     static char ID;    
-    llvm::Function *Offload, *FlushUndoLog;
-    MicroWorkloadHelper(llvm::Function* F) : llvm::ModulePass(ID) ,
-            Offload(F), FlushUndoLog(nullptr) {}
+    llvm::Function *Offload, *Undo;
+
+    MicroWorkloadHelper(llvm::Function* F, llvm::Function* U) : llvm::ModulePass(ID) ,
+            Offload(F), Undo(U) {}
+
     virtual bool runOnModule(llvm::Module &M) override;
     virtual bool doInitialization(llvm::Module &M) override;
     virtual bool doFinalization(llvm::Module &M) override;
+
+    void addUndoLog();
+    void replaceGuards();
+
     virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
         AU.addRequired<llvm::AliasAnalysis>();
     }
