@@ -641,14 +641,15 @@ static bool verifyChop(const SmallVector<BasicBlock *, 16> Chop) {
 
 Function *
 MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
-                                   SmallVector<BasicBlock *, 16> &RevTopoChop) {
+                                   SmallVector<BasicBlock *, 16> &RevTopoChop,
+                                   SetVector<Value*> &LiveOut, SetVector<Value*> &GEPOut) {
 
     auto *StartBB = RevTopoChop.back();
     auto *LastBB = RevTopoChop.front();
 
     assert(verifyChop(RevTopoChop) && "Invalid Region!");
 
-    SetVector<Value *> LiveOut, Globals;
+    SetVector<Value *> Globals;
     SmallVector<Value *, 16> LiveIn;
 
     auto handlePhis =
@@ -754,9 +755,16 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
                                  UIns->getParent()) == RevTopoChop.end()) {
                             // errs() << "Adding LO: " << *Ins << "\n";
                             // Need to reason about this check some more.
-                            if (!PDT->dominates(LastBB, UIns->getParent()) &&
-                                !isa<GetElementPtrInst>(Ins)) {
-                                LiveOut.insert(Ins);
+                            //if (!PDT->dominates(LastBB, UIns->getParent()) &&
+                                //!isa<GetElementPtrInst>(Ins)) {
+                                //LiveOut.insert(Ins);
+                            //}
+                            if (!PDT->dominates(LastBB, UIns->getParent())){
+                                if(isa<GetElementPtrInst>(Ins)) {
+                                    GEPOut.insert(Ins);
+                                } else {
+                                    LiveOut.insert(Ins);
+                                }
                             }
                         }
                     }
@@ -805,7 +813,7 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
 
     // Create the trace function
     Function *StaticFunc = Function::Create(
-        StFuncType, GlobalValue::ExternalLinkage, "__static_func", Mod);
+        StFuncType, GlobalValue::ExternalLinkage, "__offload_func", Mod);
 
     // Create an external function which is used to
     // model all guard checks. First arg is the condition, second is whether 
@@ -882,34 +890,44 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
 
 static void
 instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
-                    Function* ExtractFunc, Function* FlushFunc) {
+                    FunctionType* OffloadTy, FunctionType* UndoTy,
+                    SetVector<Value*> &LiveOut,
+                    SetVector<Value*> &GEPOut) {
     BasicBlock* StartBB = Blocks.back(), *LastBB = Blocks.front();
-    // map<string, BasicBlock *> BlockMap;
-    // for (auto &BB : F)
-    //     BlockMap[BB.getName().str()] = &BB;
-
-    // for(auto &BName : P.Seq) {
-    //     if(BlockMap.count(BName) == 0) assert(false && "Block not found in cloned module");
-    // }
-
+    
+    auto &Ctx = F.getContext();
+    auto *Mod = F.getParent();
+    auto *VoidTy = Type::getVoidTy(Ctx);
+    UndoTy = FunctionType::get(VoidTy, {}, false);
+    
+    auto *Offload = Mod->getOrInsertFunction("__offload_func", OffloadTy);
+    auto *Undo = Mod->getOrInsertFunction("__undo_mem", UndoTy);
+    
+    auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
+    auto *LSplit = LastBB->splitBasicBlock(LastBB->getTerminator());
+    
+    errs() << GEPOut.size() << "\n";
+    assert(GEPOut.size() == 0 && "Need to handle GEPs");
+     
 }
 
-static void
-instrumentModule(Module* Mod, Path& P, StringRef FunctionName,
-                Function *ExtractFunc, Function *FlushFunc, bool extractAsChop) {
-    for(auto &F : *Mod) {
-        if(F.getName() == FunctionName) {
-            map<string, BasicBlock *> BlockMap;
-            for (auto &BB : F)
-                BlockMap[BB.getName().str()] = &BB;
-            SmallVector<BasicBlock*, 16> Blocks = extractAsChop ? 
-                        getChopBlocks(P, BlockMap) : getTraceBlocks(P, BlockMap);
-            instrumentFunction(F, Blocks, ExtractFunc, FlushFunc);
-            return;
-        }
-    }
-    assert(false && "Unreachable");
-}
+//static void
+//instrumentModule(Module* Mod, Path& P, StringRef FunctionName,
+                //FunctionType *OffloadTy, FunctionType *UndoTy, bool extractAsChop) {
+     
+    //for(auto &F : *Mod) {
+        //if(F.getName() == FunctionName) {
+            //map<string, BasicBlock *> BlockMap;
+            //for (auto &BB : F)
+                //BlockMap[BB.getName().str()] = &BB;
+            //SmallVector<BasicBlock*, 16> Blocks = extractAsChop ? 
+                        //getChopBlocks(P, BlockMap) : getTraceBlocks(P, BlockMap);
+            //instrumentFunction(F, Blocks, OffloadTy, UndoTy);
+            //return;
+        //}
+    //}
+    //assert(false && "Unreachable");
+//}
 
 static void
 runHelperPasses(Function* Offload, Function *Undo, Module* Generated) {
@@ -935,7 +953,9 @@ MicroWorkloadExtract::process(Function &F) {
                     getChopBlocks(P, BlockMap) : getTraceBlocks(P, BlockMap);
 
         // Extract the blocks and create a new function
-        Function *Offload = extract(PostDomTree, Mod, Blocks);
+        SetVector<Value*> LiveOut, GEPOut;
+        Function *Offload = extract(PostDomTree, Mod, Blocks, LiveOut, GEPOut);
+
         // Creating a definition of the Undo function here and 
         // then creating the body inside the pass causes LLVM to 
         // crash thus nullptr is passed.
@@ -946,11 +966,14 @@ MicroWorkloadExtract::process(Function &F) {
         // out the bitcode which grafts the extracted function
         // back inside the copied module.
         
-        //auto InstMod = CloneModule(F.getParent());
-        //StripDebugInfo(*InstMod);
-        //instrumentModule(InstMod, P, F.getName(), Offload, 
-                            //nullptr, extractAsChop);
-        //writeModule(InstMod, string("main.inst.ll"));
+        // auto InstMod = CloneModule(F.getParent());
+        // StripDebugInfo(*InstMod);
+        // instrumentModule(InstMod, P, F.getName(), Offload->getFunctionType(), 
+        //                   nullptr, extractAsChop);
+        instrumentFunction(F, Blocks, Offload->getFunctionType(), nullptr,
+                            LiveOut, GEPOut);
+        StripDebugInfo(*F.getParent());
+        writeModule(F.getParent(), string("app.inst.ll"));
         // Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);
         delete Mod;
     }
