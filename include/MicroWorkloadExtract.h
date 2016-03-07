@@ -16,6 +16,7 @@
 #include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopIterator.h"
 #include "llvm/Analysis/ScalarEvolution.h"
@@ -67,6 +68,7 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
     void process(llvm::Function &F);
     llvm::Function* extractAsFunction(llvm::PostDominatorTree* , llvm::Module*,
                                    llvm::SmallVector<llvm::BasicBlock *, 16>&);
+    
     void 
     staticHelper(llvm::Function *, llvm::Function *,
                       llvm::SmallVector<llvm::Value *, 16> &LiveIn, llvm::SetVector<llvm::Value *>&,

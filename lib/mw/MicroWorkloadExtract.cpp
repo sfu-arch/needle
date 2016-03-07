@@ -937,7 +937,12 @@ replaceGuards(Function& F, Pass* P) {
 }
 
 static Function* 
-createFlushBufferFunction(Module* Mod, GlobalVariable* ULog) {
+createInitBufferFunction(Module* Mod, GlobalVariable* ULog, uint32_t Size) {
+
+}
+
+static Function* 
+createFlushBufferFunction(Module* Mod, GlobalVariable* ULog, uint32_t Size) {
     auto &Ctx = Mod->getContext();
     auto *VoidTy = Type::getVoidTy(Ctx);      
 
@@ -958,8 +963,9 @@ createFlushBufferFunction(Module* Mod, GlobalVariable* ULog) {
     // TODO : This entire thing can be vectorized?
     auto *Counter = PHINode::Create(Int64Ty, 2, "ctr", Body);
     auto *Zero = ConstantInt::get(Int64Ty, 0, false);
-    auto *One = ConstantInt::get(Int64Ty, 1, false);
+    //auto *One = ConstantInt::get(Int64Ty, 1, false);
     auto *Eight = ConstantInt::get(Int64Ty, 8, false);
+    auto *Max = ConstantInt::get(Int64Ty, 2*8*Size);
     Counter->addIncoming(Zero, Entry);
    
     Value * AddrIdx[] = {Zero, Counter};
@@ -973,26 +979,33 @@ createFlushBufferFunction(Module* Mod, GlobalVariable* ULog) {
     auto* ValBC = new BitCastInst(ValGEP, PointerType::get(Int64Ty, 0), "", Body);
     auto* Val = new LoadInst(ValBC, "val_ld", Body);
 
-    // If Addr == 0 then branch to exit, else flush the store,
-    // increment the counter and branch back to this block.
-    
-    auto* Cond = new ICmpInst(*Body, ICmpInst::ICMP_EQ, Zero, Addr, "");
+    auto* CounterPlusSixteen = BinaryOperator::CreateAdd(CounterPlusEight, Eight, "", Body);
+    auto* Cond = new ICmpInst(*Body, ICmpInst::ICMP_ULT, Max, CounterPlusSixteen, "");
     BranchInst::Create(Exit, Tail, Cond, Body);
+    Counter->addIncoming(CounterPlusSixteen, Tail);
 
     // Tail Block
-    auto* CounterPlusSixteen = BinaryOperator::CreateAdd(CounterPlusEight, Eight, "", Tail);
     auto* StAddr = new IntToPtrInst(Addr, PointerType::get(Int64Ty, 0), "", Tail);
     auto* StGEP = GetElementPtrInst::Create(StAddr, {Zero}, "st_gep", Tail);
     new StoreInst(Val, StGEP, Tail);
     BranchInst::Create(Body, Tail);
 
-    // Update incoming for Phi
-    Counter->addIncoming(CounterPlusSixteen, Tail);
-
     // Exit block contents
     ReturnInst::Create(Ctx, nullptr, Exit);
     
     return FlushFunc;
+}
+
+static SmallVector<BasicBlock*, 16>
+getFunctionRPO(Function& F) {
+    DenseSet<BasicBlock*> Blocks;
+    for(auto &BB : F) Blocks.insert(&BB);
+    DenseSet<pair<const BasicBlock *, const BasicBlock *>> BackEdges;
+    auto *StartBB = &F.getEntryBlock();
+    
+    auto RevOrder = getTopoChop(Blocks, StartBB, BackEdges);
+    reverse(RevOrder.begin(), RevOrder.end());
+    return RevOrder;
 }
 
 static Function* 
@@ -1010,8 +1023,15 @@ addUndoLog(Function& F) {
     // assume that output struct is always last arg
     auto StructPtr = --F.arg_end();
 
-    for(auto &BB : F) {
-        for(auto &I : BB) {
+    auto TopoBlocks = getFunctionRPO(F);
+
+    // TODO : Running Alias Analysis on the new module means 
+    // I have to create a pass manager, move all of this
+    // code into a new pass, schedule the passes and then 
+    // run the transformations.
+
+    for(auto &BB : TopoBlocks) {
+        for(auto &I : *BB) {
             if(auto *SI = dyn_cast<StoreInst>(&I)) {
                 // Filter out the stores added due to live outs
                 // being returned as a struct by reference.
@@ -1021,10 +1041,6 @@ addUndoLog(Function& F) {
         }
     }
 
-    // TODO : Convert to topological order store collection
-    // and use alias analysis to only save the first unique 
-    // store location.
-    
     // Create the Undo Log as a global variable
     ArrayType *LogArrTy =
         ArrayType::get(IntegerType::get(Mod->getContext(), 8), Stores.size()*2*8);
@@ -1061,7 +1077,7 @@ addUndoLog(Function& F) {
     }
 
     // Create a function to flush the undo log buffer
-    auto *Func = createFlushBufferFunction(Mod, ULog);
+    auto *Func = createFlushBufferFunction(Mod, ULog, Stores.size());
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
 
     return Func;
@@ -1116,8 +1132,8 @@ void MicroWorkloadExtract::process(Function &F) {
         // Add undo log instrumentation and rollback function
         Function *ExtractFunc = extractAsFunction(PostDomTree, Mod, Blocks);
         Function *FlushFunc = addUndoLog(*ExtractFunc);
-        optimizeModule(Mod);
-        replaceGuards(*ExtractFunc, this);
+        //optimizeModule(Mod);
+        //replaceGuards(*ExtractFunc, this);
         writeModule(Mod, (P.Id) + string(".ll"));
 
 
