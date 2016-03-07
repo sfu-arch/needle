@@ -642,7 +642,7 @@ static bool verifyChop(const SmallVector<BasicBlock *, 16> Chop) {
 Function *
 MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
                                    SmallVector<BasicBlock *, 16> &RevTopoChop,
-                                   SetVector<Value*> &LiveOut, SetVector<Value*> &GEPOut) {
+                                   SetVector<Value*> &LiveOut) {
 
     auto *StartBB = RevTopoChop.back();
     auto *LastBB = RevTopoChop.front();
@@ -760,11 +760,9 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
                                 //LiveOut.insert(Ins);
                             //}
                             if (!PDT->dominates(LastBB, UIns->getParent())){
-                                if(isa<GetElementPtrInst>(Ins)) {
-                                    GEPOut.insert(Ins);
-                                } else {
+                                //if(!isa<GetElementPtrInst>(Ins)) {
                                     LiveOut.insert(Ins);
-                                }
+                                //}
                             }
                         }
                     }
@@ -891,8 +889,7 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
 static void
 instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
                     FunctionType* OffloadTy, FunctionType* UndoTy,
-                    SetVector<Value*> &LiveOut,
-                    SetVector<Value*> &GEPOut) {
+                    SetVector<Value*> &LiveOut){
     BasicBlock* StartBB = Blocks.back(), *LastBB = Blocks.front();
     
     auto &Ctx = F.getContext();
@@ -906,8 +903,6 @@ instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
     auto *LSplit = LastBB->splitBasicBlock(LastBB->getTerminator());
     
-    errs() << GEPOut.size() << "\n";
-    assert(GEPOut.size() == 0 && "Need to handle GEPs");
      
 }
 
@@ -953,8 +948,8 @@ MicroWorkloadExtract::process(Function &F) {
                     getChopBlocks(P, BlockMap) : getTraceBlocks(P, BlockMap);
 
         // Extract the blocks and create a new function
-        SetVector<Value*> LiveOut, GEPOut;
-        Function *Offload = extract(PostDomTree, Mod, Blocks, LiveOut, GEPOut);
+        SetVector<Value*> LiveOut;
+        Function *Offload = extract(PostDomTree, Mod, Blocks, LiveOut);
 
         // Creating a definition of the Undo function here and 
         // then creating the body inside the pass causes LLVM to 
@@ -971,7 +966,7 @@ MicroWorkloadExtract::process(Function &F) {
         // instrumentModule(InstMod, P, F.getName(), Offload->getFunctionType(), 
         //                   nullptr, extractAsChop);
         instrumentFunction(F, Blocks, Offload->getFunctionType(), nullptr,
-                            LiveOut, GEPOut);
+                            LiveOut);
         StripDebugInfo(*F.getParent());
         writeModule(F.getParent(), string("app.inst.ll"));
         // Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);
