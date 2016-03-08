@@ -47,31 +47,32 @@ void MicroWorkloadExtract::readSequences() {
         // and finding out exactly how many paths we want to
         // analyse.
 
+        move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
         // a. The last token is blank, so always end -1
         // b. If Path is RIRO, then range is +4, -1
         // c. If Path is FIRO, then range is +5, -1
         // d. If Path is RIFO, then range is +4, -2
         // e. If Path is FIFO, then range is +5, -2
         // f. If Path is SELF, then range is +4, -0
-        switch (P.PType) {
-        case RIRO:
-            move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
-            break;
-        case FIRO:
-            move(Tokens.begin() + 5, Tokens.end() - 1, back_inserter(P.Seq));
-            break;
-        case RIFO:
-            move(Tokens.begin() + 4, Tokens.end() - 2, back_inserter(P.Seq));
-            break;
-        case FIFO:
-            move(Tokens.begin() + 5, Tokens.end() - 2, back_inserter(P.Seq));
-            break;
-        case SELF:
-            move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
-            break;
-        default:
-            assert(false && "Unknown path type");
-        }
+        // switch (P.PType) {
+        // case RIRO:
+        //     move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
+        //     break;
+        // case FIRO:
+        //     move(Tokens.begin() + 5, Tokens.end() - 1, back_inserter(P.Seq));
+        //     break;
+        // case RIFO:
+        //     move(Tokens.begin() + 4, Tokens.end() - 2, back_inserter(P.Seq));
+        //     break;
+        // case FIFO:
+        //     move(Tokens.begin() + 5, Tokens.end() - 2, back_inserter(P.Seq));
+        //     break;
+        // case SELF:
+        //     move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
+        //     break;
+        // default:
+        //     assert(false && "Unknown path type");
+        // }
         Sequences.push_back(P);
         Count++;
         if (Count == NumSeq)

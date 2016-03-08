@@ -345,7 +345,7 @@ MicroWorkloadHelper::replaceGuards() {
 bool
 MicroWorkloadHelper::runOnModule(Module& M) {
     optimizeModule(&M);
-    //replaceGuards();
+    replaceGuards();
     addUndoLog();
     return false;
 }
