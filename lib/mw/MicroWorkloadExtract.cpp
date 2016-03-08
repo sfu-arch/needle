@@ -639,6 +639,15 @@ static bool verifyChop(const SmallVector<BasicBlock *, 16> Chop) {
     return true;
 }
 
+static StructType*
+getLiveOutStructType(SetVector<Value*> &LiveOut, Module* Mod) {
+    SmallVector<Type *, 16> LiveOutTypes(LiveOut.size());
+    transform(LiveOut.begin(), LiveOut.end(), LiveOutTypes.begin(),
+              [](const Value *V) -> Type *{ return V->getType(); });
+    // Create a packed struct return type
+    return StructType::get(Mod->getContext(), LiveOutTypes, true);
+}
+
 Function *
 MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
                                    SmallVector<BasicBlock *, 16> &RevTopoChop,
@@ -786,11 +795,11 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
     Mod->setDataLayout(DataLayoutStr);
     Mod->setTargetTriple(TargetTripleStr);
 
-    SmallVector<Type *, 16> LiveOutTypes(LiveOut.size());
-    transform(LiveOut.begin(), LiveOut.end(), LiveOutTypes.begin(),
-              [](const Value *V) -> Type *{ return V->getType(); });
+    //SmallVector<Type *, 16> LiveOutTypes(LiveOut.size());
+    //transform(LiveOut.begin(), LiveOut.end(), LiveOutTypes.begin(),
+              //[](const Value *V) -> Type *{ return V->getType(); });
     // Create a packed struct return type
-    auto *StructTy = StructType::get(Mod->getContext(), LiveOutTypes, true);
+    auto *StructTy = getLiveOutStructType(LiveOut, Mod);
     auto *StructPtrTy = PointerType::getUnqual(StructTy);
 
     // errs() << *StructPtrTy << "\n";
@@ -890,7 +899,8 @@ static void
 instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
                     FunctionType* OffloadTy, FunctionType* UndoTy,
                     SetVector<Value*> &LiveIn,
-                    SetVector<Value*> &LiveOut){
+                    SetVector<Value*> &LiveOut,
+                    PostDominatorTree* PDT){
     BasicBlock* StartBB = Blocks.back(), *LastBB = Blocks.front();
     
     auto &Ctx = F.getContext();
@@ -911,9 +921,38 @@ instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     // Get all the live-ins
     // Allocate a struct to get the live-outs filled in
     // Call offload function and check the return
+    auto *StructTy = getLiveOutStructType(LiveOut, Mod);
+    auto *LOS = new AllocaInst(StructTy, nullptr, "", StartBB);
+    auto *Int64Ty = Type::getInt64Ty(Mod->getContext());
+    ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
+    auto *StPtr = GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", StartBB);
+
     vector<Value*> Params;
+    for(auto &V : LiveIn) Params.push_back(V);
+    Params.push_back(StPtr);
+
     auto *CI = CallInst::Create(Offload, Params, "", StartBB);
     BranchInst::Create(Success, Fail, CI, StartBB);
+    
+    // Success -- Unpack struct
+    for(uint32_t Idx = 0; Idx < LiveOut.size(); Idx++) {
+        auto *Val = LiveOut[Idx];
+        Value *StIdx = ConstantInt::get(Int64Ty, Idx, false);
+        auto *ValPtr = GetElementPtrInst::CreateInBounds(StPtr, {StIdx}, "st_gep", Success);
+        auto *Load = new LoadInst(ValPtr, "", Success);
+        vector<User*> Users(Val->user_begin(), Val->user_end());
+        for(auto &U : Users) {
+            auto *UseBB = dyn_cast<Instruction>(U)->getParent();
+            if(PDT->dominates(UseBB, LastBB)) {
+                U->replaceUsesOfWith(Val, Load);                    
+            }
+        }
+    }
+    BranchInst::Create(LSplit, Success);
+
+    // Fail -- Undo memory
+    CallInst::Create(Undo, {}, "", Fail);
+    BranchInst::Create(SSplit, Fail);
 }
 
 //static void
@@ -976,7 +1015,7 @@ MicroWorkloadExtract::process(Function &F) {
         // instrumentModule(InstMod, P, F.getName(), Offload->getFunctionType(), 
         //                   nullptr, extractAsChop);
         instrumentFunction(F, Blocks, Offload->getFunctionType(), nullptr,
-                            LiveIn, LiveOut);
+                            LiveIn, LiveOut, PostDomTree);
         StripDebugInfo(*F.getParent());
         writeModule(F.getParent(), string("app.inst.ll"));
         // Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);
