@@ -68,11 +68,12 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
     void process(llvm::Function &F);
     llvm::Function* extract(llvm::PostDominatorTree* , llvm::Module*,
                                    llvm::SmallVector<llvm::BasicBlock *, 16>&,
+                                   llvm::SetVector<llvm::Value*> &,
                                    llvm::SetVector<llvm::Value*> &);
     
     void 
     extractHelper(llvm::Function *, llvm::Function *,
-                      llvm::SmallVector<llvm::Value *, 16> &LiveIn, llvm::SetVector<llvm::Value *>&,
+                      llvm::SetVector<llvm::Value *> &LiveIn, llvm::SetVector<llvm::Value *>&,
                       llvm::SetVector<llvm::Value *> &,
                       llvm::SmallVector<llvm::BasicBlock *, 16> &,
                       llvm::LLVMContext &); 

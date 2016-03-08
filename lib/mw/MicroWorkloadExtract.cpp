@@ -173,15 +173,15 @@ getChop(BasicBlock *StartBB, BasicBlock *LastBB,
 }
 
 static void liveInHelperStatic(SmallVector<BasicBlock *, 16> &RevTopoChop,
-                               SmallVector<Value *, 16> &LiveIn,
-                               SetVector<Value *> &Globals, Value *Val) {
+                               SetVector<Value*> &LiveIn,
+                               SetVector<Value*> &Globals, Value *Val) {
     if (auto Ins = dyn_cast<Instruction>(Val)) {
         for (auto OI = Ins->op_begin(), EI = Ins->op_end(); OI != EI; OI++) {
             if (auto OIns = dyn_cast<Instruction>(OI)) {
                 // if (!Chop.count(OIns->getParent())) {
                 if (find(RevTopoChop.begin(), RevTopoChop.end(),
                          OIns->getParent()) == RevTopoChop.end()) {
-                    LiveIn.push_back(OIns);
+                    LiveIn.insert(OIns);
                 }
             } else
                 liveInHelperStatic(RevTopoChop, LiveIn, Globals, *OI);
@@ -193,7 +193,7 @@ static void liveInHelperStatic(SmallVector<BasicBlock *, 16> &RevTopoChop,
             liveInHelperStatic(RevTopoChop, LiveIn, Globals, *OI);
         }
     } else if (auto Arg = dyn_cast<Argument>(Val))
-        LiveIn.push_back(Arg);
+        LiveIn.insert(Arg);
     else if (auto GV = dyn_cast<GlobalVariable>(Val))
         Globals.insert(GV);
 
@@ -216,7 +216,7 @@ getBackEdges(BasicBlock *StartBB) {
 
 void 
 MicroWorkloadExtract::extractHelper(Function *StaticFunc, Function *GuardFunc,
-                  SmallVector<Value *, 16> &LiveIn, SetVector<Value *> &LiveOut,
+                  SetVector<Value *> &LiveIn, SetVector<Value *> &LiveOut,
                   SetVector<Value *> &Globals,
                   SmallVector<BasicBlock *, 16> &RevTopoChop,
                   LLVMContext &Context) {
@@ -642,6 +642,7 @@ static bool verifyChop(const SmallVector<BasicBlock *, 16> Chop) {
 Function *
 MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
                                    SmallVector<BasicBlock *, 16> &RevTopoChop,
+                                   SetVector<Value*> &LiveIn,
                                    SetVector<Value*> &LiveOut) {
 
     auto *StartBB = RevTopoChop.back();
@@ -650,7 +651,6 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
     assert(verifyChop(RevTopoChop) && "Invalid Region!");
 
     SetVector<Value *> Globals;
-    SmallVector<Value *, 16> LiveIn;
 
     auto handlePhis =
         [&LiveIn, &LiveOut, &Globals, &StartBB, &PDT, &LastBB, &RevTopoChop](
@@ -703,7 +703,7 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
             } // End of handling for LiveOut
 
             if (Phi->getParent() == StartBB) {
-                LiveIn.push_back(Phi);
+                LiveIn.insert(Phi);
                 return 1;
             }
 
@@ -718,11 +718,11 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
                         // if (Chop.count(VI->getParent()) == 0) {
                         if (find(RevTopoChop.begin(), RevTopoChop.end(),
                                  VI->getParent()) == RevTopoChop.end()) {
-                            LiveIn.push_back(Val);
+                            LiveIn.insert(Val);
                             Num += 1;
                         }
                     } else if (auto *AI = dyn_cast<Argument>(Val)) {
-                        LiveIn.push_back(AI);
+                        LiveIn.insert(AI);
                         Num += 1;
                     } else if (auto *GV = dyn_cast<GlobalVariable>(Val)) {
                         errs() << *GV << "\n";
@@ -889,6 +889,7 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
 static void
 instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
                     FunctionType* OffloadTy, FunctionType* UndoTy,
+                    SetVector<Value*> &LiveIn,
                     SetVector<Value*> &LiveOut){
     BasicBlock* StartBB = Blocks.back(), *LastBB = Blocks.front();
     
@@ -903,7 +904,16 @@ instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
     auto *LSplit = LastBB->splitBasicBlock(LastBB->getTerminator());
     
-     
+    auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
+    auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
+
+    StartBB->getTerminator()->eraseFromParent();
+    // Get all the live-ins
+    // Allocate a struct to get the live-outs filled in
+    // Call offload function and check the return
+    vector<Value*> Params;
+    auto *CI = CallInst::Create(Offload, Params, "", StartBB);
+    BranchInst::Create(Success, Fail, CI, StartBB);
 }
 
 //static void
@@ -948,8 +958,8 @@ MicroWorkloadExtract::process(Function &F) {
                     getChopBlocks(P, BlockMap) : getTraceBlocks(P, BlockMap);
 
         // Extract the blocks and create a new function
-        SetVector<Value*> LiveOut;
-        Function *Offload = extract(PostDomTree, Mod, Blocks, LiveOut);
+        SetVector<Value*> LiveOut, LiveIn;
+        Function *Offload = extract(PostDomTree, Mod, Blocks, LiveIn, LiveOut);
 
         // Creating a definition of the Undo function here and 
         // then creating the body inside the pass causes LLVM to 
@@ -966,7 +976,7 @@ MicroWorkloadExtract::process(Function &F) {
         // instrumentModule(InstMod, P, F.getName(), Offload->getFunctionType(), 
         //                   nullptr, extractAsChop);
         instrumentFunction(F, Blocks, Offload->getFunctionType(), nullptr,
-                            LiveOut);
+                            LiveIn, LiveOut);
         StripDebugInfo(*F.getParent());
         writeModule(F.getParent(), string("app.inst.ll"));
         // Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);
