@@ -240,6 +240,7 @@ MicroWorkloadHelper::addUndoLog() {
     // add a new function to the module which will flush 
     // the undo log
     Module *Mod = Offload->getParent();
+    auto &Ctx = Mod->getContext();
     SmallVector<StoreInst*, 16> Stores;
 
     auto TopoBlocks = getFunctionRPO(*Offload);
@@ -268,7 +269,7 @@ MicroWorkloadHelper::addUndoLog() {
 
     // Create the Undo Log as a global variable
     ArrayType *LogArrTy =
-        ArrayType::get(IntegerType::get(Mod->getContext(), 8), Stores.size()*2*8);
+        ArrayType::get(IntegerType::get(Ctx, 8), Stores.size()*2*8);
     auto *Initializer = ConstantAggregateZero::get(LogArrTy);
     GlobalVariable *ULog =
         new GlobalVariable(*Mod, LogArrTy, false,
@@ -282,18 +283,18 @@ MicroWorkloadHelper::addUndoLog() {
     
     uint32_t LogIndex = 0;
     Value* Idx[2];
-    Idx[0] = ConstantInt::getNullValue(Type::getInt32Ty(Mod->getContext()));
-    auto Int8Ty = Type::getInt8Ty(Mod->getContext());
+    Idx[0] = ConstantInt::getNullValue(Type::getInt32Ty(Ctx));
+    auto Int8Ty = Type::getInt8Ty(Ctx);
     for(auto &SI : Stores) {
        auto *Ptr = SI->getPointerOperand();
        auto *LI = new LoadInst(Ptr, "undo", SI);
-       Idx[1] = ConstantInt::get(Type::getInt32Ty(Mod->getContext()), LogIndex*8);
+       Idx[1] = ConstantInt::get(Type::getInt32Ty(Ctx), LogIndex*8);
        LogIndex++;
        GetElementPtrInst *AddrGEP = GetElementPtrInst::Create(ULog, Idx, "", SI);
        auto *AddrBI = new PtrToIntInst(Ptr, Int8Ty, "", SI );
        new StoreInst(AddrBI, AddrGEP, SI);
 
-       Idx[1] = ConstantInt::get(Type::getInt32Ty(Mod->getContext()), LogIndex*8);
+       Idx[1] = ConstantInt::get(Type::getInt32Ty(Ctx), LogIndex*8);
        LogIndex++;
        GetElementPtrInst *ValGEP = GetElementPtrInst::Create(ULog, Idx, "", SI);
        auto *ValBI = new BitCastInst(ValGEP, PointerType::get(LI->getType(), 0), "", SI);
@@ -304,6 +305,21 @@ MicroWorkloadHelper::addUndoLog() {
 
     // Create a function to flush the undo log buffer
     defineUndoFunction(Mod, ULog, Undo, Stores.size());
+
+    // Add a buffer init memset into the offload function entry
+    Type *Tys[] = { Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx) };
+    auto *Memset = Intrinsic::getDeclaration(Mod, Intrinsic::memset, Tys);
+    auto *Int64Ty = Type::getInt64Ty(Ctx);
+    auto *Zero = ConstantInt::get(Int64Ty, 0, false);
+    Idx[1] = Zero;
+    auto *UGEP = GetElementPtrInst::Create(ULog, Idx, "", 
+            Offload->getEntryBlock().getFirstNonPHI());
+    Value* Params[] = {UGEP, ConstantInt::get(Int8Ty, 0, false), 
+                        ConstantInt::get(Type::getInt32Ty(Ctx), Stores.size()*2*8, false), 
+                        ConstantInt::get(Type::getInt32Ty(Ctx), 8, false), 
+                        ConstantInt::getFalse(Ctx)};
+    CallInst::Create(Memset, Params, "")->insertAfter(UGEP);
+
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
 }
 
