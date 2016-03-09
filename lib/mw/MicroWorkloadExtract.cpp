@@ -74,6 +74,7 @@ void MicroWorkloadExtract::readSequences() {
         //     assert(false && "Unknown path type");
         // }
         Sequences.push_back(P);
+        errs() << *P.Seq.begin() << " " << *P.Seq.rbegin() << "\n";
         Count++;
         if (Count == NumSeq)
             break;
@@ -445,10 +446,11 @@ MicroWorkloadExtract::extractHelper(Function *StaticFunc, Function *GuardFunc,
                         BrInst->setSuccessor(0, cast<BasicBlock>(Targets[0]));
                         BrInst->setSuccessor(1, cast<BasicBlock>(Targets[1]));
                     } else {
-                        if(inChop(T->getSuccessor(0)))
+                        if(inChop(T->getSuccessor(0))) {
                             insertGuardCall(BrInst, true);
-                        else 
+                        } else  {
                             insertGuardCall(BrInst, false);
+                        }
                         T->eraseFromParent();
                         BranchInst::Create(cast<BasicBlock>(Targets[0]), NewBB);
                     }
@@ -464,7 +466,7 @@ MicroWorkloadExtract::extractHelper(Function *StaticFunc, Function *GuardFunc,
                             "Could not find successor!");
                     assert(VMap[SuccBB] && "Successor not found in VMap");
                     if(T->getNumSuccessors() == 2) {
-                        if(inChop(T->getSuccessor(0)))
+                        if(T->getSuccessor(0) == SuccBB)
                             insertGuardCall(BrInst, true);
                         else 
                             insertGuardCall(BrInst, false);
@@ -913,10 +915,13 @@ instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     auto *Undo = Mod->getOrInsertFunction("__undo_mem", UndoTy);
     
     auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
+    SSplit->setName(StartBB->getName()+".split");
     auto *LSplit = LastBB->splitBasicBlock(LastBB->getTerminator());
+    LSplit->setName(LastBB->getName()+".split");
     
     auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
     auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
+
 
     StartBB->getTerminator()->eraseFromParent();
     // Get all the live-ins
@@ -1017,7 +1022,7 @@ MicroWorkloadExtract::process(Function &F) {
         //                   nullptr, extractAsChop);
         instrumentFunction(F, Blocks, Offload->getFunctionType(), nullptr,
                             LiveIn, LiveOut, PostDomTree);
-        StripDebugInfo(*F.getParent());
+        //StripDebugInfo(*F.getParent());
         writeModule(F.getParent(), string("app.inst.ll"));
         // Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);
         delete Mod;
