@@ -23,6 +23,7 @@
 #include <boost/graph/strong_components.hpp>
 #include <boost/property_map/property_map.hpp>
 #include <cxxabi.h>
+#include <llvm/Linker/Linker.h>
 
 #include <map>
 #include <set>

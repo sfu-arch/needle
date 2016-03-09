@@ -18,6 +18,7 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/IR/DerivedTypes.h"
 #include <cxxabi.h>
+#include "llvm/Linker/Linker.h"
 
 #define DEBUG_TYPE "mw"
 
@@ -33,6 +34,10 @@ void MicroWorkloadExtract::readSequences() {
     ifstream SeqFile(SeqFilePath.c_str(), ios::in);
     assert(SeqFile.is_open() && "Could not open file");
     string Line;
+    // TODO: We can do more than one in case they are not overlapping
+    // I will add the checks later.
+    assert(NumSeq == 1 && "Can't do more than 1 since original"
+            "bitcode is modified");
     for (int64_t Count = 0; getline(SeqFile, Line);) {
         Path P;
         std::vector<std::string> Tokens;
@@ -48,31 +53,6 @@ void MicroWorkloadExtract::readSequences() {
         // analyse.
 
         move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
-        // a. The last token is blank, so always end -1
-        // b. If Path is RIRO, then range is +4, -1
-        // c. If Path is FIRO, then range is +5, -1
-        // d. If Path is RIFO, then range is +4, -2
-        // e. If Path is FIFO, then range is +5, -2
-        // f. If Path is SELF, then range is +4, -0
-        // switch (P.PType) {
-        // case RIRO:
-        //     move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
-        //     break;
-        // case FIRO:
-        //     move(Tokens.begin() + 5, Tokens.end() - 1, back_inserter(P.Seq));
-        //     break;
-        // case RIFO:
-        //     move(Tokens.begin() + 4, Tokens.end() - 2, back_inserter(P.Seq));
-        //     break;
-        // case FIFO:
-        //     move(Tokens.begin() + 5, Tokens.end() - 2, back_inserter(P.Seq));
-        //     break;
-        // case SELF:
-        //     move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
-        //     break;
-        // default:
-        //     assert(false && "Unknown path type");
-        // }
         Sequences.push_back(P);
         errs() << *P.Seq.begin() << " " << *P.Seq.rbegin() << "\n";
         Count++;
@@ -908,11 +888,8 @@ instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     
     auto &Ctx = F.getContext();
     auto *Mod = F.getParent();
-    auto *VoidTy = Type::getVoidTy(Ctx);
-    UndoTy = FunctionType::get(VoidTy, {}, false);
     
-    auto *Offload = Mod->getOrInsertFunction("__offload_func", OffloadTy);
-    auto *Undo = Mod->getOrInsertFunction("__undo_mem", UndoTy);
+    auto *Offload = Mod->getFunction("__offload_func");
     
     auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
     SSplit->setName(StartBB->getName()+".split");
@@ -921,7 +898,6 @@ instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     
     auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
     auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
-
 
     StartBB->getTerminator()->eraseFromParent();
     // Get all the live-ins
@@ -941,6 +917,7 @@ instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     BranchInst::Create(Success, Fail, CI, StartBB);
     
     // Success -- Unpack struct
+    //CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
     for(uint32_t Idx = 0; Idx < LiveOut.size(); Idx++) {
         auto *Val = LiveOut[Idx];
         Value *StIdx = ConstantInt::get(Int64Ty, Idx, false);
@@ -956,28 +933,20 @@ instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     }
     BranchInst::Create(LSplit, Success);
 
+    auto *Undo = Mod->getFunction("__undo_mem");
+    auto *ULog = Mod->getNamedGlobal("__undo_log");
+    auto *NumStore = Mod->getNamedGlobal("__undo_num_stores");
+   
+    vector<Value*> Idx = {Zero, Zero};
+    auto *UGEP = GetElementPtrInst::CreateInBounds(ULog, Idx, "", Fail);
+    auto *UNS = GetElementPtrInst::CreateInBounds(NumStore, {Zero}, "", Fail);
+    auto *NSLoad = new LoadInst(UNS, "", Fail);
     // Fail -- Undo memory
-    CallInst::Create(Undo, {}, "", Fail);
+    vector<Value*> Args = {UGEP, NSLoad};
+    CallInst::Create(Undo, Args, "", Fail);
+    //CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
     BranchInst::Create(SSplit, Fail);
 }
-
-//static void
-//instrumentModule(Module* Mod, Path& P, StringRef FunctionName,
-                //FunctionType *OffloadTy, FunctionType *UndoTy, bool extractAsChop) {
-     
-    //for(auto &F : *Mod) {
-        //if(F.getName() == FunctionName) {
-            //map<string, BasicBlock *> BlockMap;
-            //for (auto &BB : F)
-                //BlockMap[BB.getName().str()] = &BB;
-            //SmallVector<BasicBlock*, 16> Blocks = extractAsChop ? 
-                        //getChopBlocks(P, BlockMap) : getTraceBlocks(P, BlockMap);
-            //instrumentFunction(F, Blocks, OffloadTy, UndoTy);
-            //return;
-        //}
-    //}
-    //assert(false && "Unreachable");
-//}
 
 static void
 runHelperPasses(Function* Offload, Function *Undo, Module* Generated) {
@@ -1012,14 +981,11 @@ MicroWorkloadExtract::process(Function &F) {
         runHelperPasses(Offload, nullptr, Mod);
         writeModule(Mod, (P.Id) + string(".ll"));
 
-        // Instrument a copy of the module and write
-        // out the bitcode which grafts the extracted function
-        // back inside the copied module.
-        
-        // auto InstMod = CloneModule(F.getParent());
-        // StripDebugInfo(*InstMod);
-        // instrumentModule(InstMod, P, F.getName(), Offload->getFunctionType(), 
-        //                   nullptr, extractAsChop);
+        // Link modules now since the required globals 
+        // have been created.
+        Linker::LinkModules(Mod, UndoMod);
+        Linker::LinkModules(F.getParent(), Mod);
+
         instrumentFunction(F, Blocks, Offload->getFunctionType(), nullptr,
                             LiveIn, LiveOut, PostDomTree);
         //StripDebugInfo(*F.getParent());

@@ -13,6 +13,14 @@
 #include "llvm/Pass.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Linker/Linker.h"
+#include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/ToolOutputFile.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetLibraryInfo.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Transforms/Scalar.h"
 
 #include <string>
 #include <thread>
@@ -23,6 +31,7 @@
 #include "MicroWorkloadExtract.h"
 #include "AllInliner.h"
 #include "Namer.h"
+#include "Common.h"
 
 using namespace std;
 using namespace llvm;
@@ -34,6 +43,8 @@ enum ExtractType {
 };
 
 // MWE-only options
+
+cl::opt<std::string> UndoLib("u",cl::desc("Path to the undo library bitcode module"), cl::Required);
 
 cl::opt<ExtractType> ExtractAs(cl::desc("Choose extract type, trace / chop"),
         cl::values( clEnumVal(trace, "Extract as trace"),
@@ -55,6 +66,23 @@ cl::list<std::string> FunctionList("fn", cl::value_desc("String"),
                                    cl::desc("List of functions to instrument"),
                                    cl::OneOrMore, cl::CommaSeparated);
 
+cl::opt<char> optLevel("O",
+                       cl::desc("Optimization level. [-O0, -O1, -O2, or -O3] "
+                                "(default = '-O2')"),
+                       cl::Prefix, cl::ZeroOrMore, cl::init('2'));
+
+cl::list<string> libPaths("L", cl::Prefix,
+                          cl::desc("Specify a library search path"),
+                          cl::value_desc("directory"));
+
+cl::list<string> libraries("l", cl::Prefix,
+                           cl::desc("Specify libraries to link to"),
+                           cl::value_desc("library prefix"));
+
+cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
+                        cl::value_desc("filename"));
+
+
 bool isTargetFunction(const Function &f,
                       const cl::list<std::string> &FunctionList) {
     if (f.isDeclaration())
@@ -75,19 +103,26 @@ int main(int argc, char **argv, const char **env) {
     LLVMContext &context = getGlobalContext();
     llvm_shutdown_obj shutdown;
 
-    // InitializeAllTargets();
-    // InitializeAllTargetMCs();
-    // InitializeAllAsmPrinters();
-    // InitializeAllAsmParsers();
-    // cl::AddExtraVersionPrinter(TargetRegistry::printRegisteredTargetsForVersion);
+    InitializeAllTargets();
+    InitializeAllTargetMCs();
+    InitializeAllAsmPrinters();
+    InitializeAllAsmParsers();
+    cl::AddExtraVersionPrinter(TargetRegistry::printRegisteredTargetsForVersion);
     cl::ParseCommandLineOptions(argc, argv);
 
     // Construct an IR file from the filename passed on the command line.
     SMDiagnostic err;
     unique_ptr<Module> module(parseIRFile(InPath.getValue(), err, context));
-
     if (!module.get()) {
         errs() << "Error reading bitcode file.\n";
+        err.print(argv[0], errs());
+        return -1;
+    }
+
+    // Load the undo library and link it
+    unique_ptr<Module> UndoMod(parseIRFile(UndoLib, err, context));
+    if(!UndoMod.get()) {
+        errs() << "Error reading undo lib bitcode.\n";
         err.print(argv[0], errs());
         return -1;
     }
@@ -105,9 +140,12 @@ int main(int argc, char **argv, const char **env) {
     pm.add(new epp::Namer());
     pm.add(llvm::createPostDomTree());
     pm.add(new DominatorTreeWrapperPass());
-    pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq, ExtractAs));
+    pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq, 
+                ExtractAs, UndoMod.get()));
     pm.add(createVerifierPass());
     pm.run(*module);
+
+    common::generateBinary(*module, outFile);
 
     return 0;
 }
