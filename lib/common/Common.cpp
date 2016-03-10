@@ -1,4 +1,5 @@
 #include "llvm/ADT/Triple.h"
+#include "llvm/Analysis/CFG.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Bitcode/ReaderWriter.h"
@@ -41,13 +42,9 @@
 using namespace llvm;
 using namespace std;
 
-extern cl::opt<char> optLevel;
-extern cl::list<string> libPaths;
-extern cl::list<string> libraries;
-
 namespace common {
 
-void compile(Module &m, string outputPath) {
+void compile(Module &m, string outputPath, char optLevel) {
     string err;
 
     Triple triple = Triple(m.getTargetTriple());
@@ -87,7 +84,7 @@ void compile(Module &m, string outputPath) {
     }
 
     error_code EC;
-    auto out = ::make_unique<tool_output_file>(outputPath.c_str(), EC,
+    auto out = std::make_unique<tool_output_file>(outputPath.c_str(), EC,
                                                sys::fs::F_None);
     if (EC) {
         report_fatal_error("Unable to create file:\n " + EC.message());
@@ -125,7 +122,8 @@ void compile(Module &m, string outputPath) {
     out->keep();
 }
 
-void link(const string &objectFile, const string &outputFile) {
+void link(const string &objectFile, const string &outputFile, 
+            char optLevel, cl::list<string>& libPaths, cl::list<string>& libraries) {
     auto clang = sys::findProgramByName("clang++");
     if (!clang) {
         report_fatal_error(
@@ -163,13 +161,14 @@ void link(const string &objectFile, const string &outputFile) {
     }
 }
 
-void generateBinary(Module &m, const string &outputFilename) {
+void generateBinary(Module &m, const string &outputFilename, 
+            char optLevel, cl::list<string>& libPaths, cl::list<string>& libraries) {
     // Compiling to native should allow things to keep working even when the
     // version of clang on the system and the version of LLVM used to compile
     // the tool don't quite match up.
     string objectFile = outputFilename + ".o";
-    compile(m, objectFile);
-    link(objectFile, outputFilename);
+    compile(m, objectFile, optLevel);
+    link(objectFile, outputFilename, optLevel, libPaths, libraries);
 }
 
 void saveModule(Module &m, StringRef filename) {
@@ -184,4 +183,16 @@ void saveModule(Module &m, StringRef filename) {
 }
 
 
+DenseSet<pair<const BasicBlock *, const BasicBlock *>>
+getBackEdges(BasicBlock *StartBB) {
+    SmallVector<std::pair<const BasicBlock *, const BasicBlock *>, 8>
+        BackEdgesVec;
+    FindFunctionBackedges(*StartBB->getParent(), BackEdgesVec);
+    DenseSet<pair<const BasicBlock *, const BasicBlock *>> BackEdges;
+
+    for (auto &BE : BackEdgesVec) {
+        BackEdges.insert(BE);
+    }
+    return BackEdges;
+}
 }

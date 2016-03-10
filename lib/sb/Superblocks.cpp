@@ -16,6 +16,7 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/IR/DerivedTypes.h"
 #include <fstream>
+#include "Common.h"
 
 #define DEBUG_TYPE "pasha_sb"
 
@@ -26,6 +27,15 @@ using namespace std;
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
+
+namespace sb {
+    std::function<bool(const Edge&, const Edge&)> getCmp() {
+        return [](const Edge& A, const Edge& B) -> bool {
+            return A.first < B.first || 
+                (A.first == B.first && A.second < B.second);
+        };
+    }
+}
 
 void Superblocks::readSequences() {
     ifstream SeqFile(SeqFilePath.c_str(), ios::in);
@@ -74,16 +84,49 @@ bool
 Superblocks::doFinalization(Module &M) { return false; }
 
 void 
+Superblocks::construct(BasicBlock* Begin, 
+        SmallVector<SmallVector<BasicBlock*, 8>, 32>& Superblocks,
+        DenseSet<pair<const BasicBlock *, const BasicBlock *>>& BackEdges) {
+    BasicBlock* Next = nullptr;
+    APInt Count(256, 0, false);
+    SmallVector<BasicBlock*, 8> SBlock;
+    do {
+        if(Next != nullptr) {
+            SBlock.push_back(Next);
+        }
+        Next = nullptr;
+        for(auto SB = succ_begin(Begin), SE = succ_end(Begin);
+                SB != SE; SB++) { 
+            auto E = make_pair(Begin, *SB);
+            if(!BackEdges.count(E)) {
+                if(EdgeProfile[E].ugt(Count)) {
+                    Count = EdgeProfile[E];
+                    Next = *SB;
+                } 
+            }
+        }
+    } while (Next);
+    
+    for(auto &BB : SBlock) {
+        errs() << *BB << " ";
+    }
+}
+
+void 
 Superblocks::process(Function &F) {
     map<string, BasicBlock *> BlockMap;
     for (auto &BB : F)
         BlockMap[BB.getName().str()] = &BB;
 
     makeEdgeProfile(BlockMap);
-
-    for (auto &P : Sequences) {
-
+    auto BackEdges = common::getBackEdges(&F.getEntryBlock());
+    
+    SmallVector<SmallVector<BasicBlock*, 8>, 32>  Superblocks;
+    LoopInfo &LI = getAnalysis<LoopInfo>(F);
+    for(auto &L : LI) {
+        construct(L->getHeader(), Superblocks, BackEdges);
     }
+
 }
 
 bool 

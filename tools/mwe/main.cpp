@@ -145,7 +145,8 @@ int main(int argc, char **argv, const char **env) {
     pm.add(createVerifierPass());
     pm.run(*module);
 
-    common::generateBinary(*module, outFile);
+    common::generateBinary(*module, outFile, optLevel, 
+            libPaths, libraries);
 
     return 0;
 }

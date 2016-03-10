@@ -43,6 +43,10 @@ struct Path {
 
 typedef std::pair<llvm::BasicBlock*, llvm::BasicBlock*> Edge;
 
+std::function<bool(const Edge&, const Edge&)> getCmp();
+std::vector<llvm::Loop*>
+getInnermostLoops(llvm::LoopInfo &LI);
+
 struct Superblocks : public llvm::ModulePass {
     static char ID;
     std::string SeqFilePath;
@@ -52,7 +56,7 @@ struct Superblocks : public llvm::ModulePass {
     std::map<sb::Edge, llvm::APInt, decltype(KeyCmp)> EdgeProfile;
 
     Superblocks(std::string S, int N)
-        : llvm::ModulePass(ID), SeqFilePath(S), NumSeq(N){}
+        : llvm::ModulePass(ID), SeqFilePath(S), NumSeq(N), EdgeProfile(getCmp()) {}
 
     virtual bool runOnModule(llvm::Module &M) override;
     virtual bool doInitialization(llvm::Module &M) override;
@@ -61,8 +65,12 @@ struct Superblocks : public llvm::ModulePass {
     void makeEdgeProfile(std::map<std::string, llvm::BasicBlock*>&);
     void readSequences();
     void process(llvm::Function& F);
+    void construct(llvm::BasicBlock* Begin, 
+        llvm::SmallVector<llvm::SmallVector<llvm::BasicBlock*, 8>, 32>& Superblocks,
+        llvm::DenseSet<std::pair<const llvm::BasicBlock *, const llvm::BasicBlock *>>& BackEdges);
 
     virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
+        AU.addRequired<llvm::LoopInfo>();
         AU.setPreservesAll();
     }
 };

@@ -267,7 +267,7 @@ static void instrumentModule(Module &module, std::string, const char *argv0) {
     libraries.push_back("m");
 
     common::saveModule(module, outFile + ".epp.bc");
-    common::generateBinary(module, outFile);
+    common::generateBinary(module, outFile, optLevel, libPaths, libraries);
 }
 
 static void interpretResults(Module &module, std::string filename) {

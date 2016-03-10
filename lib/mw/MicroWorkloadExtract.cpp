@@ -19,6 +19,7 @@
 #include "llvm/IR/DerivedTypes.h"
 #include <cxxabi.h>
 #include "llvm/Linker/Linker.h"
+#include "Common.h"
 
 #define DEBUG_TYPE "mw"
 
@@ -183,19 +184,6 @@ static void liveInHelperStatic(SmallVector<BasicBlock *, 16> &RevTopoChop,
     // in the trace.
 }
 
-static DenseSet<pair<const BasicBlock *, const BasicBlock *>>
-getBackEdges(BasicBlock *StartBB) {
-    SmallVector<std::pair<const BasicBlock *, const BasicBlock *>, 8>
-        BackEdgesVec;
-    FindFunctionBackedges(*StartBB->getParent(), BackEdgesVec);
-    DenseSet<pair<const BasicBlock *, const BasicBlock *>> BackEdges;
-
-    for (auto &BE : BackEdgesVec) {
-        BackEdges.insert(BE);
-    }
-    return BackEdges;
-}
-
 void 
 MicroWorkloadExtract::extractHelper(Function *StaticFunc, Function *GuardFunc,
                   SetVector<Value *> &LiveIn, SetVector<Value *> &LiveOut,
@@ -204,7 +192,7 @@ MicroWorkloadExtract::extractHelper(Function *StaticFunc, Function *GuardFunc,
                   LLVMContext &Context) {
 
     ValueToValueMapTy VMap;
-    auto BackEdges = getBackEdges(RevTopoChop.back());
+    auto BackEdges = common::getBackEdges(RevTopoChop.back());
 
     auto handleCallSites =
         [&VMap, &StaticFunc](CallSite &OrigCS, CallSite &StaticCS) {
@@ -859,7 +847,7 @@ static SmallVector<BasicBlock *, 16>
 getChopBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
     auto *StartBB = BlockMap[P.Seq.front()];
     auto *LastBB = BlockMap[P.Seq.back()];
-    auto BackEdges = getBackEdges(StartBB);
+    auto BackEdges = common::getBackEdges(StartBB);
     auto Chop = getChop(StartBB, LastBB, BackEdges);
     auto RevTopoChop = getTopoChop(Chop, StartBB, BackEdges);
     assert(StartBB == RevTopoChop.back() && LastBB == RevTopoChop.front() &&
