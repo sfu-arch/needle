@@ -99,6 +99,7 @@ Superblocks::construct(BasicBlock* Begin,
                 SB != SE; SB++) { 
             auto E = make_pair(Begin, *SB);
             if(!BackEdges.count(E)) {
+                // What if it doesn't exist?
                 if(EdgeProfile[E].ugt(Count)) {
                     Count = EdgeProfile[E];
                     Next = *SB;
