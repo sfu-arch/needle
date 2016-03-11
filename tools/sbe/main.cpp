@@ -48,9 +48,6 @@ cl::opt<string> SeqFilePath("seq",
                             cl::value_desc("filename"),
                             cl::init("epp-sequences.txt"));
 
-cl::opt<int> NumSeq("num", cl::desc("Number of sequences to analyse"),
-                    cl::value_desc("positive integer"), cl::init(3));
-
 cl::list<std::string> FunctionList("fn", cl::value_desc("String"),
                                    cl::desc("List of functions to instrument"),
                                    cl::OneOrMore, cl::CommaSeparated);
@@ -98,7 +95,7 @@ int main(int argc, char **argv, const char **env) {
     pm.add(new llvm::CallGraphWrapperPass());
     pm.add(new epp::PeruseInliner());
     pm.add(new epp::Namer());
-    pm.add(new sb::Superblocks(SeqFilePath, NumSeq));
+    pm.add(new sb::Superblocks(SeqFilePath));
     pm.add(createVerifierPass());
     pm.run(*module);
 

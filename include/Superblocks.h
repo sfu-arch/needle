@@ -55,8 +55,8 @@ struct Superblocks : public llvm::ModulePass {
     std::function<bool(const Edge&, const Edge&)> KeyCmp;
     std::map<sb::Edge, llvm::APInt, decltype(KeyCmp)> EdgeProfile;
 
-    Superblocks(std::string S, int N)
-        : llvm::ModulePass(ID), SeqFilePath(S), NumSeq(N), EdgeProfile(getCmp()) {}
+    Superblocks(std::string S)
+        : llvm::ModulePass(ID), SeqFilePath(S), EdgeProfile(getCmp()) {}
 
     virtual bool runOnModule(llvm::Module &M) override;
     virtual bool doInitialization(llvm::Module &M) override;

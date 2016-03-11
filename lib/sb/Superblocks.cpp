@@ -41,7 +41,7 @@ void Superblocks::readSequences() {
     ifstream SeqFile(SeqFilePath.c_str(), ios::in);
     assert(SeqFile.is_open() && "Could not open file");
     string Line;
-    for (int64_t Count = 0; getline(SeqFile, Line);) {
+    for (; getline(SeqFile, Line);) {
         Path P;
         std::vector<std::string> Tokens;
         boost::split(Tokens, Line, boost::is_any_of("\t "));
@@ -52,10 +52,7 @@ void Superblocks::readSequences() {
 
         move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
         Sequences.push_back(P);
-        errs() << *P.Seq.begin() << " " << *P.Seq.rbegin() << "\n";
-        Count++;
-        if (Count == NumSeq)
-            break;
+        //errs() << *P.Seq.begin() << " " << *P.Seq.rbegin() << "\n";
     }
     SeqFile.close();
 }
@@ -87,19 +84,21 @@ void
 Superblocks::construct(BasicBlock* Begin, 
         SmallVector<SmallVector<BasicBlock*, 8>, 32>& Superblocks,
         DenseSet<pair<const BasicBlock *, const BasicBlock *>>& BackEdges) {
-    BasicBlock* Next = nullptr;
-    APInt Count(256, 0, false);
+    BasicBlock* Next = nullptr, *Prev = nullptr;
     SmallVector<BasicBlock*, 8> SBlock;
+    SBlock.push_back(Begin);
+    Prev = Begin;
     do {
         if(Next != nullptr) {
             SBlock.push_back(Next);
+            Prev = Next;
         }
         Next = nullptr;
-        for(auto SB = succ_begin(Begin), SE = succ_end(Begin);
+        APInt Count(256, 0, false);
+        for(auto SB = succ_begin(Prev), SE = succ_end(Prev);
                 SB != SE; SB++) { 
-            auto E = make_pair(Begin, *SB);
-            if(!BackEdges.count(E)) {
-                // What if it doesn't exist?
+            auto E = make_pair(Prev, *SB);
+            if(!BackEdges.count(E) && EdgeProfile.count(E) != 0 ) {
                 if(EdgeProfile[E].ugt(Count)) {
                     Count = EdgeProfile[E];
                     Next = *SB;
@@ -107,10 +106,8 @@ Superblocks::construct(BasicBlock* Begin,
             }
         }
     } while (Next);
-    
-    for(auto &BB : SBlock) {
-        errs() << *BB << " ";
-    }
+
+    Superblocks.push_back(SBlock);
 }
 
 void 
@@ -124,10 +121,17 @@ Superblocks::process(Function &F) {
     
     SmallVector<SmallVector<BasicBlock*, 8>, 32>  Superblocks;
     LoopInfo &LI = getAnalysis<LoopInfo>(F);
-    for(auto &L : LI) {
+    for(auto &L : getInnermostLoops(LI)) {
+        assert(L->getHeader()->getParent() == &F);
         construct(L->getHeader(), Superblocks, BackEdges);
     }
 
+    for(auto &SV : Superblocks) {
+        for(auto &BB : SV) {
+            errs() << BB->getName() << " ";
+        }
+        errs() << "\n";
+    }
 }
 
 bool 
