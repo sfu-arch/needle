@@ -121,7 +121,9 @@ Superblocks::process(Function &F) {
     
     SmallVector<SmallVector<BasicBlock*, 8>, 32>  Superblocks;
     LoopInfo &LI = getAnalysis<LoopInfo>(F);
-    for(auto &L : getInnermostLoops(LI)) {
+    vector<Loop*> InnerLoops = getInnermostLoops(LI);
+    errs() << "Num Loops: " << InnerLoops.size() << "\n";
+    for(auto &L : InnerLoops) {
         assert(L->getHeader()->getParent() == &F);
         construct(L->getHeader(), Superblocks, BackEdges);
     }
@@ -130,7 +132,7 @@ Superblocks::process(Function &F) {
         for(auto &BB : SV) {
             errs() << BB->getName() << " ";
         }
-        errs() << "\n";
+        errs() << "\n\n";
     }
 }
 
