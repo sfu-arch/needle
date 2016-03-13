@@ -88,22 +88,37 @@ Superblocks::construct(BasicBlock* Begin,
     SmallVector<BasicBlock*, 8> SBlock;
     SBlock.push_back(Begin);
     Prev = Begin;
+    
+    auto hasEdgeToHeader = [&SBlock](const BasicBlock* Prev) -> bool {
+        for(auto SB = succ_begin(Prev), SE = succ_end(Prev);
+                    SB != SE; SB++) { 
+            // If there is an edge back to the first block then exit
+            if(SBlock[0] == *SB) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     do {
         if(Next != nullptr) {
             SBlock.push_back(Next);
             Prev = Next;
+            Next = nullptr; 
         }
-        Next = nullptr;
-        APInt Count(256, 0, false);
-        for(auto SB = succ_begin(Prev), SE = succ_end(Prev);
-                SB != SE; SB++) { 
-            auto E = make_pair(Prev, *SB);
-            if(!BackEdges.count(E) && EdgeProfile.count(E) != 0 ) {
-                if(EdgeProfile[E].ugt(Count)) {
-                    Count = EdgeProfile[E];
-                    Next = *SB;
-                } 
-            }
+
+        if(!hasEdgeToHeader(Prev)) {
+            APInt Count(256, 0, false);
+            for(auto SB = succ_begin(Prev), SE = succ_end(Prev);
+                    SB != SE; SB++) { 
+                auto E = make_pair(Prev, *SB);
+                if(EdgeProfile.count(E) != 0) {
+                    if(EdgeProfile[E].ugt(Count)) {
+                        Count = EdgeProfile[E];
+                        Next = *SB;
+                    } 
+                }
+            }    
         }
     } while (Next);
 
@@ -122,17 +137,23 @@ Superblocks::process(Function &F) {
     SmallVector<SmallVector<BasicBlock*, 8>, 32>  Superblocks;
     LoopInfo &LI = getAnalysis<LoopInfo>(F);
     vector<Loop*> InnerLoops = getInnermostLoops(LI);
-    errs() << "Num Loops: " << InnerLoops.size() << "\n";
+    DEBUG(errs() << "Num Loops: " << InnerLoops.size() << "\n");
     for(auto &L : InnerLoops) {
         assert(L->getHeader()->getParent() == &F);
         construct(L->getHeader(), Superblocks, BackEdges);
     }
 
+
+    uint32_t Counter = 0;
+    std::ofstream outfile("superblocks.txt", ios::out);
     for(auto &SV : Superblocks) {
+        outfile << Counter++ <<  " 0 0 0 ";
         for(auto &BB : SV) {
-            errs() << BB->getName() << " ";
+            DEBUG(errs() << BB->getName() << " ");
+            outfile << BB->getName().str() << " ";
         }
-        errs() << "\n\n";
+        outfile << "\n";
+        DEBUG(errs() << "\n\n");
     }
 }
 
