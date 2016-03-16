@@ -55,11 +55,6 @@ using namespace llvm;
 using namespace llvm::sys;
 using namespace epp;
 
-// TODO: This is a temporary placeholder until make_unique ships widely.
-template <typename T, typename... Args>
-unique_ptr<T> make_unique(Args &&... args) {
-    return unique_ptr<T>(new T(forward<Args>(args)...));
-}
 
 cl::opt<string> inPath(cl::Positional, cl::desc("<Module to analyze>"),
                        cl::value_desc("bitcode filename"), cl::Required);
@@ -242,8 +237,8 @@ static void instrumentModule(Module &module, std::string, const char *argv0) {
     pm.add(createTypeBasedAliasAnalysisPass());
     pm.add(new LoopInfo());
     pm.add(new llvm::CallGraphWrapperPass());
-    pm.add(new epp::PeruseInliner());
-    pm.add(new epp::Namer());
+    //pm.add(new epp::PeruseInliner());
+    //pm.add(new epp::Namer());
     pm.add(new epp::EPPProfile());
     pm.add(createVerifierPass());
     pm.run(module);

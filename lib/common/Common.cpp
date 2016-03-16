@@ -42,6 +42,12 @@
 using namespace llvm;
 using namespace std;
 
+// GCC 4.8.3 does not have make_unique 
+template <typename T, typename... Args>
+unique_ptr<T> make_unique(Args &&... args) {
+    return unique_ptr<T>(new T(forward<Args>(args)...));
+}
+
 namespace common {
 
 void compile(Module &m, string outputPath, char optLevel) {
@@ -84,7 +90,7 @@ void compile(Module &m, string outputPath, char optLevel) {
     }
 
     error_code EC;
-    auto out = std::make_unique<tool_output_file>(outputPath.c_str(), EC,
+    auto out = ::make_unique<tool_output_file>(outputPath.c_str(), EC,
                                                sys::fs::F_None);
     if (EC) {
         report_fatal_error("Unable to create file:\n " + EC.message());
