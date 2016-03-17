@@ -15,7 +15,7 @@
 #include "llvm/PassManager.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/FileUtilities.h"
+#include "llvm/Support/FileUtilities.h" 
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/ManagedStatic.h"
@@ -237,8 +237,8 @@ static void instrumentModule(Module &module, std::string, const char *argv0) {
     pm.add(createTypeBasedAliasAnalysisPass());
     pm.add(new LoopInfo());
     pm.add(new llvm::CallGraphWrapperPass());
-    //pm.add(new epp::PeruseInliner());
-    //pm.add(new epp::Namer());
+    pm.add(new epp::PeruseInliner());
+    pm.add(new epp::Namer());
     pm.add(new epp::EPPProfile());
     pm.add(createVerifierPass());
     pm.run(module);
