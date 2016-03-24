@@ -124,6 +124,29 @@ Superblocks::construct(BasicBlock* Begin,
 
     Superblocks.push_back(SBlock);
 }
+void printPathSrc(SmallVector<llvm::BasicBlock *, 8> &blocks) {
+    unsigned line = 0;
+    llvm::StringRef file;
+    for (auto *bb : blocks) {
+        for (auto &instruction : *bb) {
+            MDNode *n = instruction.getMetadata("dbg");
+            if (!n) {
+                continue;
+            }
+
+            DILocation loc(n);
+            if (loc.getLineNumber() != line || loc.getFilename() != file) {
+                line = loc.getLineNumber();
+                file = loc.getFilename();
+                errs() << "File " << file.str() << " line " << line << "\n";
+                // break; // FIXME : This makes it only print once for each BB,
+                // remove to print all
+                // source lines per instruction.
+            }
+        }
+    }
+    errs() << "-----------------------\n";
+}
 
 void 
 Superblocks::process(Function &F) {
@@ -144,8 +167,16 @@ Superblocks::process(Function &F) {
     }
 
 
+    std::ofstream edgefile("edgeprofile.txt", ios::out);
+    for(auto &E : EdgeProfile) {
+        edgefile << E.second.getZExtValue() << " " << E.first.first->getName().str() 
+            << " " << E.first.second->getName().str() << "\n"; 
+    }
+    edgefile.close();
+
     uint32_t Counter = 0;
     std::ofstream outfile("superblocks.txt", ios::out);
+    
     for(auto &SV : Superblocks) {
         outfile << Counter++ <<  " 0 0 0 ";
         for(auto &BB : SV) {
@@ -154,6 +185,8 @@ Superblocks::process(Function &F) {
         }
         outfile << "\n";
         DEBUG(errs() << "\n\n");
+        errs() << Counter - 1 << "\n";
+        printPathSrc(SV);
     }
 }
 
