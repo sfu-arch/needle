@@ -60,7 +60,7 @@ cl::opt<string> SeqFilePath("seq",
                             cl::init("epp-sequences.txt"));
 
 cl::opt<int> NumSeq("num", cl::desc("Number of sequences to analyse"),
-                    cl::value_desc("positive integer"), cl::init(3));
+                    cl::value_desc("positive integer"), cl::init(1));
 
 cl::list<std::string> FunctionList("fn", cl::value_desc("String"),
                                    cl::desc("List of functions to instrument"),
@@ -80,7 +80,7 @@ cl::list<string> libraries("l", cl::Prefix,
                            cl::value_desc("library prefix"));
 
 cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
-                        cl::value_desc("filename"));
+                        cl::value_desc("filename"), cl::Required);
 
 
 bool isTargetFunction(const Function &f,

@@ -632,9 +632,20 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
 
     SetVector<Value *> Globals;
 
-    auto handlePhis =
-        [&LiveIn, &LiveOut, &Globals, &StartBB, &PDT, &LastBB, &RevTopoChop](
-            PHINode *Phi) -> int32_t {
+    auto distance =  [&RevTopoChop](SmallVector<BasicBlock *, 16> &SV,
+                       BasicBlock *ToBB) -> uint32_t {
+            uint32_t I = 0;
+            for (auto &BB : RevTopoChop) {
+                if (BB == ToBB)
+                    return I;
+                I++;
+            }
+            assert(false && "Unreachable");
+        };
+
+    auto handlePhis = [&LiveIn, &LiveOut, &Globals, 
+                    &StartBB, &PDT, &LastBB, &RevTopoChop, &distance]
+        (PHINode *Phi) {
 
             // Add uses of Phi before checking if it is LiveIn
             // What happens if this is promoted ot argument?
@@ -657,22 +668,9 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
                         }
                     } else {
                         // Handle loop-back Phi's
-                        auto distance =
-                            [&RevTopoChop](SmallVector<BasicBlock *, 16> &SV,
-                                           BasicBlock *ToBB) -> uint32_t {
-                                uint32_t I = 0;
-                                for (auto &BB : RevTopoChop) {
-                                    if (BB == ToBB)
-                                        return I;
-                                    I++;
-                                }
-                                assert(false && "Unreachable");
-                            };
                         // Find the topo position of Tgt
                         // If it is topologically before the phi def, then it is
-                        // a
-                        // use
-                        // across a backedge which we must add as live-out
+                        // a use across a backedge which we must add as live-out
                         auto PosTgt = distance(RevTopoChop, Tgt);
                         auto PosPhi = distance(RevTopoChop, Phi->getParent());
                         if (PosTgt > PosPhi) {
@@ -684,10 +682,9 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
 
             if (Phi->getParent() == StartBB) {
                 LiveIn.insert(Phi);
-                return 1;
+                return;
             }
 
-            uint32_t Num = 0;
             for (uint32_t I = 0; I < Phi->getNumIncomingValues(); I++) {
                 auto *Blk = Phi->getIncomingBlock(I);
                 auto *Val = Phi->getIncomingValue(I);
@@ -699,29 +696,25 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
                         if (find(RevTopoChop.begin(), RevTopoChop.end(),
                                  VI->getParent()) == RevTopoChop.end()) {
                             LiveIn.insert(Val);
-                            Num += 1;
                         }
                     } else if (auto *AI = dyn_cast<Argument>(Val)) {
                         LiveIn.insert(AI);
-                        Num += 1;
                     } else if (auto *GV = dyn_cast<GlobalVariable>(Val)) {
-                        errs() << *GV << "\n";
+                        //errs() << *GV << "\n";
                         Globals.insert(GV);
                     }
                 }
             }
-            return Num;
         };
 
     // Collect the live-ins and live-outs for the Chop
-    uint32_t PhiLiveIn = 0;
     // for (auto &BB : Chop) {
     // The order of iteration of blocks in this loop,
     // does not matter.
     for (auto &BB : RevTopoChop) {
         for (auto &I : *BB) {
             if (auto Phi = dyn_cast<PHINode>(&I)) {
-                PhiLiveIn += handlePhis(Phi);
+                handlePhis(Phi);
                 continue;
             }
             liveInHelperStatic(RevTopoChop, LiveIn, Globals, &I);
@@ -734,15 +727,8 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
                         if (find(RevTopoChop.begin(), RevTopoChop.end(),
                                  UIns->getParent()) == RevTopoChop.end()) {
                             // errs() << "Adding LO: " << *Ins << "\n";
-                            // Need to reason about this check some more.
-                            //if (!PDT->dominates(LastBB, UIns->getParent()) &&
-                                //!isa<GetElementPtrInst>(Ins)) {
-                                //LiveOut.insert(Ins);
-                            //}
                             if (!PDT->dominates(LastBB, UIns->getParent())){
-                                //if(!isa<GetElementPtrInst>(Ins)) {
                                     LiveOut.insert(Ins);
-                                //}
                             }
                         }
                     }
@@ -867,7 +853,7 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
 
 
 static void
-instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
+instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
                     FunctionType* OffloadTy, FunctionType* UndoTy,
                     SetVector<Value*> &LiveIn,
                     SetVector<Value*> &LiveOut,
@@ -905,7 +891,7 @@ instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     BranchInst::Create(Success, Fail, CI, StartBB);
     
     // Success -- Unpack struct
-    //CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
+    CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
     for(uint32_t Idx = 0; Idx < LiveOut.size(); Idx++) {
         auto *Val = LiveOut[Idx];
         Value *StIdx = ConstantInt::get(Int64Ty, Idx, false);
@@ -932,7 +918,8 @@ instrumentFunction(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     // Fail -- Undo memory
     vector<Value*> Args = {UGEP, NSLoad};
     CallInst::Create(Undo, Args, "", Fail);
-    //CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
+    errs() << "Inserting\n";
+    CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
     BranchInst::Create(SSplit, Fail);
 }
 
@@ -974,7 +961,7 @@ MicroWorkloadExtract::process(Function &F) {
         Linker::LinkModules(Mod, UndoMod);
         Linker::LinkModules(F.getParent(), Mod);
 
-        instrumentFunction(F, Blocks, Offload->getFunctionType(), nullptr,
+        instrument(F, Blocks, Offload->getFunctionType(), nullptr,
                             LiveIn, LiveOut, PostDomTree);
         //StripDebugInfo(*F.getParent());
         writeModule(F.getParent(), string("app.inst.ll"));
