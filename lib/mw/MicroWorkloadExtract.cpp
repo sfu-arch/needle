@@ -625,7 +625,8 @@ Function *
 MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
                                    SmallVector<BasicBlock *, 16> &RevTopoChop,
                                    SetVector<Value*> &LiveIn,
-                                   SetVector<Value*> &LiveOut) {
+                                   SetVector<Value*> &LiveOut, 
+                                   DominatorTree *DT) {
 
     auto *StartBB = RevTopoChop.back();
     auto *LastBB = RevTopoChop.front();
@@ -685,7 +686,7 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
     };
 
     auto processLiveOut = [&LiveOut, &RevTopoChop, &StartBB, &LastBB,
-            &LiveIn, &notInChop, &PDT](Instruction* Ins, Instruction *UIns) {
+            &LiveIn, &notInChop, &DT](Instruction* Ins, Instruction *UIns) {
         if(isa<PHINode>(UIns) && UIns->getParent() == StartBB) {
             errs() << "Live Out : " << *Ins << "\n";
             errs() << "Phi User : " << *UIns << " " 
@@ -693,7 +694,7 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
             LiveOut.insert(Ins);
         }
         else if (notInChop(UIns) && 
-                PDT->dominates(UIns->getParent(), LastBB) &&
+                DT->dominates(LastBB, UIns->getParent() ) &&
                 UIns->getParent() !=  LastBB) {
             errs() << "Live Out : " << *Ins << "\n";
             errs() << "Outside User : " << *UIns << " " 
@@ -875,7 +876,8 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
                     FunctionType* OffloadTy, FunctionType* UndoTy,
                     SetVector<Value*> &LiveIn,
                     SetVector<Value*> &LiveOut,
-                    PostDominatorTree* PDT){
+                    PostDominatorTree* PDT, 
+                    DominatorTree *DT){
 
     BasicBlock* StartBB = Blocks.back(), *LastBB = Blocks.front();
     auto BackEdges = common::getBackEdges(StartBB);
@@ -911,8 +913,30 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     
     // Success -- Unpack struct
     //CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
+
+    auto *T = LastBB->getTerminator();
+    uint32_t hasLastLiveOut = 0;
+    if(T->getNumSuccessors() == 2 ||
+            (isa<ReturnInst>(T) && 
+             dyn_cast<ReturnInst>(T)->getReturnValue())) {
+        hasLastLiveOut = 1;
+    }
+
+    BasicBlock* MergeBB = nullptr;
+    if(T->getNumSuccessors() == 2) {
+        auto *A = T->getSuccessor(0);
+        auto *B = T->getSuccessor(1);
+        if(DT->dominates(LastBB, A)) {
+            MergeBB = A;
+        } else {
+            assert(DT->dominates(LastBB, B) 
+                    && "It must dominate only 1 as it has a backedge");
+            MergeBB = B;
+        }
+    }
     
-    for(uint32_t Idx = 0; Idx < LiveOut.size(); Idx++) {
+    ValueToValueMapTy PhiMap;
+    for(uint32_t Idx = 0; Idx < LiveOut.size() - hasLastLiveOut; Idx++) {
         auto *Val = LiveOut[Idx];
         // GEP Indices always need to i32 types for historical
         // reasons.
@@ -923,23 +947,32 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
         vector<User*> Users(Val->user_begin(), Val->user_end());
         for(auto &U : Users) {
             auto *UseBB = dyn_cast<Instruction>(U)->getParent();
-            if(auto *Phi = dyn_cast<PHINode>(U)) {
-                errs() << "Val : " << *Val << "\n";
-                errs() << "Modify Phi : " << *Phi << "\n";
+            if( DT->dominates(LastBB, UseBB) &&
+                    UseBB != LastBB) {
+                errs() << "User : " << *U << " " 
+                            << UseBB->getName() << "\n";
+                assert(T->getNumSuccessors() == 2 
+                        && "Should only happen for backedge blocks");
+                // Insert a phi in there which has 2 values,
+                // (load,Success) , (original, LastBB)
+                // rewrite uses with this new phi.
+                if(PhiMap.count(Val) == 0) {
+                    auto *MPhi = PHINode::Create(Val->getType(), 2, "merge", &MergeBB->front());
+                    MPhi->addIncoming(Val, LastBB);
+                    MPhi->addIncoming(Load, Success);
+                    PhiMap[Val] = MPhi;
+                }
+                U->replaceUsesOfWith(Val, PhiMap[Val]);
+            } else if(auto *Phi = dyn_cast<PHINode>(U)) {
                 if(Phi->getParent() == StartBB) {
                     Phi->addIncoming(Load, Success);
+                    errs() << "Val : " << *Val << "\n";
+                    errs() << "Modify Phi : " << *Phi << "\n";
                 }
-            } else if(PDT->dominates(UseBB, LastBB) &&
-                    UseBB != LastBB) {
-                assert(!isa<PHINode>(U) && "PHINodes dealt with separately");
-                errs() << "Replacing : " << *U << "\n";
-                U->replaceUsesOfWith(Val, Load);
-            } 
+            }
         } 
     }
 
-    BasicBlock* LSplit = nullptr;
-    auto *T = LastBB->getTerminator();
     
     switch(T->getNumSuccessors()) {
         case 2: {
@@ -967,8 +1000,6 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
                     Value *GEPIdx[2] = {Zero, StIdx};
                     auto *ValPtr = GetElementPtrInst::Create(StPtr, GEPIdx, "st_gep", Success);
                     auto *Load = new LoadInst(ValPtr, "live_out", Success);
-                    // Cast to return type of function
-                    //auto *BC = new BitCastInst(Load, F.getReturnType(), "", Success);
                     ReturnInst::Create(Mod->getContext(), Load, Success);
                 } else {
                     ReturnInst::Create(Mod->getContext(), nullptr, Success);
@@ -1006,6 +1037,7 @@ runHelperPasses(Function* Offload, Function *Undo, Module* Generated) {
 void 
 MicroWorkloadExtract::process(Function &F) {
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
+    auto *DT = &getAnalysis<DominatorTreeWrapperPass>(F).getDomTree();
 
     map<string, BasicBlock *> BlockMap;
     for (auto &BB : F)
@@ -1019,7 +1051,7 @@ MicroWorkloadExtract::process(Function &F) {
 
         // Extract the blocks and create a new function
         SetVector<Value*> LiveOut, LiveIn;
-        Function *Offload = extract(PostDomTree, Mod, Blocks, LiveIn, LiveOut);
+        Function *Offload = extract(PostDomTree, Mod, Blocks, LiveIn, LiveOut, DT);
 
         // Creating a definition of the Undo function here and 
         // then creating the body inside the pass causes LLVM to 
@@ -1033,7 +1065,7 @@ MicroWorkloadExtract::process(Function &F) {
         Linker::LinkModules(F.getParent(), Mod);
 
         instrument(F, Blocks, Offload->getFunctionType(), nullptr,
-                            LiveIn, LiveOut, PostDomTree);
+                            LiveIn, LiveOut, PostDomTree, DT);
         //StripDebugInfo(*F.getParent());
         writeModule(F.getParent(), string("app.inst.ll"));
         // Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);

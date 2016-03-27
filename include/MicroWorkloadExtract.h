@@ -70,7 +70,8 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
     llvm::Function* extract(llvm::PostDominatorTree* , llvm::Module*,
                                    llvm::SmallVector<llvm::BasicBlock *, 16>&,
                                    llvm::SetVector<llvm::Value*> &,
-                                   llvm::SetVector<llvm::Value*> &);
+                                   llvm::SetVector<llvm::Value*> &,
+                                   llvm::DominatorTree*);
     
     void 
     extractHelper(llvm::Function *, llvm::Function *,
