@@ -1,6 +1,5 @@
 #include "MicroWorkloadExtract.h"
 #include <boost/algorithm/string.hpp>
-#include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/Utils/CodeExtractor.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/PassManager.h"
@@ -45,15 +44,6 @@ getFunctionRPO(Function& F) {
     return RevOrder;
 }
 
-static void optimizeModule(Module *Mod) {
-    PassManagerBuilder PMB;
-    PMB.OptLevel = 3;
-    PMB.SLPVectorize = false;
-    PMB.BBVectorize = false;
-    PassManager PM;
-    PMB.populateModulePassManager(PM);
-    PM.run(*Mod);
-}
 
 static bool
 replaceGuardsHelper(Function& F,

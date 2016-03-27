@@ -155,25 +155,24 @@ getChop(BasicBlock *StartBB, BasicBlock *LastBB,
     return Chop;
 }
 
-static void liveInHelperStatic(SmallVector<BasicBlock *, 16> &RevTopoChop,
+static void liveInHelper(SmallVector<BasicBlock *, 16> &RevTopoChop,
                                SetVector<Value*> &LiveIn,
                                SetVector<Value*> &Globals, Value *Val) {
     if (auto Ins = dyn_cast<Instruction>(Val)) {
         for (auto OI = Ins->op_begin(), EI = Ins->op_end(); OI != EI; OI++) {
             if (auto OIns = dyn_cast<Instruction>(OI)) {
-                // if (!Chop.count(OIns->getParent())) {
                 if (find(RevTopoChop.begin(), RevTopoChop.end(),
                          OIns->getParent()) == RevTopoChop.end()) {
                     LiveIn.insert(OIns);
                 }
             } else
-                liveInHelperStatic(RevTopoChop, LiveIn, Globals, *OI);
+                liveInHelper(RevTopoChop, LiveIn, Globals, *OI);
         }
     } else if (auto CE = dyn_cast<ConstantExpr>(Val)) {
         for (auto OI = CE->op_begin(), EI = CE->op_end(); OI != EI; OI++) {
             assert(!isa<Instruction>(OI) &&
                    "Don't expect operand of ConstExpr to be an Instruction");
-            liveInHelperStatic(RevTopoChop, LiveIn, Globals, *OI);
+            liveInHelper(RevTopoChop, LiveIn, Globals, *OI);
         }
     } else if (auto Arg = dyn_cast<Argument>(Val))
         LiveIn.insert(Arg);
@@ -448,8 +447,6 @@ MicroWorkloadExtract::extractHelper(Function *StaticFunc, Function *GuardFunc,
         }
     }
     
-    // FIXME : At a higher level, induction variable Phi's should become 
-    // live-in which is then supplied by the wrapper in a loop.
     auto handlePhis = [&VMap, &RevTopoChop, &BackEdges](PHINode *Phi, bool extractAsChop) {
         auto NV = Phi->getNumIncomingValues();
         vector<BasicBlock *> ToRemove;
@@ -465,19 +462,23 @@ MicroWorkloadExtract::extractHelper(Function *StaticFunc, Function *GuardFunc,
 
             // Is this a backedge? Remove the incoming value
             // Is this predicated on a block outside the chop? Remove
-            if (BackEdges.count(make_pair(Blk, Phi->getParent())) ||
-                find(RevTopoChop.begin(), RevTopoChop.end(), Blk) ==
-                    RevTopoChop.end()) {
+            assert(BackEdges.count(make_pair(Blk, Phi->getParent())) == 0
+                    && "Backedge Phi's should not exists -- should be promoted to LiveIn");
+
+            if (find(RevTopoChop.begin(), RevTopoChop.end(), Blk) == RevTopoChop.end()) {
                 ToRemove.push_back(Blk);
                 continue;
             }
             assert(VMap[Phi] &&
                    "New Phis should have been added by Instruction clone");
+
             auto *NewPhi = cast<PHINode>(VMap[Phi]);
             assert(VMap[Blk] && "Value not found in ValMap");
             NewPhi->setIncomingBlock(I, cast<BasicBlock>(VMap[Blk]));
 
             // Rewrite the value if it is available in the val map
+            // Val may be constants or globals which are not present
+            // in the map and don't need to be rewritten.
             if (VMap.count(Val)) {
                 NewPhi->setIncomingValue(I, VMap[Val]);
             }
@@ -511,6 +512,7 @@ MicroWorkloadExtract::extractHelper(Function *StaticFunc, Function *GuardFunc,
     Idx[0] = Constant::getNullValue(Type::getInt32Ty(Context));
     for (auto &L : LiveOut) {
         Value *LO = VMap[L];
+        errs() << "LO : " << *L << "\n";
         assert(LO && "Live Out not remapped");
         auto *Block = cast<Instruction>(LO)->getParent();
         Idx[1] = ConstantInt::get(Type::getInt32Ty(Context), OutIndex);
@@ -632,67 +634,18 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
 
     SetVector<Value *> Globals;
 
-    auto distance =  [&RevTopoChop](SmallVector<BasicBlock *, 16> &SV,
-                       BasicBlock *ToBB) -> uint32_t {
-            uint32_t I = 0;
-            for (auto &BB : RevTopoChop) {
-                if (BB == ToBB)
-                    return I;
-                I++;
-            }
-            assert(false && "Unreachable");
-        };
-
-    auto handlePhis = [&LiveIn, &LiveOut, &Globals, 
-                    &StartBB, &PDT, &LastBB, &RevTopoChop, &distance]
-        (PHINode *Phi) {
-
-            // Add uses of Phi before checking if it is LiveIn
-            // What happens if this is promoted ot argument?
-            for (auto UI = Phi->use_begin(), UE = Phi->use_end(); UI != UE;
-                 UI++) {
-                if (auto UIns = dyn_cast<Instruction>(UI->getUser())) {
-                    auto Tgt = UIns->getParent();
-                    // if (!Chop.count(Tgt)) {
-                    if (find(RevTopoChop.begin(), RevTopoChop.end(), Tgt) ==
-                        RevTopoChop.end()) {
-                        // errs() << "Adding LO: " << *Ins << "\n";
-                        if (!PDT->dominates(LastBB, UIns->getParent())) {
-                            // Phi at the begining of path is a live-in,
-                            // if it is used outside then don't care as
-                            // the argument to the accelerated chop can be
-                            // sent to the consumer outside the chop.
-                            if (Phi->getParent() != StartBB) {
-                                LiveOut.insert(Phi);
-                            }
-                        }
-                    } else {
-                        // Handle loop-back Phi's
-                        // Find the topo position of Tgt
-                        // If it is topologically before the phi def, then it is
-                        // a use across a backedge which we must add as live-out
-                        auto PosTgt = distance(RevTopoChop, Tgt);
-                        auto PosPhi = distance(RevTopoChop, Phi->getParent());
-                        if (PosTgt > PosPhi) {
-                            LiveOut.insert(Phi);
-                        }
-                    }
-                }
-            } // End of handling for LiveOut
-
-            if (Phi->getParent() == StartBB) {
+    auto handlePhiIn = [&LiveIn, &RevTopoChop, 
+                            &Globals, &StartBB](PHINode *Phi) {
+        if (Phi->getParent() == StartBB) {
                 LiveIn.insert(Phi);
-                return;
-            }
-
+        
+        } else{
             for (uint32_t I = 0; I < Phi->getNumIncomingValues(); I++) {
                 auto *Blk = Phi->getIncomingBlock(I);
                 auto *Val = Phi->getIncomingValue(I);
-                // if (Chop.count(Blk)) {
                 if (find(RevTopoChop.begin(), RevTopoChop.end(), Blk) !=
                     RevTopoChop.end()) {
                     if (auto *VI = dyn_cast<Instruction>(Val)) {
-                        // if (Chop.count(VI->getParent()) == 0) {
                         if (find(RevTopoChop.begin(), RevTopoChop.end(),
                                  VI->getParent()) == RevTopoChop.end()) {
                             LiveIn.insert(Val);
@@ -700,52 +653,117 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
                     } else if (auto *AI = dyn_cast<Argument>(Val)) {
                         LiveIn.insert(AI);
                     } else if (auto *GV = dyn_cast<GlobalVariable>(Val)) {
-                        //errs() << *GV << "\n";
                         Globals.insert(GV);
                     }
                 }
             }
-        };
+        }
+    };
 
-    // Collect the live-ins and live-outs for the Chop
-    // for (auto &BB : Chop) {
-    // The order of iteration of blocks in this loop,
-    // does not matter.
+
+    // Live In Loop
     for (auto &BB : RevTopoChop) {
         for (auto &I : *BB) {
             if (auto Phi = dyn_cast<PHINode>(&I)) {
-                handlePhis(Phi);
-                continue;
+                handlePhiIn(Phi);
+            } else {
+                liveInHelper(RevTopoChop, LiveIn, Globals, &I);
             }
-            liveInHelperStatic(RevTopoChop, LiveIn, Globals, &I);
-            // Live-Outs
+        }
+    }
+
+
+    errs() << "RevTopoChop : ";
+    for(auto &B : RevTopoChop) {
+        errs() << B->getName() << " ";
+    }
+    errs() << "\n";
+
+    auto notInChop = [&RevTopoChop](const Instruction* I) -> bool {
+        return find(RevTopoChop.begin(), RevTopoChop.end(),
+                    I->getParent()) == RevTopoChop.end();
+    };
+
+    auto processLiveOut = [&LiveOut, &RevTopoChop, &StartBB, &LastBB,
+            &LiveIn, &notInChop, &PDT](Instruction* Ins, Instruction *UIns) {
+        if(isa<PHINode>(UIns) && UIns->getParent() == StartBB) {
+            errs() << "Live Out : " << *Ins << "\n";
+            errs() << "Phi User : " << *UIns << " " 
+                << UIns->getParent()->getName() << "\n";
+            LiveOut.insert(Ins);
+        }
+        else if (notInChop(UIns) && 
+                PDT->dominates(UIns->getParent(), LastBB) &&
+                UIns->getParent() !=  LastBB) {
+            errs() << "Live Out : " << *Ins << "\n";
+            errs() << "Outside User : " << *UIns << " " 
+                << UIns->getParent()->getName() << "\n";
+            LiveOut.insert(Ins);
+        } else if (LiveIn.count(UIns)){
+            errs() << "Live Out : " << *Ins << "\n";
+            errs() << "Live in User : " << *UIns << " " 
+                << UIns->getParent()->getName() << "\n";
+            LiveOut.insert(Ins);
+        }
+
+    };
+    
+    // Live Out Loop
+    for (auto &BB : RevTopoChop) {
+        for (auto &I : *BB) {
             if (auto Ins = dyn_cast<Instruction>(&I)) {
                 for (auto UI = Ins->use_begin(), UE = Ins->use_end(); UI != UE;
                      UI++) {
                     if (auto UIns = dyn_cast<Instruction>(UI->getUser())) {
-                        // if (!Chop.count(UIns->getParent())) {
-                        if (find(RevTopoChop.begin(), RevTopoChop.end(),
-                                 UIns->getParent()) == RevTopoChop.end()) {
-                            // errs() << "Adding LO: " << *Ins << "\n";
-                            if (!PDT->dominates(LastBB, UIns->getParent())){
-                                    LiveOut.insert(Ins);
-                            }
-                        }
+                        processLiveOut(Ins, UIns);
                     }
                 }
             }
         }
     }
 
-    // Add the live-out which is the return value from the
-    // chop if it exists since we return void.
-
+     
     auto *LastT = LastBB->getTerminator();
-    if (auto *RT = dyn_cast<ReturnInst>(LastT)) {
-        if (auto *Val = RT->getReturnValue()) {
-            LiveOut.insert(Val);
+
+    // If LastT has 2 successors then, evaluate condition inside
+    // and create a condition inside the success block to do the 
+    // same and branch accordingly.
+    
+    // If LastT has 1 successor then, the successor is a target
+    // of the backedge from LastT, then nothing to do.
+
+    // If the LastT has 0 successor then, there may be a return
+    // value to patch. 
+    
+    switch(LastT->getNumSuccessors()) {
+        case 2: {
+                auto *CBR = dyn_cast<BranchInst>(LastT);
+                LiveOut.insert(CBR->getCondition());
+            }
+            break;
+        case 1: break;
+        case 0: {
+            auto *RT = dyn_cast<ReturnInst>(LastT);
+            assert(RT && "Path with 0 successor should have returninst"); 
+            if (auto *Val = RT->getReturnValue()) {
+                LiveOut.insert(Val);
+            }
         }
+        break;
+        default:
+            assert(false && "Unexpected num successors -- lowerswitch?");
     }
+    
+
+     errs() << "LiveIns :\n";
+     for(auto *V : LiveIn) {
+         errs() << *V << "\n";
+     }
+
+     errs() << "LiveOut :\n";
+     for(auto *V : LiveOut) {
+         errs() << *V << "\n";
+     }
 
     auto DataLayoutStr = StartBB->getDataLayout();
     auto TargetTripleStr = StartBB->getParent()->getParent()->getTargetTriple();
@@ -858,7 +876,9 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
                     SetVector<Value*> &LiveIn,
                     SetVector<Value*> &LiveOut,
                     PostDominatorTree* PDT){
+
     BasicBlock* StartBB = Blocks.back(), *LastBB = Blocks.front();
+    auto BackEdges = common::getBackEdges(StartBB);
     
     auto &Ctx = F.getContext();
     auto *Mod = F.getParent();
@@ -867,9 +887,7 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     
     auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
     SSplit->setName(StartBB->getName()+".split");
-    auto *LSplit = LastBB->splitBasicBlock(LastBB->getTerminator());
-    LSplit->setName(LastBB->getName()+".split");
-    
+
     auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
     auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
 
@@ -880,6 +898,7 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     auto *StructTy = getLiveOutStructType(LiveOut, Mod);
     auto *LOS = new AllocaInst(StructTy, nullptr, "", StartBB);
     auto *Int64Ty = Type::getInt64Ty(Mod->getContext());
+    auto *Int32Ty = Type::getInt32Ty(Mod->getContext());
     ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
     auto *StPtr = GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", StartBB);
 
@@ -891,21 +910,74 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     BranchInst::Create(Success, Fail, CI, StartBB);
     
     // Success -- Unpack struct
-    CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
+    //CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
+    
     for(uint32_t Idx = 0; Idx < LiveOut.size(); Idx++) {
         auto *Val = LiveOut[Idx];
-        Value *StIdx = ConstantInt::get(Int64Ty, Idx, false);
-        auto *ValPtr = GetElementPtrInst::CreateInBounds(StPtr, {StIdx}, "st_gep", Success);
-        auto *Load = new LoadInst(ValPtr, "", Success);
+        // GEP Indices always need to i32 types for historical
+        // reasons.
+        Value *StIdx = ConstantInt::get(Int32Ty, Idx, false);
+        Value *GEPIdx[2] = {Zero, StIdx};
+        auto *ValPtr = GetElementPtrInst::Create(StPtr, GEPIdx, "st_gep", Success);
+        auto *Load = new LoadInst(ValPtr, "live_out", Success);
         vector<User*> Users(Val->user_begin(), Val->user_end());
         for(auto &U : Users) {
             auto *UseBB = dyn_cast<Instruction>(U)->getParent();
-            if(PDT->dominates(UseBB, LastBB)) {
-                U->replaceUsesOfWith(Val, Load);                    
-            }
-        }
+            if(auto *Phi = dyn_cast<PHINode>(U)) {
+                errs() << "Val : " << *Val << "\n";
+                errs() << "Modify Phi : " << *Phi << "\n";
+                if(Phi->getParent() == StartBB) {
+                    Phi->addIncoming(Load, Success);
+                }
+            } else if(PDT->dominates(UseBB, LastBB) &&
+                    UseBB != LastBB) {
+                assert(!isa<PHINode>(U) && "PHINodes dealt with separately");
+                errs() << "Replacing : " << *U << "\n";
+                U->replaceUsesOfWith(Val, Load);
+            } 
+        } 
     }
-    BranchInst::Create(LSplit, Success);
+
+    BasicBlock* LSplit = nullptr;
+    auto *T = LastBB->getTerminator();
+    
+    switch(T->getNumSuccessors()) {
+        case 2: {
+                // Last value in the live out array is the branch
+                // condition, load it and branch accordingly.
+                Value *StIdx = ConstantInt::get(Int32Ty, LiveOut.size() - 1, false);
+                Value *GEPIdx[2] = {Zero, StIdx};
+                auto *ValPtr = GetElementPtrInst::Create(StPtr, GEPIdx, "st_gep", Success);
+                auto *Load = new LoadInst(ValPtr, "live_out", Success);
+                auto *NewBr = T->clone();
+                dyn_cast<BranchInst>(NewBr)->setCondition(Load);  
+                NewBr->insertAfter(Load);
+            }
+            break;
+        case 1:
+            // This should always be a backedge. 
+            assert(BackEdges.count(make_pair(LastBB, T->getSuccessor(0))) && 
+                    "Expected backedge here");
+            BranchInst::Create(T->getSuccessor(0), Success);
+            break;
+        case 0: {
+                auto *RT = dyn_cast<ReturnInst>(T);
+                if(RT->getReturnValue()) {
+                    Value *StIdx = ConstantInt::get(Int32Ty, LiveOut.size() - 1, false);
+                    Value *GEPIdx[2] = {Zero, StIdx};
+                    auto *ValPtr = GetElementPtrInst::Create(StPtr, GEPIdx, "st_gep", Success);
+                    auto *Load = new LoadInst(ValPtr, "live_out", Success);
+                    // Cast to return type of function
+                    //auto *BC = new BitCastInst(Load, F.getReturnType(), "", Success);
+                    ReturnInst::Create(Mod->getContext(), Load, Success);
+                } else {
+                    ReturnInst::Create(Mod->getContext(), nullptr, Success);
+                }
+            } 
+            break;
+        default:
+            assert(false && "Unexpected num successors");
+    }
 
     auto *Undo = Mod->getFunction("__undo_mem");
     auto *ULog = Mod->getNamedGlobal("__undo_log");
@@ -918,8 +990,7 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     // Fail -- Undo memory
     vector<Value*> Args = {UGEP, NSLoad};
     CallInst::Create(Undo, Args, "", Fail);
-    errs() << "Inserting\n";
-    CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
+    //CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
     BranchInst::Create(SSplit, Fail);
 }
 

@@ -17,6 +17,7 @@
 #include "llvm/PassManager.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Host.h"
@@ -201,4 +202,16 @@ getBackEdges(BasicBlock *StartBB) {
     }
     return BackEdges;
 }
+
+
+void optimizeModule(Module *Mod) {
+    PassManagerBuilder PMB;
+    PMB.OptLevel = 3;
+    PMB.SLPVectorize = false;
+    PMB.BBVectorize = false;
+    PassManager PM;
+    PMB.populateModulePassManager(PM);
+    PM.run(*Mod);
+}
+
 }
