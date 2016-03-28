@@ -621,6 +621,7 @@ getLiveOutStructType(SetVector<Value*> &LiveOut, Module* Mod) {
     return StructType::get(Mod->getContext(), LiveOutTypes, true);
 }
 
+
 Function *
 MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
                                    SmallVector<BasicBlock *, 16> &RevTopoChop,
@@ -631,6 +632,9 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
 
     auto *StartBB = RevTopoChop.back();
     auto *LastBB = RevTopoChop.front();
+
+    auto BackEdges = common::getBackEdges(StartBB);
+    auto ReachableFromLast = fSliceDFS(LastBB, BackEdges);
 
     assert(verifyChop(RevTopoChop) && "Invalid Region!");
 
@@ -687,7 +691,7 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
     };
 
     auto processLiveOut = [&LiveOut, &RevTopoChop, &StartBB, &LastBB,
-            &LiveIn, &notInChop, &DT, &LI](Instruction* Ins, Instruction *UIns) {
+            &LiveIn, &notInChop, &DT, &LI, &ReachableFromLast](Instruction* Ins, Instruction *UIns) {
         if(isa<PHINode>(UIns) && UIns->getParent() == StartBB) {
             errs() << "Live Out : " << *Ins << "\n";
             errs() << "Phi User : " << *UIns << " " 
@@ -697,6 +701,7 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
         else if (notInChop(UIns) && 
                 DT->dominates(LastBB, UIns->getParent() ) &&
                 //llvm::isPotentiallyReachable(LastBB, UIns->getParent(), DT, LI) &&
+                ReachableFromLast.count(UIns->getParent()) &&
                 UIns->getParent() !=  LastBB) {
             errs() << "Live Out : " << *Ins << "\n";
             errs() << "Outside User : " << *UIns << " " 
@@ -972,12 +977,14 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
                 U->replaceUsesOfWith(Val, PhiMap[Val]);
             } else if(auto *Phi = dyn_cast<PHINode>(U)) {
                 //if(Phi->getParent() == StartBB) {
-                if(find(Blocks.begin(), Blocks.end(), Phi->getParent()) 
-                        != Blocks.end()) {
-                    Phi->addIncoming(Load, Success);
-                    errs() << "Val : " << *Val << "\n";
-                    errs() << "Modify Phi : " << *Phi << "\n";
-                    PatchBlocks.insert(Phi->getParent());
+                auto *PB = Phi->getParent();
+                for(uint32_t N = 0; N < T->getNumSuccessors(); N++) {
+                    if(PB == T->getSuccessor(N)) {
+                        Phi->addIncoming(Load, Success);
+                        errs() << "Val : " << *Val << "\n";
+                        errs() << "Modify Phi : " << *Phi << "\n";
+                        PatchBlocks.insert(Phi->getParent());
+                    }
                 }
             }
         } 

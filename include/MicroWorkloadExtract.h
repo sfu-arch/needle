@@ -86,7 +86,6 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
         AU.addRequired<llvm::DominatorTreeWrapperPass>();
         AU.addRequired<llvm::LoopInfo>();
         AU.addRequired<llvm::PostDominatorTree>();
-        AU.setPreservesAll();
     }
 };
 
