@@ -883,79 +883,11 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
 
 
 static void
-instrumentRIRO(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
+instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
                     FunctionType* OffloadTy, FunctionType* UndoTy,
                     SetVector<Value*> &LiveIn,
                     SetVector<Value*> &LiveOut,
                     DominatorTree *DT){
-}
-
-static void
-instrumentFIRO(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
-                    FunctionType* OffloadTy, FunctionType* UndoTy,
-                    SetVector<Value*> &LiveIn,
-                    SetVector<Value*> &LiveOut,
-                    DominatorTree *DT){
-}
-
-static void
-instrumentRIFO(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
-                    FunctionType* OffloadTy, FunctionType* UndoTy,
-                    SetVector<Value*> &LiveIn,
-                    SetVector<Value*> &LiveOut,
-                    DominatorTree *DT){
-}
-
-static void
-instrumentFIFO(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
-                    FunctionType* OffloadTy, FunctionType* UndoTy,
-                    SetVector<Value*> &LiveIn,
-                    SetVector<Value*> &LiveOut,
-                    DominatorTree *DT){
-}
-
-
-static void
-instrumentSELF(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
-                    FunctionType* OffloadTy, FunctionType* UndoTy,
-                    SetVector<Value*> &LiveIn,
-                    SetVector<Value*> &LiveOut,
-                    DominatorTree *DT){
-}
-
-
-static void
-instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
-                    FunctionType* OffloadTy, FunctionType* UndoTy,
-                    SetVector<Value*> &LiveIn,
-                    SetVector<Value*> &LiveOut,
-                    PostDominatorTree* PDT, 
-                    DominatorTree *DT,
-                    mwe::PathType Type){
-
-    switch(Type) {
-        case RIRO:
-            instrumentRIRO(F, Blocks, OffloadTy, UndoTy,
-                    LiveIn, LiveOut, DT);
-            break;
-        case FIRO:
-            instrumentFIRO(F, Blocks, OffloadTy, UndoTy,
-                    LiveIn, LiveOut, DT);
-            break;
-        case RIFO:
-            instrumentRIRO(F, Blocks, OffloadTy, UndoTy,
-                    LiveIn, LiveOut, DT);
-            break;
-        case FIFO:
-            instrumentFIFO(F, Blocks, OffloadTy, UndoTy,
-                    LiveIn, LiveOut, DT);
-            break;
-        case SELF:
-            instrumentSELF(F, Blocks, OffloadTy, UndoTy,
-                    LiveIn, LiveOut, DT);
-            break;
-    }
-
 
     BasicBlock* StartBB = Blocks.back(), *LastBB = Blocks.front();
     auto BackEdges = common::getBackEdges(StartBB);
@@ -1002,8 +934,7 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     }
 
     BasicBlock* MergeBB = nullptr;
-    if(T->getNumSuccessors() == 2  
-            && StartBB != LastBB) {
+    if(T->getNumSuccessors() == 2) {
         auto *A = T->getSuccessor(0);
         auto *B = T->getSuccessor(1);
         errs() << "A: " << A->getName() << "\n";
@@ -1140,7 +1071,149 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     CallInst::Create(Undo, Args, "", Fail);
     CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
     BranchInst::Create(SSplit, Fail);
+
 }
+
+static void
+instrumentSELF(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
+                    FunctionType* OffloadTy, FunctionType* UndoTy,
+                    SetVector<Value*> &LiveIn,
+                    SetVector<Value*> &LiveOut,
+                    DominatorTree *DT) {
+
+    BasicBlock* StartBB = Blocks.back(); //, *LastBB = Blocks.front();
+    
+    auto &Ctx = F.getContext();
+    auto *Mod = F.getParent();
+    
+    auto *Offload = Mod->getFunction("__offload_func");
+    
+    auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
+    SSplit->setName(StartBB->getName()+".split");
+
+    auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
+    auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
+
+    StartBB->getTerminator()->eraseFromParent();
+    // Get all the live-ins
+    // Allocate a struct to get the live-outs filled in
+    // Call offload function and check the return
+    auto *StructTy = getLiveOutStructType(LiveOut, Mod);
+    auto *LOS = new AllocaInst(StructTy, nullptr, "", StartBB);
+    auto *Int64Ty = Type::getInt64Ty(Mod->getContext());
+    auto *Int32Ty = Type::getInt32Ty(Mod->getContext());
+    ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
+    auto *StPtr = GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", StartBB);
+
+    vector<Value*> Params;
+    for(auto &V : LiveIn) Params.push_back(V);
+    Params.push_back(StPtr);
+
+    auto *CI = CallInst::Create(Offload, Params, "", StartBB);
+    BranchInst::Create(Success, Fail, CI, StartBB);
+    
+    // Success -- Unpack struct
+    CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
+
+    auto *T = SSplit->getTerminator();
+    uint32_t hasLastLiveOut = 1;
+
+    BasicBlock* MergeBB = nullptr;
+    if(T->getSuccessor(0) == StartBB) {
+        MergeBB = T->getSuccessor(1);
+    } else {
+        MergeBB = T->getSuccessor(0);
+    }
+
+    auto BackEdges = common::getBackEdges(SSplit);
+    auto ReachableFromLast = fSliceDFS(SSplit, BackEdges);
+
+    ValueToValueMapTy PhiMap;
+    for(uint32_t Idx = 0; Idx < LiveOut.size() - hasLastLiveOut; Idx++) {
+        auto *Val = LiveOut[Idx];
+        // GEP Indices always need to i32 types for historical
+        // reasons.
+        Value *StIdx = ConstantInt::get(Int32Ty, Idx, false);
+        Value *GEPIdx[2] = {Zero, StIdx};
+        auto *ValPtr = GetElementPtrInst::Create(StPtr, GEPIdx, "st_gep", Success);
+        auto *Load = new LoadInst(ValPtr, "live_out", Success);
+        vector<User*> Users(Val->user_begin(), Val->user_end());
+        for(auto &U : Users) {
+            auto *UseBB = dyn_cast<Instruction>(U)->getParent();
+            if(UseBB == StartBB) {
+                auto *Phi = dyn_cast<PHINode>(U);
+                assert(Phi && "Only PhiNode users in StartBB");
+                Phi->addIncoming(Load, Success);
+            } else if(ReachableFromLast.count(UseBB) &&
+                    UseBB != SSplit) {
+                auto *Phi = PHINode::Create(Load->getType(), 2, "merge", MergeBB->begin());
+                Phi->addIncoming(Val, SSplit);
+                Phi->addIncoming(Load, Success);
+                U->replaceUsesOfWith(Val, Phi);
+            }
+        } 
+    }
+
+
+    switch(T->getNumSuccessors()) {
+        case 2: {
+                // Last value in the live out array is the branch
+                // condition, load it and branch accordingly.
+                Value *StIdx = ConstantInt::get(Int32Ty, LiveOut.size() - 1, false);
+                Value *GEPIdx[2] = {Zero, StIdx};
+                auto *ValPtr = GetElementPtrInst::Create(StPtr, GEPIdx, "st_gep", Success);
+                auto *Load = new LoadInst(ValPtr, "live_out", Success);
+                auto *NewBr = T->clone();
+                dyn_cast<BranchInst>(NewBr)->setCondition(Load);  
+                NewBr->insertAfter(Load);
+            }
+            break;
+        case 1:
+        case 0:  
+        default:
+            assert(false && "Unexpected num successors");
+    }
+
+    auto *Undo = Mod->getFunction("__undo_mem");
+    auto *ULog = Mod->getNamedGlobal("__undo_log");
+    auto *NumStore = Mod->getNamedGlobal("__undo_num_stores");
+   
+    vector<Value*> Idx = {Zero, Zero};
+    auto *UGEP = GetElementPtrInst::CreateInBounds(ULog, Idx, "", Fail);
+    auto *UNS = GetElementPtrInst::CreateInBounds(NumStore, {Zero}, "", Fail);
+    auto *NSLoad = new LoadInst(UNS, "", Fail);
+    // Fail -- Undo memory
+    vector<Value*> Args = {UGEP, NSLoad};
+    CallInst::Create(Undo, Args, "", Fail);
+    CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
+    BranchInst::Create(SSplit, Fail);
+}
+
+
+ 
+static void
+instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
+                    FunctionType* OffloadTy, FunctionType* UndoTy,
+                    SetVector<Value*> &LiveIn,
+                    SetVector<Value*> &LiveOut,
+                    DominatorTree *DT,
+                    mwe::PathType Type){
+
+    switch(Type) {
+        case RIRO:
+        case FIRO:
+        case RIFO:
+        case FIFO:
+            instrumentPATH(F, Blocks, OffloadTy, UndoTy,
+                    LiveIn, LiveOut, DT);
+            break;
+        case SELF:
+            instrumentSELF(F, Blocks, OffloadTy, UndoTy,
+                    LiveIn, LiveOut, DT);
+            break;
+    }
+
+} 
 
 static void
 runHelperPasses(Function* Offload, Function *Undo, Module* Generated) {
@@ -1183,7 +1256,7 @@ MicroWorkloadExtract::process(Function &F) {
         Linker::LinkModules(F.getParent(), Mod);
 
         instrument(F, Blocks, Offload->getFunctionType(), nullptr,
-                            LiveIn, LiveOut, PostDomTree, DT, P.PType);
+                            LiveIn, LiveOut, DT, P.PType);
         //StripDebugInfo(*F.getParent());
         writeModule(F.getParent(), string("app.inst.ll"));
         // Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);
