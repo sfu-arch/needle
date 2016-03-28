@@ -702,7 +702,7 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
             LiveOut.insert(Ins);
         }
         else if (notInChop(UIns) && 
-                DT->dominates(LastBB, UIns->getParent() ) &&
+                //DT->dominates(LastBB, UIns->getParent() ) &&
                 //llvm::isPotentiallyReachable(LastBB, UIns->getParent(), DT, LI) &&
                 ReachableFromLast.count(UIns->getParent()) &&
                 UIns->getParent() !=  LastBB) {
@@ -892,6 +892,7 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
 
     BasicBlock* StartBB = Blocks.back(), *LastBB = Blocks.front();
     auto BackEdges = common::getBackEdges(StartBB);
+    auto ReachableFromLast = fSliceDFS(LastBB, BackEdges);
     
     auto &Ctx = F.getContext();
     auto *Mod = F.getParent();
@@ -934,7 +935,8 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     }
 
     BasicBlock* MergeBB = nullptr;
-    if(T->getNumSuccessors() == 2) {
+    if(T->getNumSuccessors() == 2  
+            && StartBB != LastBB) {
         auto *A = T->getSuccessor(0);
         auto *B = T->getSuccessor(1);
         if(DT->dominates(LastBB, A)) {
@@ -962,7 +964,8 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
         vector<User*> Users(Val->user_begin(), Val->user_end());
         for(auto &U : Users) {
             auto *UseBB = dyn_cast<Instruction>(U)->getParent();
-            if( DT->dominates(LastBB, UseBB) &&
+            //if( DT->dominates(LastBB, UseBB) &&
+            if(ReachableFromLast.count(UseBB) &&
                     UseBB != LastBB) {
                 errs() << "User : " << *U << " " 
                             << UseBB->getName() << "\n";
@@ -1000,10 +1003,13 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     if(MergeBB) {
         PatchBlocks.insert(MergeBB);
     }
-    assert(PatchBlocks.size() <= 2 && "Can at most be the 2 targets of Success block");
+
+    assert(PatchBlocks.size() <= 2 && 
+            "Can at most be the 2 targets of Success block");
+
     for(auto &BB : PatchBlocks) {
         for(auto &I : *BB) {
-            if(auto *Phi = dyn_cast<PHINode>(&I)){
+            if(auto *Phi = dyn_cast<PHINode>(&I)) {
                 if(Phi->getBasicBlockIndex(LastBB) != -1
                         && Phi->getBasicBlockIndex(Success) == -1) {
                     Phi->addIncoming(Phi->getIncomingValueForBlock(LastBB), Success);
