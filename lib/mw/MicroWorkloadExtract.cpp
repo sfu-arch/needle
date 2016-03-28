@@ -782,12 +782,6 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
     Mod->setDataLayout(DataLayoutStr);
     Mod->setTargetTriple(TargetTripleStr);
 
-    //SmallVector<Type *, 16> LiveOutTypes(LiveOut.size());
-    //transform(LiveOut.begin(), LiveOut.end(), LiveOutTypes.begin(),
-              //[](const Value *V) -> Type *{ return V->getType(); });
-    // Create a packed struct return type
-    auto *StructTy = getLiveOutStructType(LiveOut, Mod);
-    auto *StructPtrTy = PointerType::getUnqual(StructTy);
 
     // errs() << *StructPtrTy << "\n";
 
@@ -800,8 +794,13 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
     // to the function's argument list
     for (auto Val : LiveIn)
         ParamTy.push_back(Val->getType());
-
-    ParamTy.push_back(StructPtrTy);
+    
+    if(LiveOut.size()) {
+        // Create a packed struct return type
+        auto *StructTy = getLiveOutStructType(LiveOut, Mod);
+        auto *StructPtrTy = PointerType::getUnqual(StructTy);
+        ParamTy.push_back(StructPtrTy);
+    }
 
     FunctionType *StFuncType = FunctionType::get(Int1Ty, ParamTy, false);
 
@@ -895,6 +894,9 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     
     auto &Ctx = F.getContext();
     auto *Mod = F.getParent();
+    auto *Int64Ty = Type::getInt64Ty(Ctx);
+    auto *Int32Ty = Type::getInt32Ty(Ctx);
+    ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
     
     auto *Offload = Mod->getFunction("__offload_func");
     
@@ -905,25 +907,40 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
 
     StartBB->getTerminator()->eraseFromParent();
+
     // Get all the live-ins
     // Allocate a struct to get the live-outs filled in
     // Call offload function and check the return
-    auto *StructTy = getLiveOutStructType(LiveOut, Mod);
-    auto *LOS = new AllocaInst(StructTy, nullptr, "", StartBB);
-    auto *Int64Ty = Type::getInt64Ty(Mod->getContext());
-    auto *Int32Ty = Type::getInt32Ty(Mod->getContext());
-    ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
-    auto *StPtr = GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", StartBB);
-
     vector<Value*> Params;
     for(auto &V : LiveIn) Params.push_back(V);
-    Params.push_back(StPtr);
+
+    GetElementPtrInst* StPtr = nullptr;
+    if(LiveOut.size()) {
+        auto *StructTy = getLiveOutStructType(LiveOut, Mod);
+        auto *LOS = new AllocaInst(StructTy, nullptr, "", StartBB);
+        StPtr = GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", StartBB);
+        Params.push_back(StPtr);
+    }
+
+    // Debugging
+    errs() << "LiveIn : " << LiveIn.size() << "\n";
+    for(auto &P : LiveIn) errs() << *P->getType() << "\n";
+    errs() << "\n";
+    errs() << "Params : " << Params.size() << "\n";
+    for(auto &P : Params) errs() << *P->getType() << "\n";
+    errs() << "\n";
+    errs() << "Num Args: " << Offload->arg_size() << "\n";
+    for(auto AI = Offload->arg_begin(), AE = Offload->arg_end();
+            AI != AE; AI++) {
+        errs() << *AI->getType() << "\n";
+    }
+    errs() << "\n";
 
     auto *CI = CallInst::Create(Offload, Params, "", StartBB);
     BranchInst::Create(Success, Fail, CI, StartBB);
     
     // Success -- Unpack struct
-    CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
+    //CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
 
     auto *T = LastBB->getTerminator();
     uint32_t hasLastLiveOut = 0;
@@ -1059,7 +1076,7 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     // Fail -- Undo memory
     vector<Value*> Args = {UGEP, NSLoad};
     CallInst::Create(Undo, Args, "", Fail);
-    CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
+    //CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
     BranchInst::Create(SSplit, Fail);
 
 }
@@ -1103,7 +1120,7 @@ instrumentSELF(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     BranchInst::Create(Success, Fail, CI, StartBB);
     
     // Success -- Unpack struct
-    CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
+    //CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
 
     auto *T = SSplit->getTerminator();
     uint32_t hasLastLiveOut = 1;
@@ -1178,7 +1195,7 @@ instrumentSELF(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     // Fail -- Undo memory
     vector<Value*> Args = {UGEP, NSLoad};
     CallInst::Create(Undo, Args, "", Fail);
-    CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
+    //CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
     BranchInst::Create(SSplit, Fail);
 }
 
