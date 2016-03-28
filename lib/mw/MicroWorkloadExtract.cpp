@@ -883,12 +883,79 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
 
 
 static void
+instrumentRIRO(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
+                    FunctionType* OffloadTy, FunctionType* UndoTy,
+                    SetVector<Value*> &LiveIn,
+                    SetVector<Value*> &LiveOut,
+                    DominatorTree *DT){
+}
+
+static void
+instrumentFIRO(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
+                    FunctionType* OffloadTy, FunctionType* UndoTy,
+                    SetVector<Value*> &LiveIn,
+                    SetVector<Value*> &LiveOut,
+                    DominatorTree *DT){
+}
+
+static void
+instrumentRIFO(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
+                    FunctionType* OffloadTy, FunctionType* UndoTy,
+                    SetVector<Value*> &LiveIn,
+                    SetVector<Value*> &LiveOut,
+                    DominatorTree *DT){
+}
+
+static void
+instrumentFIFO(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
+                    FunctionType* OffloadTy, FunctionType* UndoTy,
+                    SetVector<Value*> &LiveIn,
+                    SetVector<Value*> &LiveOut,
+                    DominatorTree *DT){
+}
+
+
+static void
+instrumentSELF(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
+                    FunctionType* OffloadTy, FunctionType* UndoTy,
+                    SetVector<Value*> &LiveIn,
+                    SetVector<Value*> &LiveOut,
+                    DominatorTree *DT){
+}
+
+
+static void
 instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
                     FunctionType* OffloadTy, FunctionType* UndoTy,
                     SetVector<Value*> &LiveIn,
                     SetVector<Value*> &LiveOut,
                     PostDominatorTree* PDT, 
-                    DominatorTree *DT){
+                    DominatorTree *DT,
+                    mwe::PathType Type){
+
+    switch(Type) {
+        case RIRO:
+            instrumentRIRO(F, Blocks, OffloadTy, UndoTy,
+                    LiveIn, LiveOut, DT);
+            break;
+        case FIRO:
+            instrumentFIRO(F, Blocks, OffloadTy, UndoTy,
+                    LiveIn, LiveOut, DT);
+            break;
+        case RIFO:
+            instrumentRIRO(F, Blocks, OffloadTy, UndoTy,
+                    LiveIn, LiveOut, DT);
+            break;
+        case FIFO:
+            instrumentFIFO(F, Blocks, OffloadTy, UndoTy,
+                    LiveIn, LiveOut, DT);
+            break;
+        case SELF:
+            instrumentSELF(F, Blocks, OffloadTy, UndoTy,
+                    LiveIn, LiveOut, DT);
+            break;
+    }
+
 
     BasicBlock* StartBB = Blocks.back(), *LastBB = Blocks.front();
     auto BackEdges = common::getBackEdges(StartBB);
@@ -924,7 +991,7 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     BranchInst::Create(Success, Fail, CI, StartBB);
     
     // Success -- Unpack struct
-    //CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
+    CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
 
     auto *T = LastBB->getTerminator();
     uint32_t hasLastLiveOut = 0;
@@ -939,6 +1006,8 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
             && StartBB != LastBB) {
         auto *A = T->getSuccessor(0);
         auto *B = T->getSuccessor(1);
+        errs() << "A: " << A->getName() << "\n";
+        errs() << "B: " << A->getName() << "\n";
         if(DT->dominates(LastBB, A)) {
             MergeBB = A;
             assert(BackEdges.count(make_pair(LastBB,B)));
@@ -985,6 +1054,8 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
                 //if(Phi->getParent() == StartBB) {
                 auto *PB = Phi->getParent();
                 for(uint32_t N = 0; N < T->getNumSuccessors(); N++) {
+                    errs() << "PB : " << PB->getName() << "\n";
+                    errs() << "T(N) : " << T->getSuccessor(N)->getName() << "\n";
                     if(PB == T->getSuccessor(N)) {
                         Phi->addIncoming(Load, Success);
                         errs() << "Val : " << *Val << "\n";
@@ -995,6 +1066,7 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
             }
         } 
     }
+
 
     // For some phi's in mergebb and the backedge target they may have values predicated on
     // coming from LastBB but it's not a live out of the extracted
@@ -1066,7 +1138,7 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     // Fail -- Undo memory
     vector<Value*> Args = {UGEP, NSLoad};
     CallInst::Create(Undo, Args, "", Fail);
-    //CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
+    CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
     BranchInst::Create(SSplit, Fail);
 }
 
@@ -1111,7 +1183,7 @@ MicroWorkloadExtract::process(Function &F) {
         Linker::LinkModules(F.getParent(), Mod);
 
         instrument(F, Blocks, Offload->getFunctionType(), nullptr,
-                            LiveIn, LiveOut, PostDomTree, DT);
+                            LiveIn, LiveOut, PostDomTree, DT, P.PType);
         //StripDebugInfo(*F.getParent());
         writeModule(F.getParent(), string("app.inst.ll"));
         // Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);
