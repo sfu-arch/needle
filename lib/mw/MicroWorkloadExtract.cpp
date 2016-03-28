@@ -626,7 +626,8 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
                                    SmallVector<BasicBlock *, 16> &RevTopoChop,
                                    SetVector<Value*> &LiveIn,
                                    SetVector<Value*> &LiveOut, 
-                                   DominatorTree *DT) {
+                                   DominatorTree *DT,
+                                   LoopInfo *LI) {
 
     auto *StartBB = RevTopoChop.back();
     auto *LastBB = RevTopoChop.front();
@@ -686,7 +687,7 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
     };
 
     auto processLiveOut = [&LiveOut, &RevTopoChop, &StartBB, &LastBB,
-            &LiveIn, &notInChop, &DT](Instruction* Ins, Instruction *UIns) {
+            &LiveIn, &notInChop, &DT, &LI](Instruction* Ins, Instruction *UIns) {
         if(isa<PHINode>(UIns) && UIns->getParent() == StartBB) {
             errs() << "Live Out : " << *Ins << "\n";
             errs() << "Phi User : " << *UIns << " " 
@@ -695,12 +696,14 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
         }
         else if (notInChop(UIns) && 
                 DT->dominates(LastBB, UIns->getParent() ) &&
+                //llvm::isPotentiallyReachable(LastBB, UIns->getParent(), DT, LI) &&
                 UIns->getParent() !=  LastBB) {
             errs() << "Live Out : " << *Ins << "\n";
             errs() << "Outside User : " << *UIns << " " 
                 << UIns->getParent()->getName() << "\n";
             LiveOut.insert(Ins);
         } else if (LiveIn.count(UIns)){
+            // Required for loop induction phi's
             errs() << "Live Out : " << *Ins << "\n";
             errs() << "Live in User : " << *UIns << " " 
                 << UIns->getParent()->getName() << "\n";
@@ -928,12 +931,16 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
         auto *B = T->getSuccessor(1);
         if(DT->dominates(LastBB, A)) {
             MergeBB = A;
+            assert(BackEdges.count(make_pair(LastBB,B)));
         } else {
             assert(DT->dominates(LastBB, B) 
                     && "It must dominate only 1 as it has a backedge");
+            assert(BackEdges.count(make_pair(LastBB,A)));
             MergeBB = B;
         }
     }
+
+    SetVector<BasicBlock*> PatchBlocks;
     
     ValueToValueMapTy PhiMap;
     for(uint32_t Idx = 0; Idx < LiveOut.size() - hasLastLiveOut; Idx++) {
@@ -964,13 +971,35 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
                 }
                 U->replaceUsesOfWith(Val, PhiMap[Val]);
             } else if(auto *Phi = dyn_cast<PHINode>(U)) {
-                if(Phi->getParent() == StartBB) {
+                //if(Phi->getParent() == StartBB) {
+                if(find(Blocks.begin(), Blocks.end(), Phi->getParent()) 
+                        != Blocks.end()) {
                     Phi->addIncoming(Load, Success);
                     errs() << "Val : " << *Val << "\n";
                     errs() << "Modify Phi : " << *Phi << "\n";
+                    PatchBlocks.insert(Phi->getParent());
                 }
             }
         } 
+    }
+
+    // For some phi's in mergebb and the backedge target they may have values predicated on
+    // coming from LastBB but it's not a live out of the extracted
+    // region. In this case just copy and create another entry.
+   
+    if(MergeBB) {
+        PatchBlocks.insert(MergeBB);
+    }
+    assert(PatchBlocks.size() <= 2 && "Can at most be the 2 targets of Success block");
+    for(auto &BB : PatchBlocks) {
+        for(auto &I : *BB) {
+            if(auto *Phi = dyn_cast<PHINode>(&I)){
+                if(Phi->getBasicBlockIndex(LastBB) != -1
+                        && Phi->getBasicBlockIndex(Success) == -1) {
+                    Phi->addIncoming(Phi->getIncomingValueForBlock(LastBB), Success);
+                }
+            }
+        }
     }
 
     
@@ -1038,6 +1067,7 @@ void
 MicroWorkloadExtract::process(Function &F) {
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
     auto *DT = &getAnalysis<DominatorTreeWrapperPass>(F).getDomTree();
+    auto *LI = &getAnalysis<LoopInfo>(F);
 
     map<string, BasicBlock *> BlockMap;
     for (auto &BB : F)
@@ -1051,7 +1081,7 @@ MicroWorkloadExtract::process(Function &F) {
 
         // Extract the blocks and create a new function
         SetVector<Value*> LiveOut, LiveIn;
-        Function *Offload = extract(PostDomTree, Mod, Blocks, LiveIn, LiveOut, DT);
+        Function *Offload = extract(PostDomTree, Mod, Blocks, LiveIn, LiveOut, DT, LI);
 
         // Creating a definition of the Undo function here and 
         // then creating the body inside the pass causes LLVM to 

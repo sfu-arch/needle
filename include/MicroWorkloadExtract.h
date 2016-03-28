@@ -71,7 +71,8 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
                                    llvm::SmallVector<llvm::BasicBlock *, 16>&,
                                    llvm::SetVector<llvm::Value*> &,
                                    llvm::SetVector<llvm::Value*> &,
-                                   llvm::DominatorTree*);
+                                   llvm::DominatorTree*,
+                                   llvm::LoopInfo*);
     
     void 
     extractHelper(llvm::Function *, llvm::Function *,
@@ -83,6 +84,7 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
     virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
         AU.addRequired<llvm::AliasAnalysis>();
         AU.addRequired<llvm::DominatorTreeWrapperPass>();
+        AU.addRequired<llvm::LoopInfo>();
         AU.addRequired<llvm::PostDominatorTree>();
         AU.setPreservesAll();
     }
