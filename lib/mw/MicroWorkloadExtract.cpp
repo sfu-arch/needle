@@ -222,6 +222,9 @@ MicroWorkloadExtract::extractHelper(Function *StaticFunc, Function *GuardFunc,
         GV->copyAttributesFrom(OldGV);
         assert(VMap.count(OldGV) == 0 && "Need new values");
         VMap[OldGV] = GV;
+        // Just set the linkage for the original global variable in
+        // case the it was private or something.
+        OldGV->setLinkage(GlobalValue::ExternalLinkage);
     }
 
     for (auto IT = RevTopoChop.rbegin(), IE = RevTopoChop.rend(); IT != IE;
