@@ -887,7 +887,7 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
                     FunctionType* OffloadTy, FunctionType* UndoTy,
                     SetVector<Value*> &LiveIn,
                     SetVector<Value*> &LiveOut,
-                    DominatorTree *DT){
+                    DominatorTree *DT) {
 
     BasicBlock* StartBB = Blocks.back(), *LastBB = Blocks.front();
     auto BackEdges = common::getBackEdges(StartBB);
@@ -950,8 +950,6 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
         }
     }
 
-    SetVector<BasicBlock*> PatchBlocks;
-    
     ValueToValueMapTy PhiMap;
     for(uint32_t Idx = 0; Idx < LiveOut.size() - hasLastLiveOut; Idx++) {
         auto *Val = LiveOut[Idx];
@@ -964,7 +962,6 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
         vector<User*> Users(Val->user_begin(), Val->user_end());
         for(auto &U : Users) {
             auto *UseBB = dyn_cast<Instruction>(U)->getParent();
-            //if( DT->dominates(LastBB, UseBB) &&
             if(ReachableFromLast.count(UseBB) &&
                     UseBB != LastBB) {
                 errs() << "User : " << *U << " " 
@@ -982,7 +979,6 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
                 }
                 U->replaceUsesOfWith(Val, PhiMap[Val]);
             } else if(auto *Phi = dyn_cast<PHINode>(U)) {
-                //if(Phi->getParent() == StartBB) {
                 auto *PB = Phi->getParent();
                 for(uint32_t N = 0; N < T->getNumSuccessors(); N++) {
                     errs() << "PB : " << PB->getName() << "\n";
@@ -991,7 +987,6 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
                         Phi->addIncoming(Load, Success);
                         errs() << "Val : " << *Val << "\n";
                         errs() << "Modify Phi : " << *Phi << "\n";
-                        PatchBlocks.insert(Phi->getParent());
                     }
                 }
             }
@@ -1003,16 +998,11 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     // coming from LastBB but it's not a live out of the extracted
     // region. In this case just copy and create another entry.
    
-    if(MergeBB) {
-        PatchBlocks.insert(MergeBB);
-    }
-
-    assert(PatchBlocks.size() <= 2 && 
-            "Can at most be the 2 targets of Success block");
-
-    for(auto &BB : PatchBlocks) {
+    for(auto &BB : vector<BasicBlock*>({MergeBB, StartBB})) {
         for(auto &I : *BB) {
             if(auto *Phi = dyn_cast<PHINode>(&I)) {
+                // Have an edge from LastBB but no edge from 
+                // new created SuccessBB
                 if(Phi->getBasicBlockIndex(LastBB) != -1
                         && Phi->getBasicBlockIndex(Success) == -1) {
                     Phi->addIncoming(Phi->getIncomingValueForBlock(LastBB), Success);
@@ -1146,10 +1136,13 @@ instrumentSELF(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
                 Phi->addIncoming(Load, Success);
             } else if(ReachableFromLast.count(UseBB) &&
                     UseBB != SSplit) {
-                auto *Phi = PHINode::Create(Load->getType(), 2, "merge", MergeBB->begin());
-                Phi->addIncoming(Val, SSplit);
-                Phi->addIncoming(Load, Success);
-                U->replaceUsesOfWith(Val, Phi);
+                if(PhiMap.count(Val) == 0) {
+                    auto *Phi = PHINode::Create(Load->getType(), 2, "merge", MergeBB->begin());
+                    Phi->addIncoming(Val, SSplit);
+                    Phi->addIncoming(Load, Success);
+                    PhiMap[Val] = Phi;
+                } 
+                U->replaceUsesOfWith(Val, PhiMap[Val]);
             }
         } 
     }
@@ -1200,9 +1193,11 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
                     mwe::PathType Type){
 
     switch(Type) {
-        case RIRO:
         case FIRO:
         case RIFO:
+            assert(false && 
+                    "Path Types FIRO and RIFO not supported for extraction");
+        case RIRO:
         case FIFO:
             instrumentPATH(F, Blocks, OffloadTy, UndoTy,
                     LiveIn, LiveOut, DT);
