@@ -78,6 +78,7 @@ static inline bool checkIntrinsic(CallSite& CS) {
         } 
         return true;
     }
+    /** Code used for Legup Compatibility
     else if (Name.startswith("llvm.dbg.") ||      // This will be stripped out
         Name.startswith("llvm.lifetime.") || // This will be stripped out
         Name.startswith("llvm.uadd.") ||     // Handled in the Verilog module
@@ -85,10 +86,11 @@ static inline bool checkIntrinsic(CallSite& CS) {
         Name.startswith("llvm.bswap.") ||    // Handled in the Verilog module
         Name.startswith("llvm.fabs.")) {
         return false;
+    } **/
+    else if(F->isIntrinsic()){
+        return false;
     }
-    else {
-        return true;
-    }
+    return true;
 }
 
 static uint64_t pathCheck(vector<BasicBlock *> &Blocks) {
@@ -109,10 +111,10 @@ static uint64_t pathCheck(vector<BasicBlock *> &Blocks) {
                 } else {
                     if (CS.getCalledFunction()->isDeclaration() &&
                         checkIntrinsic(CS)) {
-                        DEBUG(errs() << "Lib Call: "
-                                     << CS.getCalledFunction()->getName()
-                                     << "\n");
-                        return 0;
+                            DEBUG(errs() << "Lib Call: "
+                                         << CS.getCalledFunction()->getName()
+                                         << "\n");
+                            return 0;
                     }
                 }
             }

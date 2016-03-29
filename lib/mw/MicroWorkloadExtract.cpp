@@ -967,6 +967,8 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
         }
     }
 
+    SetVector<BasicBlock*> PatchBlocks;
+
     ValueToValueMapTy PhiMap;
     for(uint32_t Idx = 0; Idx < LiveOut.size() - hasLastLiveOut; Idx++) {
         auto *Val = LiveOut[Idx];
@@ -1004,6 +1006,7 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
                         Phi->addIncoming(Load, Success);
                         errs() << "Val : " << *Val << "\n";
                         errs() << "Modify Phi : " << *Phi << "\n";
+                        PatchBlocks.insert(PB);
                     }
                 }
             }
@@ -1014,8 +1017,12 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     // For some phi's in mergebb and the backedge target they may have values predicated on
     // coming from LastBB but it's not a live out of the extracted
     // region. In this case just copy and create another entry.
-   
-    for(auto &BB : vector<BasicBlock*>({MergeBB, StartBB})) {
+    
+    if(MergeBB) {
+        PatchBlocks.insert(MergeBB);
+    }
+     
+    for(auto &BB : PatchBlocks) {
         for(auto &I : *BB) {
             if(auto *Phi = dyn_cast<PHINode>(&I)) {
                 // Have an edge from LastBB but no edge from 
