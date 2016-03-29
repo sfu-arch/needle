@@ -78,7 +78,6 @@ static inline bool checkIntrinsic(CallSite& CS) {
         } 
         return true;
     }
-    /** Code used for Legup Compatibility
     else if (Name.startswith("llvm.dbg.") ||      // This will be stripped out
         Name.startswith("llvm.lifetime.") || // This will be stripped out
         Name.startswith("llvm.uadd.") ||     // Handled in the Verilog module
@@ -86,10 +85,10 @@ static inline bool checkIntrinsic(CallSite& CS) {
         Name.startswith("llvm.bswap.") ||    // Handled in the Verilog module
         Name.startswith("llvm.fabs.")) {
         return false;
-    } **/
-    else if(F->isIntrinsic()){
-        return false;
-    }
+    } 
+    //else if(F->isIntrinsic()){
+        //return false;
+    //}
     return true;
 }
 
