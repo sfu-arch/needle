@@ -206,7 +206,7 @@ getBackEdges(BasicBlock *StartBB) {
 
 void optimizeModule(Module *Mod) {
     PassManagerBuilder PMB;
-    PMB.OptLevel = 3;
+    PMB.OptLevel = 2;
     PMB.SLPVectorize = false;
     PMB.BBVectorize = false;
     PassManager PM;

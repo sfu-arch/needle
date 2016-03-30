@@ -322,6 +322,8 @@ int main(int argc, char **argv, const char **env) {
         }
     }
 
+    common::optimizeModule(module.get());
+
     if (!profile.empty()) {
         interpretResults(*module, profile);
     } else if (!outFile.empty()) {

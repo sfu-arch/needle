@@ -13,6 +13,7 @@
 #include "llvm/Pass.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/IR/Verifier.h"
+#include "Common.h"
 
 #include <string>
 #include <thread>
@@ -80,6 +81,8 @@ int main(int argc, char **argv, const char **env) {
         err.print(argv[0], errs());
         return -1;
     }
+
+    common::optimizeModule(module.get());
 
     PassManager pm;
     pm.add(new DataLayoutPass());
