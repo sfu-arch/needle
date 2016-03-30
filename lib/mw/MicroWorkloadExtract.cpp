@@ -795,12 +795,12 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
     for (auto Val : LiveIn)
         ParamTy.push_back(Val->getType());
     
-    if(LiveOut.size()) {
+    //if(LiveOut.size()) {
         // Create a packed struct return type
         auto *StructTy = getLiveOutStructType(LiveOut, Mod);
         auto *StructPtrTy = PointerType::getUnqual(StructTy);
         ParamTy.push_back(StructPtrTy);
-    }
+    //}
 
     FunctionType *StFuncType = FunctionType::get(Int1Ty, ParamTy, false);
 
@@ -915,12 +915,13 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     for(auto &V : LiveIn) Params.push_back(V);
 
     GetElementPtrInst* StPtr = nullptr;
-    if(LiveOut.size()) {
+    //if(LiveOut.size()) {
+        auto InsertionPt = F.getEntryBlock().getFirstInsertionPt();
         auto *StructTy = getLiveOutStructType(LiveOut, Mod);
-        auto *LOS = new AllocaInst(StructTy, nullptr, "", StartBB);
-        StPtr = GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", StartBB);
+        auto *LOS = new AllocaInst(StructTy, nullptr, "", InsertionPt);
+        StPtr = GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", InsertionPt);
         Params.push_back(StPtr);
-    }
+    //}
 
     // Debugging
     errs() << "LiveIn : " << LiveIn.size() << "\n";
