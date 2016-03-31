@@ -133,7 +133,6 @@ int main(int argc, char **argv, const char **env) {
     PassManager pm;
     pm.add(new DataLayoutPass());
     pm.add(new llvm::AssumptionCacheTracker());
-    pm.add(createLowerSwitchPass());
     pm.add(createLoopSimplifyPass());
     pm.add(createBasicAliasAnalysisPass());
     pm.add(createTypeBasedAliasAnalysisPass());
