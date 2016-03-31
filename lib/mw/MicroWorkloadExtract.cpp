@@ -30,6 +30,22 @@ using namespace std;
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
+static void 
+compareTypes(SetVector<Value*> &LiveIn, 
+             Function* Offload) {
+    errs() << "Comparing Type\n";
+    auto Arg = Offload->arg_begin();
+    for(auto &V : LiveIn) {
+        if(V->getType() != Arg->getType()) {
+            errs() << "LType : " << *V->getType() << "\n";
+            errs() << "AType : " << *Arg->getType() << "\n";
+        }
+        assert(V->getType() == Arg->getType() 
+                && "Live in and function arg mismatch");
+        Arg++;
+    } 
+}
+
 
 void MicroWorkloadExtract::readSequences() {
     ifstream SeqFile(SeqFilePath.c_str(), ios::in);
@@ -808,6 +824,10 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
     Function *StaticFunc = Function::Create(
         StFuncType, GlobalValue::ExternalLinkage, "__offload_func", Mod);
 
+
+    // Debug 
+    compareTypes(LiveIn, StaticFunc);
+
     // Create an external function which is used to
     // model all guard checks. First arg is the condition, second is whether 
     // the condition is dominant as true or as false. This 
@@ -847,6 +867,9 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
     // Dumbass verifyModule function returns false if no
     // errors are found. Ref "llvm/IR/Verifier.h":46
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
+
+    compareTypes(LiveIn, StaticFunc);
+
     return StaticFunc;
 }
 
@@ -880,7 +903,6 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
     return RPath;
 }
 
-
 static void
 instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
                     FunctionType* OffloadTy, FunctionType* UndoTy,
@@ -899,6 +921,10 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
     
     auto *Offload = Mod->getFunction("__offload_func");
+
+    errs() << "After Linking" << *Offload << "\n";
+
+    compareTypes(LiveIn, Offload);
     
     auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
     SSplit->setName(StartBB->getName()+".split");
@@ -1114,11 +1140,12 @@ instrumentSELF(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     // Allocate a struct to get the live-outs filled in
     // Call offload function and check the return
     auto *StructTy = getLiveOutStructType(LiveOut, Mod);
-    auto *LOS = new AllocaInst(StructTy, nullptr, "", StartBB);
+    auto InsertionPt = F.getEntryBlock().getFirstInsertionPt();
+    auto *LOS = new AllocaInst(StructTy, nullptr, "", InsertionPt);
     auto *Int64Ty = Type::getInt64Ty(Mod->getContext());
     auto *Int32Ty = Type::getInt32Ty(Mod->getContext());
     ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
-    auto *StPtr = GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", StartBB);
+    auto *StPtr = GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", InsertionPt);
 
     vector<Value*> Params;
     for(auto &V : LiveIn) Params.push_back(V);
@@ -1170,6 +1197,18 @@ instrumentSELF(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
                 U->replaceUsesOfWith(Val, PhiMap[Val]);
             }
         } 
+    }
+
+
+    for(auto &I : *MergeBB) {
+        if(auto *Phi = dyn_cast<PHINode>(&I)) {
+            // Have an edge from LastBB but no edge from 
+            // new created SuccessBB
+            if(Phi->getBasicBlockIndex(SSplit) != -1
+                    && Phi->getBasicBlockIndex(Success) == -1) {
+                Phi->addIncoming(Phi->getIncomingValueForBlock(SSplit), Success);
+            }
+        }
     }
 
 
@@ -1270,10 +1309,16 @@ MicroWorkloadExtract::process(Function &F) {
         runHelperPasses(Offload, nullptr, Mod);
         writeModule(Mod, (P.Id) + string(".ll"));
 
+        compareTypes(LiveIn, Offload);
         // Link modules now since the required globals 
         // have been created.
+        errs() << "Before Linking : " << *Offload << "\n";
         Linker::LinkModules(Mod, UndoMod);
         Linker::LinkModules(F.getParent(), Mod);
+        errs() << "Before Linking : " << *Offload << "\n";
+        // Debug
+        compareTypes(LiveIn, Offload);
+
 
         instrument(F, Blocks, Offload->getFunctionType(), nullptr,
                             LiveIn, LiveOut, DT, P.PType);
