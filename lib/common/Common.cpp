@@ -5,6 +5,7 @@
 #include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/CodeGen/CommandFlags.h"
 #include "llvm/CodeGen/LinkAllAsmWriterComponents.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/CodeGen/LinkAllCodegenComponents.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IRPrintingPasses.h"
@@ -212,6 +213,22 @@ void optimizeModule(Module *Mod) {
     PassManager PM;
     PMB.populateModulePassManager(PM);
     PM.run(*Mod);
+}
+
+
+void lowerSwitch(Function& F) {
+    legacy::FunctionPassManager FPM(F.getParent());
+    FPM.add(createLowerSwitchPass());
+    FPM.doInitialization();
+    FPM.run(F);
+    FPM.doFinalization();
+}
+
+void lowerSwitch(Module& M , StringRef FunctionName) {
+    for(auto &F : M) {
+        if(F.getName() == FunctionName)
+            lowerSwitch(F);
+    }
 }
 
 }

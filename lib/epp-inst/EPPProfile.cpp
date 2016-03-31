@@ -22,19 +22,24 @@ using namespace llvm;
 using namespace epp;
 using namespace std;
 
-cl::list<std::string> FunctionList("epp-fn", cl::value_desc("String"),
-                                   cl::desc("List of functions to instrument"),
-                                   cl::OneOrMore, cl::CommaSeparated);
 
-bool isTargetFunction(const Function &f,
-                      const cl::list<std::string> &FunctionList) {
-    if (f.isDeclaration())
-        return false;
-    for (auto &fname : FunctionList)
-        if (fname == f.getName())
-            return true;
-    return false;
-}
+extern cl::list<std::string> FunctionList;
+extern bool isTargetFunction(const Function &f,
+                      const cl::list<std::string> &FunctionList);
+
+//cl::list<std::string> FunctionList("epp-fn", cl::value_desc("String"),
+                                   //cl::desc("List of functions to instrument"),
+                                   //cl::OneOrMore, cl::CommaSeparated);
+
+//bool isTargetFunction(const Function &f,
+                      //const cl::list<std::string> &FunctionList) {
+    //if (f.isDeclaration())
+        //return false;
+    //for (auto &fname : FunctionList)
+        //if (fname == f.getName())
+            //return true;
+    //return false;
+//}
 
 bool EPPProfile::doInitialization(Module &m) {
     assert(FunctionList.size() == 1 &&

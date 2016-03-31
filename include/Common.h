@@ -25,6 +25,8 @@ llvm::DenseSet<std::pair<const llvm::BasicBlock *, const llvm::BasicBlock *>>
 
 void optimizeModule(llvm::Module* Mod);
 
+void lowerSwitch(llvm::Module& M , llvm::StringRef FunctionName);
+
 }
 
 #endif

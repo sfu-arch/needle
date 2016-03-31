@@ -90,148 +90,26 @@ cl::list<string> libraries("l", cl::Prefix,
 cl::list<string>
     linkM("b", cl::desc("Bitcode modules to merge (comma separated list)"));
 
-//static void compile(Module &m, string outputPath) {
-    //string err;
 
-    //Triple triple = Triple(m.getTargetTriple());
-    //const Target *target = TargetRegistry::lookupTarget(MArch, triple, err);
-    //if (!target) {
-        //report_fatal_error("Unable to find target:\n " + err);
-    //}
+cl::list<std::string> FunctionList("epp-fn", cl::value_desc("String"),
+                                   cl::desc("List of functions to instrument"),
+                                   cl::OneOrMore, cl::CommaSeparated);
 
-    //CodeGenOpt::Level level = CodeGenOpt::Default;
-    //switch (optLevel) {
-    //default:
-        //report_fatal_error("Invalid optimization level.\n");
-    //// No fall through
-    //case '0':
-        //level = CodeGenOpt::None;
-        //break;
-    //case '1':
-        //level = CodeGenOpt::Less;
-        //break;
-    //case '2':
-        //level = CodeGenOpt::Default;
-        //break;
-    //case '3':
-        //level = CodeGenOpt::Aggressive;
-        //break;
-    //}
-
-    //string FeaturesStr;
-    //TargetOptions options = InitTargetOptionsFromCodeGenFlags();
-    //unique_ptr<TargetMachine> machine(
-        //target->createTargetMachine(triple.getTriple(), MCPU, FeaturesStr,
-                                    //options, RelocModel, CMModel, level));
-    //assert(machine.get() && "Could not allocate target machine!");
-
-    //if (GenerateSoftFloatCalls) {
-        //FloatABIForCalls = FloatABI::Soft;
-    //}
-
-    //error_code EC;
-    //auto out = ::make_unique<tool_output_file>(outputPath.c_str(), EC,
-                                               //sys::fs::F_None);
-    //if (EC) {
-        //report_fatal_error("Unable to create file:\n " + EC.message());
-    //}
-
-    //// Build up all of the passes that we want to do to the module.
-    //PassManager pm;
-
-    //// Add target specific info and transforms
-    //pm.add(new TargetLibraryInfo(triple));
-    //machine->addAnalysisPasses(pm);
-
-    //// if (const DataLayout *dl = machine->createDataLayout()) {
-    ////      m.setDataLayout(dl);
-    //// }
-    //pm.add(new DataLayoutPass());
-
-    //{ // Bound this scope
-        //formatted_raw_ostream fos(out->os());
-
-        //FileType = TargetMachine::CGFT_ObjectFile;
-        //// Ask the target to add backend passes as necessary.
-        //if (machine->addPassesToEmitFile(pm, fos, FileType)) {
-            //report_fatal_error("target does not support generation "
-                               //"of this file type!\n");
-        //}
-
-        //// Before executing passes, print the final values of the LLVM options.
-        //cl::PrintOptionValues();
-
-        //pm.run(m);
-    //}
-
-    //// Keep the output binary if we've been successful to this point.
-    //out->keep();
-//}
-
-//static void link(const string &objectFile, const string &outputFile) {
-    //auto clang = findProgramByName("clang++");
-    //if (!clang) {
-        //report_fatal_error(
-            //"Unable to link output file. Clang not found in PATH.");
-    //}
-
-    //string opt("-O");
-    //opt += optLevel;
-
-    //vector<string> args{clang.get(), opt, "-o", outputFile, objectFile};
-
-    //for (auto &libPath : libPaths) {
-        //args.push_back("-L" + libPath);
-    //}
-
-    //for (auto &library : libraries) {
-        //args.push_back("-l" + library);
-    //}
-
-    //vector<const char *> charArgs;
-    //for (auto &arg : args) {
-        //charArgs.push_back(arg.c_str());
-    //}
-    //charArgs.push_back(0);
-
-    //for (auto &arg : args) {
-        //DEBUG(outs() << arg.c_str() << " ");
-    //}
-    //DEBUG(outs() << "\n");
-
-    //string err;
-    //if (-1 ==
-        //ExecuteAndWait(clang.get(), &charArgs[0], nullptr, 0, 0, 0, &err)) {
-        //report_fatal_error("Unable to link output file.");
-    //}
-//}
-
-//static void generateBinary(Module &m, const string &outputFilename) {
-    //// Compiling to native should allow things to keep working even when the
-    //// version of clang on the system and the version of LLVM used to compile
-    //// the tool don't quite match up.
-    //string objectFile = outputFilename + ".o";
-    //compile(m, objectFile);
-    //link(objectFile, outputFilename);
-//}
-
-//static void saveModule(Module &m, StringRef filename) {
-    //error_code EC;
-    //raw_fd_ostream out(filename.data(), EC, sys::fs::F_None);
-
-    //if (EC) {
-        //report_fatal_error("error saving llvm module to '" + filename +
-                           //"': \n" + EC.message());
-    //}
-    //WriteBitcodeToFile(&m, out);
-//}
+bool isTargetFunction(const Function &f,
+                      const cl::list<std::string> &FunctionList) {
+    if (f.isDeclaration())
+        return false;
+    for (auto &fname : FunctionList)
+        if (fname == f.getName())
+            return true;
+    return false;
+}
 
 static void instrumentModule(Module &module, std::string, const char *argv0) {
     // Build up all of the passes that we want to run on the module.
     PassManager pm;
     pm.add(new DataLayoutPass());
     pm.add(new llvm::AssumptionCacheTracker());
-    pm.add(createLowerSwitchPass());
     pm.add(createLoopSimplifyPass());
     pm.add(createBasicAliasAnalysisPass());
     pm.add(createTypeBasedAliasAnalysisPass());
@@ -266,10 +144,15 @@ static void instrumentModule(Module &module, std::string, const char *argv0) {
 }
 
 static void interpretResults(Module &module, std::string filename) {
+    // We don't handle switch instructions, so convert
+    // them to if-else. This can also be done by the 
+    // pass manager in epp/main.cpp however it breaks 
+    // for some obscure function in 403.gcc. So here I
+    // only run it for my function of interest.
+    
     PassManager pm;
     pm.add(new DataLayoutPass());
     pm.add(new llvm::AssumptionCacheTracker());
-    pm.add(createLowerSwitchPass());
     pm.add(createLoopSimplifyPass());
     pm.add(createBasicAliasAnalysisPass());
     pm.add(createTypeBasedAliasAnalysisPass());
@@ -323,6 +206,7 @@ int main(int argc, char **argv, const char **env) {
     }
 
     common::optimizeModule(module.get());
+    common::lowerSwitch(*module, FunctionList[0]);
 
     if (!profile.empty()) {
         interpretResults(*module, profile);

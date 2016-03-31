@@ -21,6 +21,7 @@
 #include "DilworthDecomposition.h"
 #include <boost/graph/bipartite.hpp>
 #include <boost/graph/strong_components.hpp>
+#include "Common.h"
 #include <boost/property_map/property_map.hpp>
 #include <cxxabi.h>
 #include <llvm/Linker/Linker.h>

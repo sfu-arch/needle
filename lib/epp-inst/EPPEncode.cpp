@@ -2,11 +2,14 @@
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/Transforms/Scalar.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/ADT/SetVector.h"
+#include "llvm/Pass.h"
+#include "Common.h"
 
 #include "EPPEncode.h"
 
@@ -280,6 +283,7 @@ void EPPEncode::releaseMemory() {
     Inc.clear();
     selfLoopCounter = 0;
 }
+
 
 void EPPEncode::encode(Function &F) {
     DEBUG(errs() << "Called Encode on " << F.getName() << "\n");

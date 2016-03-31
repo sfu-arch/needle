@@ -48,6 +48,7 @@ cl::opt<string> SeqFilePath("seq",
                             cl::value_desc("filename"),
                             cl::init("epp-sequences.txt"));
 
+// This should become a single string
 cl::list<std::string> FunctionList("fn", cl::value_desc("String"),
                                    cl::desc("List of functions to instrument"),
                                    cl::OneOrMore, cl::CommaSeparated);
@@ -84,6 +85,7 @@ int main(int argc, char **argv, const char **env) {
     }
     
     common::optimizeModule(module.get());
+    common::lowerSwitch(*module, FunctionList[0]);
 
     PassManager pm;
     pm.add(new DataLayoutPass());
