@@ -930,7 +930,6 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
     auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
 
-    StartBB->getTerminator()->eraseFromParent();
 
     // Get all the live-ins
     // Allocate a struct to get the live-outs filled in
@@ -961,6 +960,7 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     }
     errs() << "\n";
 
+    StartBB->getTerminator()->eraseFromParent();
     auto *CI = CallInst::Create(Offload, Params, "", StartBB);
     BranchInst::Create(Success, Fail, CI, StartBB);
     

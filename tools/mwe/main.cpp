@@ -127,14 +127,14 @@ int main(int argc, char **argv, const char **env) {
         return -1;
     }
 
-    common::optimizeModule(module.get());
-    common::lowerSwitch(*module, FunctionList[0]);
+    //common::optimizeModule(module.get());
+    //common::lowerSwitch(*module, FunctionList[0]);
 
     PassManager pm;
     pm.add(new DataLayoutPass());
     pm.add(new llvm::AssumptionCacheTracker());
     pm.add(createLowerSwitchPass());
-    pm.add(createLoopSimplifyPass());
+    pm.add(createLoopSimplifyPass()); // Comment this later
     pm.add(createBasicAliasAnalysisPass());
     pm.add(createTypeBasedAliasAnalysisPass());
     pm.add(new LoopInfo());
