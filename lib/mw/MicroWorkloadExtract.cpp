@@ -905,7 +905,7 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
 
 static void
 instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
-                    FunctionType* OffloadTy, FunctionType* UndoTy,
+                    FunctionType* OffloadTy, 
                     SetVector<Value*> &LiveIn,
                     SetVector<Value*> &LiveOut,
                     DominatorTree *DT) {
@@ -919,10 +919,8 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     auto *Int64Ty = Type::getInt64Ty(Ctx);
     auto *Int32Ty = Type::getInt32Ty(Ctx);
     ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
-    
-    auto *Offload = Mod->getFunction("__offload_func");
 
-    errs() << "After Linking" << *Offload << "\n";
+    auto *Offload = cast<Function>(Mod->getOrInsertFunction("__offload_func", OffloadTy));
 
     compareTypes(LiveIn, Offload);
     
@@ -1099,25 +1097,39 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
             assert(false && "Unexpected num successors");
     }
 
-    auto *Undo = Mod->getFunction("__undo_mem");
-    auto *ULog = Mod->getNamedGlobal("__undo_log");
-    auto *NumStore = Mod->getNamedGlobal("__undo_num_stores");
-   
+    
+    ArrayType *LogArrTy =
+        ArrayType::get(IntegerType::get(Ctx, 8), 0);
+    auto *ULog  = Mod->getOrInsertGlobal("__undo_log", LogArrTy);
+    auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores", 
+                  IntegerType::getInt32Ty(Ctx) );
+    Type *ParamTy[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx)};
+    auto *UndoTy = FunctionType::get(Type::getVoidTy(Ctx), ParamTy, false);
+    auto *Undo = Mod->getOrInsertFunction("__undo_mem", UndoTy);
+    
     vector<Value*> Idx = {Zero, Zero};
     auto *UGEP = GetElementPtrInst::CreateInBounds(ULog, Idx, "", Fail);
     auto *UNS = GetElementPtrInst::CreateInBounds(NumStore, {Zero}, "", Fail);
     auto *NSLoad = new LoadInst(UNS, "", Fail);
     // Fail -- Undo memory
     vector<Value*> Args = {UGEP, NSLoad};
+
+    errs() << *UGEP->getType() << "\n";
+    errs() << *NSLoad->getType() << "\n";
+    errs() << *Undo << "\n";
+
     CallInst::Create(Undo, Args, "", Fail);
     //CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
     BranchInst::Create(SSplit, Fail);
 
 }
 
+// TODO : Unify the SELF and PATH instrumentation.
+// Logic should not be that different?
+
 static void
 instrumentSELF(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
-                    FunctionType* OffloadTy, FunctionType* UndoTy,
+                    FunctionType* OffloadTy, 
                     SetVector<Value*> &LiveIn,
                     SetVector<Value*> &LiveOut,
                     DominatorTree *DT) {
@@ -1127,7 +1139,7 @@ instrumentSELF(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
     auto &Ctx = F.getContext();
     auto *Mod = F.getParent();
     
-    auto *Offload = Mod->getFunction("__offload_func");
+    auto *Offload = Mod->getOrInsertFunction("__offload_func", OffloadTy);
     
     auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
     SSplit->setName(StartBB->getName()+".split");
@@ -1231,9 +1243,14 @@ instrumentSELF(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
             assert(false && "Unexpected num successors");
     }
 
-    auto *Undo = Mod->getFunction("__undo_mem");
-    auto *ULog = Mod->getNamedGlobal("__undo_log");
-    auto *NumStore = Mod->getNamedGlobal("__undo_num_stores");
+    ArrayType *LogArrTy =
+        ArrayType::get(IntegerType::get(Ctx, 8), 0);
+    auto *ULog  = Mod->getOrInsertGlobal("__undo_log", LogArrTy);
+    auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores", 
+            IntegerType::getInt32Ty(Ctx) );
+    Type *ParamTy[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx)};
+    auto *UndoTy = FunctionType::get(Type::getVoidTy(Ctx), ParamTy, false);
+    auto *Undo = Mod->getOrInsertFunction("__undo_mem", UndoTy);
    
     vector<Value*> Idx = {Zero, Zero};
     auto *UGEP = GetElementPtrInst::CreateInBounds(ULog, Idx, "", Fail);
@@ -1250,7 +1267,7 @@ instrumentSELF(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
  
 static void
 instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks, 
-                    FunctionType* OffloadTy, FunctionType* UndoTy,
+                    FunctionType* OffloadTy,
                     SetVector<Value*> &LiveIn,
                     SetVector<Value*> &LiveOut,
                     DominatorTree *DT,
@@ -1263,11 +1280,11 @@ instrument(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
                     "Path Types FIRO and RIFO not supported for extraction");
         case RIRO:
         case FIFO:
-            instrumentPATH(F, Blocks, OffloadTy, UndoTy,
+            instrumentPATH(F, Blocks, OffloadTy,
                     LiveIn, LiveOut, DT);
             break;
         case SELF:
-            instrumentSELF(F, Blocks, OffloadTy, UndoTy,
+            instrumentSELF(F, Blocks, OffloadTy, 
                     LiveIn, LiveOut, DT);
             break;
     }
@@ -1305,23 +1322,18 @@ MicroWorkloadExtract::process(Function &F) {
 
         // Creating a definition of the Undo function here and 
         // then creating the body inside the pass causes LLVM to 
-        // crash thus nullptr is passed.
+        // crash thus nullptr is passed. CLEANME
         runHelperPasses(Offload, nullptr, Mod);
         writeModule(Mod, (P.Id) + string(".ll"));
 
-        compareTypes(LiveIn, Offload);
+        instrument(F, Blocks, Offload->getFunctionType(), 
+                            LiveIn, LiveOut, DT, P.PType);
+
         // Link modules now since the required globals 
         // have been created.
-        errs() << "Before Linking : " << *Offload << "\n";
         Linker::LinkModules(Mod, UndoMod);
         Linker::LinkModules(F.getParent(), Mod);
-        errs() << "Before Linking : " << *Offload << "\n";
-        // Debug
-        compareTypes(LiveIn, Offload);
 
-
-        instrument(F, Blocks, Offload->getFunctionType(), nullptr,
-                            LiveIn, LiveOut, DT, P.PType);
         //StripDebugInfo(*F.getParent());
         writeModule(F.getParent(), string("app.inst.ll"));
         // Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);

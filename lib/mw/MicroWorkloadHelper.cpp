@@ -113,6 +113,7 @@ MicroWorkloadHelper::addUndoLog() {
             if(auto *SI = dyn_cast<StoreInst>(&I)) {
                 // Filter out the stores added due to live outs
                 // being returned as a struct by reference.
+                // TODO : Filter out stores to alloca 
                 if(SI->getMetadata("LO") == nullptr) {
                     if(!isAliasingStore(SI))
                         Stores.push_back(SI);
