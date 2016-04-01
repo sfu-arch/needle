@@ -128,8 +128,8 @@ int main(int argc, char **argv, const char **env) {
         return -1;
     }
 
-    // common::optimizeModule(module.get());
-    // common::lowerSwitch(*module, FunctionList[0]);
+    common::optimizeModule(module.get());
+    common::lowerSwitch(*module, FunctionList[0]);
 
     PassManager pm;
     pm.add(new DataLayoutPass());
@@ -144,8 +144,8 @@ int main(int argc, char **argv, const char **env) {
     pm.add(new epp::Namer());
     pm.add(llvm::createPostDomTree());
     pm.add(new DominatorTreeWrapperPass());
-    pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq, ExtractAs,
-                                         UndoMod.get()));
+    pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, 
+                NumSeq, ExtractAs, UndoMod.get()));
     // The verifier pass does not work for some apps (gcc, h264)
     // after linking the original module with the generated one
     // and the undo module. Instead we write out the generated
