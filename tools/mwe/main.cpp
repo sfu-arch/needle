@@ -127,12 +127,13 @@ int main(int argc, char **argv, const char **env) {
         return -1;
     }
 
-    common::optimizeModule(module.get());
-    common::lowerSwitch(*module, FunctionList[0]);
+    //common::optimizeModule(module.get());
+    //common::lowerSwitch(*module, FunctionList[0]);
 
     PassManager pm;
     pm.add(new DataLayoutPass());
     pm.add(new llvm::AssumptionCacheTracker());
+    pm.add(createLowerSwitchPass());
     pm.add(createLoopSimplifyPass());
     pm.add(createBasicAliasAnalysisPass());
     pm.add(createTypeBasedAliasAnalysisPass());
@@ -144,11 +145,12 @@ int main(int argc, char **argv, const char **env) {
     pm.add(new DominatorTreeWrapperPass());
     pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq, 
                 ExtractAs, UndoMod.get()));
-    pm.add(createVerifierPass());
+    // The verifier pass does not work for some apps (gcc, h264)
+    // after linking the original module with the generated one
+    // and the undo module. Instead we write out the generated 
+    // module from the pass itself and discard the original.
+    //pm.add(createVerifierPass());
     pm.run(*module);
-
-    common::generateBinary(*module, outFile, optLevel, 
-            libPaths, libraries);
 
     return 0;
 }

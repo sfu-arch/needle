@@ -30,21 +30,13 @@ using namespace std;
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
-static void 
-compareTypes(SetVector<Value*> &LiveIn, 
-             Function* Offload) {
-    errs() << "Comparing Type\n";
-    auto Arg = Offload->arg_begin();
-    for(auto &V : LiveIn) {
-        if(V->getType() != Arg->getType()) {
-            errs() << "LType : " << *V->getType() << "\n";
-            errs() << "AType : " << *Arg->getType() << "\n";
-        }
-        assert(V->getType() == Arg->getType() 
-                && "Live in and function arg mismatch");
-        Arg++;
-    } 
-}
+
+extern cl::opt<char> optLevel;
+extern cl::list<string> libPaths;
+extern cl::list<string> libraries;
+extern cl::opt<string> outFile;
+
+
 
 
 void MicroWorkloadExtract::readSequences() {
@@ -825,8 +817,6 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
         StFuncType, GlobalValue::ExternalLinkage, "__offload_func", Mod);
 
 
-    // Debug 
-    compareTypes(LiveIn, StaticFunc);
 
     // Create an external function which is used to
     // model all guard checks. First arg is the condition, second is whether 
@@ -868,7 +858,6 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
     // errors are found. Ref "llvm/IR/Verifier.h":46
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
 
-    compareTypes(LiveIn, StaticFunc);
 
     return StaticFunc;
 }
@@ -922,7 +911,6 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
 
     auto *Offload = cast<Function>(Mod->getOrInsertFunction("__offload_func", OffloadTy));
 
-    compareTypes(LiveIn, Offload);
     
     auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
     SSplit->setName(StartBB->getName()+".split");
@@ -1318,26 +1306,36 @@ MicroWorkloadExtract::process(Function &F) {
 
         // Extract the blocks and create a new function
         SetVector<Value*> LiveOut, LiveIn;
-        Function *Offload = extract(PostDomTree, Mod, Blocks, LiveIn, LiveOut, DT, LI);
+        Function *Offload = extract(PostDomTree, Mod, Blocks, 
+                LiveIn, LiveOut, DT, LI);
 
         // Creating a definition of the Undo function here and 
         // then creating the body inside the pass causes LLVM to 
         // crash thus nullptr is passed. CLEANME
         runHelperPasses(Offload, nullptr, Mod);
-        writeModule(Mod, (P.Id) + string(".ll"));
 
         instrument(F, Blocks, Offload->getFunctionType(), 
                             LiveIn, LiveOut, DT, P.PType);
+    
+        Module *Composite = new Module(P.Id, getGlobalContext());
+        Linker L(Composite);
+        L.linkInModule(F.getParent());
+        L.linkInModule(UndoMod);
+        L.linkInModule(Mod);
 
-        // Link modules now since the required globals 
-        // have been created.
-        Linker::LinkModules(Mod, UndoMod);
-        Linker::LinkModules(F.getParent(), Mod);
+        StripDebugInfo(*Composite);
+        assert(!verifyModule(*Composite, &errs()) 
+                && "Module verification failed!");
 
-        //StripDebugInfo(*F.getParent());
-        writeModule(F.getParent(), string("app.inst.ll"));
+        writeModule(Mod, (P.Id) + string(".ll"));
+        writeModule(Composite, string("app.inst.ll"));
         // Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);
+
+        common::generateBinary(*Composite, outFile, 
+                optLevel, libPaths, libraries);
+
         delete Mod;
+        delete Composite;
     }
 }
 
