@@ -16,6 +16,8 @@
 #include "llvm/Linker/Linker.h"
 #include "llvm/MC/SubtargetFeature.h"
 #include "llvm/PassManager.h"
+#include "llvm/IR/Constant.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
@@ -229,6 +231,37 @@ void lowerSwitch(Module& M , StringRef FunctionName) {
         if(F.getName() == FunctionName)
             lowerSwitch(F);
     }
+}
+
+bool checkIntrinsic(CallSite& CS) {
+    auto *F = CS.getCalledFunction();
+    auto Name = F->getName();
+    if(Name.startswith("llvm.memcpy") || 
+       Name.startswith("llvm.memmove") || 
+       Name.startswith("llvm.memset")) {
+        // If the mem intrinsic is a small constant, then 
+        // it's ok to keep. This will usually happen for a 
+        // struct.
+        auto *LenArg = CS.getArgument(2);
+        if(ConstantInt *CI = dyn_cast<ConstantInt>(LenArg)){
+            if(CI->getLimitedValue() < 16) {
+                return false;
+            }
+        } 
+        return true;
+    }
+    else if (Name.startswith("llvm.dbg.") ||      // This will be stripped out
+        Name.startswith("llvm.lifetime.") || // This will be stripped out
+        Name.startswith("llvm.uadd.") ||     // Handled in the Verilog module
+        Name.startswith("llvm.umul.") ||     // Handled in the Verilog module
+        Name.startswith("llvm.bswap.") ||    // Handled in the Verilog module
+        Name.startswith("llvm.fabs.")) {
+        return false;
+    } 
+    //else if(F->isIntrinsic()){
+        //return false;
+    //}
+    return true;
 }
 
 }

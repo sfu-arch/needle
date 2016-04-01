@@ -535,34 +535,6 @@ MicroWorkloadExtract::extractHelper(Function *StaticFunc, Function *GuardFunc,
         OutIndex++;
     }
 
-    // Add store instructions to write live-outs to
-    // the char array.
-    // const DataLayout *DL = StaticFunc->getParent()->getDataLayout();
-    // OutIndex = 0;
-    // auto Int32Ty = IntegerType::getInt32Ty(Context);
-    // ConstantInt *Zero = ConstantInt::get(Int32Ty, 0);
-    // for (auto &L : LiveOut) {
-    //     // errs() << "Storing LO: " << *L << "\n";
-    //     // FIXME : Sometimes L may not be in the block map since it could be
-    //     a
-    //     // self-loop (?)
-    //     // if it is so then don't bother since all instructions are accounted
-    //     // for.
-    //     // EG: primal_net_simplex in mcf2000
-    //     if (Value *LO = VMap[L]) {
-    //         auto *Block = cast<Instruction>(LO)->getParent();
-    //         ConstantInt *Index = ConstantInt::get(Int32Ty, OutIndex);
-    //         Value *GEPIndices[] = {Zero, Index};
-    //         auto *GEP = GetElementPtrInst::Create(LOA, GEPIndices, "idx",
-    //                                               Block->getTerminator());
-    //         BitCastInst *BC =
-    //             new BitCastInst(GEP, PointerType::get(LO->getType(), 0),
-    //             "cast",
-    //                             Block->getTerminator());
-    //         new StoreInst(LO, BC, false, Block->getTerminator());
-    //         OutIndex += DL->getTypeStoreSize(LO->getType());
-    //     }
-    // }
 }
 
 static void getTopoChopHelper(
@@ -587,18 +559,6 @@ getTopoChop(DenseSet<BasicBlock *> &Chop, BasicBlock *StartBB,
     return Order;
 }
 
-static inline bool checkIntrinsic(Function *F) {
-    auto Name = F->getName();
-    if (Name.startswith("llvm.dbg.") ||      // This will be stripped out
-        Name.startswith("llvm.lifetime.") || // This will be stripped out
-        Name.startswith("llvm.uadd.") ||     // Handled in the Verilog module
-        Name.startswith("llvm.umul.") ||     // Handled in the Verilog module
-        Name.startswith("llvm.bswap.") ||    // Handled in the Verilog module
-        Name.startswith("llvm.fabs."))       // Handled in the Verilog module
-        return false;
-    else
-        return true;
-}
 
 static bool verifyChop(const SmallVector<BasicBlock *, 16> Chop) {
     for (auto &CB : Chop) {
@@ -610,7 +570,7 @@ static bool verifyChop(const SmallVector<BasicBlock *, 16> Chop) {
                     return false;
                 } else {
                     if (CS.getCalledFunction()->isDeclaration() &&
-                        checkIntrinsic(CS.getCalledFunction())) {
+                        common::checkIntrinsic(CS)) {
                         DEBUG(errs() << "External Call : "
                                      << CS.getCalledFunction()->getName()
                                      << "\n");
@@ -831,24 +791,6 @@ MicroWorkloadExtract::extract(PostDominatorTree *PDT, Module *Mod,
     Function *GuardFunc = Function::Create(
         GuFuncType, GlobalValue::ExternalLinkage, "__guard_func", Mod);
 
-    // // Create the Output Array as a global variable
-    // uint32_t LiveOutSize = 0;
-    // const DataLayout *DL = Mod->getDataLayout();
-    // for_each(LiveOut.begin(), LiveOut.end(),
-    //          [&LiveOutSize, &DL](const Value *Val) {
-    //              LiveOutSize += DL->getTypeStoreSize(Val->getType());
-    //          });
-    // ArrayType *CharArrTy =
-    //     ArrayType::get(IntegerType::get(Mod->getContext(), 8), LiveOutSize);
-    // auto *Initializer = ConstantAggregateZero::get(CharArrTy);
-    // GlobalVariable *LOA =
-    //     new GlobalVariable(*Mod, CharArrTy, false,
-    //     GlobalValue::CommonLinkage,
-    //                        Initializer, "__live_outs");
-
-    // LOA->setAlignment(8);
-
-    // staticHelper(StaticFunc, GuardFunc, LOA, LiveIn, LiveOut, Globals,
     extractHelper(StaticFunc, GuardFunc, LiveIn, LiveOut, Globals, RevTopoChop,
                  Mod->getContext());
 
@@ -933,20 +875,6 @@ instrumentPATH(Function& F, SmallVector<BasicBlock*, 16>& Blocks,
         StPtr = GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", InsertionPt);
         Params.push_back(StPtr);
     //}
-
-    // Debugging
-    errs() << "LiveIn : " << LiveIn.size() << "\n";
-    for(auto &P : LiveIn) errs() << *P->getType() << "\n";
-    errs() << "\n";
-    errs() << "Params : " << Params.size() << "\n";
-    for(auto &P : Params) errs() << *P->getType() << "\n";
-    errs() << "\n";
-    errs() << "Num Args: " << Offload->arg_size() << "\n";
-    for(auto AI = Offload->arg_begin(), AE = Offload->arg_end();
-            AI != AE; AI++) {
-        errs() << *AI->getType() << "\n";
-    }
-    errs() << "\n";
 
     StartBB->getTerminator()->eraseFromParent();
     auto *CI = CallInst::Create(Offload, Params, "", StartBB);

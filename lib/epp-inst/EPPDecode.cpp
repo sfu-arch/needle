@@ -11,6 +11,7 @@
 #include <unordered_map>
 
 #include "EPPDecode.h"
+#include "Common.h"
 
 using namespace llvm;
 using namespace epp;
@@ -23,14 +24,6 @@ extern bool isTargetFunction(const Function &, const cl::list<std::string> &);
 
 extern cl::opt<std::string> profile;
 extern cl::opt<std::string> selfloop;
-// cl::opt<std::string> ProfileDumpFile(
-//"path-profile", cl::desc("File containing dynamic path profile data:"),
-// cl::value_desc("filename"), cl::init("path-profile-results.txt"));
-
-// cl::opt<std::string>
-// SelfLoopDumpFile("self-loop-profile",
-// cl::desc("File containing dynamic path profile data:"),
-// cl::value_desc("filename"), cl::init("self-loop.txt"));
 
 void printPath(std::vector<llvm::BasicBlock *> &Blocks,
                std::ofstream &Outfile) {
@@ -60,37 +53,6 @@ static bool isFunctionExiting(BasicBlock *BB) {
     return false;
 }
 
-// This was copied into GraphGrok as well
-static inline bool checkIntrinsic(CallSite& CS) {
-    auto *F = CS.getCalledFunction();
-    auto Name = F->getName();
-    if(Name.startswith("llvm.memcpy") || 
-       Name.startswith("llvm.memmove") || 
-       Name.startswith("llvm.memset")) {
-        // If the mem intrinsic is a small constant, then 
-        // it's ok to keep. This will usually happen for a 
-        // struct.
-        auto *LenArg = CS.getArgument(2);
-        if(ConstantInt *CI = dyn_cast<ConstantInt>(LenArg)){
-            if(CI->getLimitedValue() < 16) {
-                return false;
-            }
-        } 
-        return true;
-    }
-    else if (Name.startswith("llvm.dbg.") ||      // This will be stripped out
-        Name.startswith("llvm.lifetime.") || // This will be stripped out
-        Name.startswith("llvm.uadd.") ||     // Handled in the Verilog module
-        Name.startswith("llvm.umul.") ||     // Handled in the Verilog module
-        Name.startswith("llvm.bswap.") ||    // Handled in the Verilog module
-        Name.startswith("llvm.fabs.")) {
-        return false;
-    } 
-    //else if(F->isIntrinsic()){
-        //return false;
-    //}
-    return true;
-}
 
 static uint64_t pathCheck(vector<BasicBlock *> &Blocks) {
     // Check for un-acceleratable paths,
@@ -109,7 +71,7 @@ static uint64_t pathCheck(vector<BasicBlock *> &Blocks) {
                     return 0;
                 } else {
                     if (CS.getCalledFunction()->isDeclaration() &&
-                        checkIntrinsic(CS)) {
+                        common::checkIntrinsic(CS)) {
                             DEBUG(errs() << "Lib Call: "
                                          << CS.getCalledFunction()->getName()
                                          << "\n");

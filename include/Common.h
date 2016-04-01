@@ -5,6 +5,8 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/IR/CallSite.h"
+
 #include <string>
 
 namespace common {
@@ -27,6 +29,7 @@ void optimizeModule(llvm::Module* Mod);
 
 void lowerSwitch(llvm::Module& M , llvm::StringRef FunctionName);
 
+bool checkIntrinsic(llvm::CallSite& CS);
 }
 
 #endif

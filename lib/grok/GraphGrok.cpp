@@ -84,31 +84,6 @@ void GraphGrok::readSequences(vector<Path> &S, map<int64_t, int64_t> &SM) {
         // analyse.
 
         move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
-        // a. The last token is blank, so always end -1
-        // b. If Path is RIRO, then range is +4, -1
-        // c. If Path is FIRO, then range is +5, -1
-        // d. If Path is RIFO, then range is +4, -2
-        // e. If Path is FIFO, then range is +5, -2
-        // f. If Path is SELF, then range is +4, -1
-        //switch (P.PType) {
-        //case RIRO:
-        //    move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
-        //    break;
-        //case FIRO:
-        //    move(Tokens.begin() + 5, Tokens.end() - 1, back_inserter(P.Seq));
-        //    break;
-        //case RIFO:
-        //    move(Tokens.begin() + 4, Tokens.end() - 2, back_inserter(P.Seq));
-        //    break;
-        //case FIFO:
-        //    move(Tokens.begin() + 5, Tokens.end() - 2, back_inserter(P.Seq));
-        //    break;
-        //case SELF:
-        //    move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
-        //    break;
-        //default:
-        //    assert(false && "Unknown path type");
-        //}
         S.push_back(P);
         // SM[P.Id] = Count;
         Count++;
@@ -2172,19 +2147,6 @@ getTopoChop(DenseSet<BasicBlock *> &Chop, BasicBlock *StartBB,
     return Order;
 }
 
-static inline bool checkIntrinsic(Function *F) {
-    auto Name = F->getName();
-    if (Name.startswith("llvm.dbg.") ||      // This will be stripped out
-        Name.startswith("llvm.lifetime.") || // This will be stripped out
-        Name.startswith("llvm.uadd.") ||     // Handled in the Verilog module
-        Name.startswith("llvm.umul.") ||     // Handled in the Verilog module
-        Name.startswith("llvm.bswap.") ||    // Handled in the Verilog module
-        Name.startswith("llvm.fabs."))       // Handled in the Verilog module
-        return false;
-    else
-        return true;
-}
-
 static bool verifyChop(const DenseSet<BasicBlock *> Chop) {
     for (auto &CB : Chop) {
         for (auto &I : *CB) {
@@ -2194,7 +2156,7 @@ static bool verifyChop(const DenseSet<BasicBlock *> Chop) {
                     return false;
                 } else {
                     if (CS.getCalledFunction()->isDeclaration() &&
-                        checkIntrinsic(CS.getCalledFunction())) {
+                        common::checkIntrinsic(CS)) {
                         return false;
                     }
                 }
