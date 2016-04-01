@@ -83,7 +83,7 @@ int main(int argc, char **argv, const char **env) {
         err.print(argv[0], errs());
         return -1;
     }
-    
+
     common::optimizeModule(module.get());
     common::lowerSwitch(*module, FunctionList[0]);
 

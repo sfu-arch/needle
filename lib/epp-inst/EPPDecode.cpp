@@ -53,7 +53,6 @@ static bool isFunctionExiting(BasicBlock *BB) {
     return false;
 }
 
-
 static uint64_t pathCheck(vector<BasicBlock *> &Blocks) {
     // Check for un-acceleratable paths,
     // a) Indirect Function Calls
@@ -72,10 +71,10 @@ static uint64_t pathCheck(vector<BasicBlock *> &Blocks) {
                 } else {
                     if (CS.getCalledFunction()->isDeclaration() &&
                         common::checkIntrinsic(CS)) {
-                            DEBUG(errs() << "Lib Call: "
-                                         << CS.getCalledFunction()->getName()
-                                         << "\n");
-                            return 0;
+                        DEBUG(errs() << "Lib Call: "
+                                     << CS.getCalledFunction()->getName()
+                                     << "\n");
+                        return 0;
                     }
                 }
             }

@@ -15,7 +15,7 @@
 #include "llvm/PassManager.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/FileUtilities.h" 
+#include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/ManagedStatic.h"
@@ -55,7 +55,6 @@ using namespace llvm;
 using namespace llvm::sys;
 using namespace epp;
 
-
 cl::opt<string> inPath(cl::Positional, cl::desc("<Module to analyze>"),
                        cl::value_desc("bitcode filename"), cl::Required);
 
@@ -89,7 +88,6 @@ cl::list<string> libraries("l", cl::Prefix,
 
 cl::list<string>
     linkM("b", cl::desc("Bitcode modules to merge (comma separated list)"));
-
 
 cl::list<std::string> FunctionList("epp-fn", cl::value_desc("String"),
                                    cl::desc("List of functions to instrument"),
@@ -145,11 +143,11 @@ static void instrumentModule(Module &module, std::string, const char *argv0) {
 
 static void interpretResults(Module &module, std::string filename) {
     // We don't handle switch instructions, so convert
-    // them to if-else. This can also be done by the 
-    // pass manager in epp/main.cpp however it breaks 
+    // them to if-else. This can also be done by the
+    // pass manager in epp/main.cpp however it breaks
     // for some obscure function in 403.gcc. So here I
     // only run it for my function of interest.
-    
+
     PassManager pm;
     pm.add(new DataLayoutPass());
     pm.add(new llvm::AssumptionCacheTracker());

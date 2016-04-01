@@ -284,7 +284,6 @@ void EPPEncode::releaseMemory() {
     selfLoopCounter = 0;
 }
 
-
 void EPPEncode::encode(Function &F) {
     DEBUG(errs() << "Called Encode on " << F.getName() << "\n");
 
@@ -386,7 +385,7 @@ void EPPEncode::encode(Function &F) {
         DEBUG(errs() << I.first->src()->getName() << " -> "
                      << I.first->tgt()->getName() << " " << I.second << "\n");
 
-    //DEBUG(errs() << "NumPaths : " << numPaths[&F.getEntryBlock()] << "\n");
+    // DEBUG(errs() << "NumPaths : " << numPaths[&F.getEntryBlock()] << "\n");
     errs() << "NumPaths : " << numPaths[&F.getEntryBlock()] << "\n";
 }
 

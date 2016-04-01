@@ -38,18 +38,19 @@ using namespace llvm;
 using namespace llvm::sys;
 using namespace mwe;
 
-enum ExtractType {
-    trace, chop
-};
+enum ExtractType { trace, chop };
 
 // MWE-only options
 
-cl::opt<std::string> UndoLib("u",cl::desc("Path to the undo library bitcode module"), cl::Required);
+cl::opt<std::string>
+    UndoLib("u", cl::desc("Path to the undo library bitcode module"),
+            cl::Required);
 
 cl::opt<ExtractType> ExtractAs(cl::desc("Choose extract type, trace / chop"),
-        cl::values( clEnumVal(trace, "Extract as trace"),
-                    clEnumVal(chop, "Extract as chop"),
-                    clEnumValEnd ), cl::Required);
+                               cl::values(clEnumVal(trace, "Extract as trace"),
+                                          clEnumVal(chop, "Extract as chop"),
+                                          clEnumValEnd),
+                               cl::Required);
 
 cl::opt<string> InPath(cl::Positional, cl::desc("<Module to analyze>"),
                        cl::value_desc("bitcode filename"), cl::Required);
@@ -82,7 +83,6 @@ cl::list<string> libraries("l", cl::Prefix,
 cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
                         cl::value_desc("filename"), cl::Required);
 
-
 bool isTargetFunction(const Function &f,
                       const cl::list<std::string> &FunctionList) {
     if (f.isDeclaration())
@@ -107,7 +107,8 @@ int main(int argc, char **argv, const char **env) {
     InitializeAllTargetMCs();
     InitializeAllAsmPrinters();
     InitializeAllAsmParsers();
-    cl::AddExtraVersionPrinter(TargetRegistry::printRegisteredTargetsForVersion);
+    cl::AddExtraVersionPrinter(
+        TargetRegistry::printRegisteredTargetsForVersion);
     cl::ParseCommandLineOptions(argc, argv);
 
     // Construct an IR file from the filename passed on the command line.
@@ -121,14 +122,14 @@ int main(int argc, char **argv, const char **env) {
 
     // Load the undo library and link it
     unique_ptr<Module> UndoMod(parseIRFile(UndoLib, err, context));
-    if(!UndoMod.get()) {
+    if (!UndoMod.get()) {
         errs() << "Error reading undo lib bitcode.\n";
         err.print(argv[0], errs());
         return -1;
     }
 
-    //common::optimizeModule(module.get());
-    //common::lowerSwitch(*module, FunctionList[0]);
+    // common::optimizeModule(module.get());
+    // common::lowerSwitch(*module, FunctionList[0]);
 
     PassManager pm;
     pm.add(new DataLayoutPass());
@@ -143,13 +144,13 @@ int main(int argc, char **argv, const char **env) {
     pm.add(new epp::Namer());
     pm.add(llvm::createPostDomTree());
     pm.add(new DominatorTreeWrapperPass());
-    pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq, 
-                ExtractAs, UndoMod.get()));
+    pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq, ExtractAs,
+                                         UndoMod.get()));
     // The verifier pass does not work for some apps (gcc, h264)
     // after linking the original module with the generated one
-    // and the undo module. Instead we write out the generated 
+    // and the undo module. Instead we write out the generated
     // module from the pass itself and discard the original.
-    //pm.add(createVerifierPass());
+    // pm.add(createVerifierPass());
     pm.run(*module);
 
     return 0;

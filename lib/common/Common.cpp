@@ -46,7 +46,7 @@
 using namespace llvm;
 using namespace std;
 
-// GCC 4.8.3 does not have make_unique 
+// GCC 4.8.3 does not have make_unique
 template <typename T, typename... Args>
 unique_ptr<T> make_unique(Args &&... args) {
     return unique_ptr<T>(new T(forward<Args>(args)...));
@@ -132,8 +132,8 @@ void compile(Module &m, string outputPath, char optLevel) {
     out->keep();
 }
 
-void link(const string &objectFile, const string &outputFile, 
-            char optLevel, cl::list<string>& libPaths, cl::list<string>& libraries) {
+void link(const string &objectFile, const string &outputFile, char optLevel,
+          cl::list<string> &libPaths, cl::list<string> &libraries) {
     auto clang = sys::findProgramByName("clang++");
     if (!clang) {
         report_fatal_error(
@@ -165,14 +165,14 @@ void link(const string &objectFile, const string &outputFile,
     DEBUG(outs() << "\n");
 
     string err;
-    if (-1 ==
-        sys::ExecuteAndWait(clang.get(), &charArgs[0], nullptr, 0, 0, 0, &err)) {
+    if (-1 == sys::ExecuteAndWait(clang.get(), &charArgs[0], nullptr, 0, 0, 0,
+                                  &err)) {
         report_fatal_error("Unable to link output file.");
     }
 }
 
-void generateBinary(Module &m, const string &outputFilename, 
-            char optLevel, cl::list<string>& libPaths, cl::list<string>& libraries) {
+void generateBinary(Module &m, const string &outputFilename, char optLevel,
+                    cl::list<string> &libPaths, cl::list<string> &libraries) {
     // Compiling to native should allow things to keep working even when the
     // version of clang on the system and the version of LLVM used to compile
     // the tool don't quite match up.
@@ -192,7 +192,6 @@ void saveModule(Module &m, StringRef filename) {
     WriteBitcodeToFile(&m, out);
 }
 
-
 DenseSet<pair<const BasicBlock *, const BasicBlock *>>
 getBackEdges(BasicBlock *StartBB) {
     SmallVector<std::pair<const BasicBlock *, const BasicBlock *>, 8>
@@ -206,7 +205,6 @@ getBackEdges(BasicBlock *StartBB) {
     return BackEdges;
 }
 
-
 void optimizeModule(Module *Mod) {
     PassManagerBuilder PMB;
     PMB.OptLevel = 2;
@@ -217,8 +215,7 @@ void optimizeModule(Module *Mod) {
     PM.run(*Mod);
 }
 
-
-void lowerSwitch(Function& F) {
+void lowerSwitch(Function &F) {
     legacy::FunctionPassManager FPM(F.getParent());
     FPM.add(createLowerSwitchPass());
     FPM.doInitialization();
@@ -226,42 +223,40 @@ void lowerSwitch(Function& F) {
     FPM.doFinalization();
 }
 
-void lowerSwitch(Module& M , StringRef FunctionName) {
-    for(auto &F : M) {
-        if(F.getName() == FunctionName)
+void lowerSwitch(Module &M, StringRef FunctionName) {
+    for (auto &F : M) {
+        if (F.getName() == FunctionName)
             lowerSwitch(F);
     }
 }
 
-bool checkIntrinsic(CallSite& CS) {
+bool checkIntrinsic(CallSite &CS) {
     auto *F = CS.getCalledFunction();
     auto Name = F->getName();
-    if(Name.startswith("llvm.memcpy") || 
-       Name.startswith("llvm.memmove") || 
-       Name.startswith("llvm.memset")) {
-        // If the mem intrinsic is a small constant, then 
-        // it's ok to keep. This will usually happen for a 
+    if (Name.startswith("llvm.memcpy") || Name.startswith("llvm.memmove") ||
+        Name.startswith("llvm.memset")) {
+        // If the mem intrinsic is a small constant, then
+        // it's ok to keep. This will usually happen for a
         // struct.
         auto *LenArg = CS.getArgument(2);
-        if(ConstantInt *CI = dyn_cast<ConstantInt>(LenArg)){
-            if(CI->getLimitedValue() < 16) {
+        if (ConstantInt *CI = dyn_cast<ConstantInt>(LenArg)) {
+            if (CI->getLimitedValue() < 16) {
                 return false;
             }
-        } 
+        }
         return true;
-    }
-    else if (Name.startswith("llvm.dbg.") ||      // This will be stripped out
-        Name.startswith("llvm.lifetime.") || // This will be stripped out
-        Name.startswith("llvm.uadd.") ||     // Handled in the Verilog module
-        Name.startswith("llvm.umul.") ||     // Handled in the Verilog module
-        Name.startswith("llvm.bswap.") ||    // Handled in the Verilog module
-        Name.startswith("llvm.fabs.")) {
+    } else if (Name.startswith("llvm.dbg.") ||      // This will be stripped out
+               Name.startswith("llvm.lifetime.") || // This will be stripped out
+               Name.startswith("llvm.uadd.") || // Handled in the Verilog module
+               Name.startswith("llvm.umul.") || // Handled in the Verilog module
+               Name.startswith(
+                   "llvm.bswap.") || // Handled in the Verilog module
+               Name.startswith("llvm.fabs.")) {
         return false;
-    } 
-    //else if(F->isIntrinsic()){
-        //return false;
+    }
+    // else if(F->isIntrinsic()){
+    // return false;
     //}
     return true;
 }
-
 }

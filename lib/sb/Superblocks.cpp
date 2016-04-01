@@ -29,12 +29,11 @@ extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
 
 namespace sb {
-    std::function<bool(const Edge&, const Edge&)> getCmp() {
-        return [](const Edge& A, const Edge& B) -> bool {
-            return A.first < B.first || 
-                (A.first == B.first && A.second < B.second);
-        };
-    }
+std::function<bool(const Edge &, const Edge &)> getCmp() {
+    return [](const Edge &A, const Edge &B) -> bool {
+        return A.first < B.first || (A.first == B.first && A.second < B.second);
+    };
+}
 }
 
 void Superblocks::readSequences() {
@@ -52,48 +51,44 @@ void Superblocks::readSequences() {
 
         move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
         Sequences.push_back(P);
-        //errs() << *P.Seq.begin() << " " << *P.Seq.rbegin() << "\n";
+        // errs() << *P.Seq.begin() << " " << *P.Seq.rbegin() << "\n";
     }
     SeqFile.close();
 }
 
-void
-Superblocks::makeEdgeProfile(map<string, BasicBlock*>& BM) {
-    for(auto &P : Sequences) {
+void Superblocks::makeEdgeProfile(map<string, BasicBlock *> &BM) {
+    for (auto &P : Sequences) {
         auto &Blocks = P.Seq;
-        for(unsigned I = 0; I < Blocks.size() - 1 ; I++) {
-            auto E = make_pair(BM[Blocks[I]], BM[Blocks[I+1]]);
-            if(EdgeProfile.count(E) == 0) {
+        for (unsigned I = 0; I < Blocks.size() - 1; I++) {
+            auto E = make_pair(BM[Blocks[I]], BM[Blocks[I + 1]]);
+            if (EdgeProfile.count(E) == 0) {
                 EdgeProfile.insert(make_pair(E, APInt(256, 0, false)));
             }
             EdgeProfile[E] += APInt(256, P.Freq, false);
         }
-    } 
+    }
 }
 
-bool 
-Superblocks::doInitialization(Module &M) {
+bool Superblocks::doInitialization(Module &M) {
     readSequences();
     return false;
 }
 
-bool 
-Superblocks::doFinalization(Module &M) { return false; }
+bool Superblocks::doFinalization(Module &M) { return false; }
 
-void 
-Superblocks::construct(BasicBlock* Begin, 
-        SmallVector<SmallVector<BasicBlock*, 8>, 32>& Superblocks,
-        DenseSet<pair<const BasicBlock *, const BasicBlock *>>& BackEdges) {
-    BasicBlock* Next = nullptr, *Prev = nullptr;
-    SmallVector<BasicBlock*, 8> SBlock;
+void Superblocks::construct(
+    BasicBlock *Begin,
+    SmallVector<SmallVector<BasicBlock *, 8>, 32> &Superblocks,
+    DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
+    BasicBlock *Next = nullptr, *Prev = nullptr;
+    SmallVector<BasicBlock *, 8> SBlock;
     SBlock.push_back(Begin);
     Prev = Begin;
-    
-    auto hasEdgeToHeader = [&SBlock](const BasicBlock* Prev) -> bool {
-        for(auto SB = succ_begin(Prev), SE = succ_end(Prev);
-                    SB != SE; SB++) { 
+
+    auto hasEdgeToHeader = [&SBlock](const BasicBlock *Prev) -> bool {
+        for (auto SB = succ_begin(Prev), SE = succ_end(Prev); SB != SE; SB++) {
             // If there is an edge back to the first block then exit
-            if(SBlock[0] == *SB) {
+            if (SBlock[0] == *SB) {
                 return true;
             }
         }
@@ -101,24 +96,24 @@ Superblocks::construct(BasicBlock* Begin,
     };
 
     do {
-        if(Next != nullptr) {
+        if (Next != nullptr) {
             SBlock.push_back(Next);
             Prev = Next;
-            Next = nullptr; 
+            Next = nullptr;
         }
 
-        if(!hasEdgeToHeader(Prev)) {
+        if (!hasEdgeToHeader(Prev)) {
             APInt Count(256, 0, false);
-            for(auto SB = succ_begin(Prev), SE = succ_end(Prev);
-                    SB != SE; SB++) { 
+            for (auto SB = succ_begin(Prev), SE = succ_end(Prev); SB != SE;
+                 SB++) {
                 auto E = make_pair(Prev, *SB);
-                if(EdgeProfile.count(E) != 0) {
-                    if(EdgeProfile[E].ugt(Count)) {
+                if (EdgeProfile.count(E) != 0) {
+                    if (EdgeProfile[E].ugt(Count)) {
                         Count = EdgeProfile[E];
                         Next = *SB;
-                    } 
+                    }
                 }
-            }    
+            }
         }
     } while (Next);
 
@@ -148,38 +143,37 @@ void printPathSrc(SmallVector<llvm::BasicBlock *, 8> &blocks) {
     errs() << "-----------------------\n";
 }
 
-void 
-Superblocks::process(Function &F) {
+void Superblocks::process(Function &F) {
     map<string, BasicBlock *> BlockMap;
     for (auto &BB : F)
         BlockMap[BB.getName().str()] = &BB;
 
     makeEdgeProfile(BlockMap);
     auto BackEdges = common::getBackEdges(&F.getEntryBlock());
-    
-    SmallVector<SmallVector<BasicBlock*, 8>, 32>  Superblocks;
+
+    SmallVector<SmallVector<BasicBlock *, 8>, 32> Superblocks;
     LoopInfo &LI = getAnalysis<LoopInfo>(F);
-    vector<Loop*> InnerLoops = getInnermostLoops(LI);
+    vector<Loop *> InnerLoops = getInnermostLoops(LI);
     DEBUG(errs() << "Num Loops: " << InnerLoops.size() << "\n");
-    for(auto &L : InnerLoops) {
+    for (auto &L : InnerLoops) {
         assert(L->getHeader()->getParent() == &F);
         construct(L->getHeader(), Superblocks, BackEdges);
     }
 
-
     std::ofstream edgefile("edgeprofile.txt", ios::out);
-    for(auto &E : EdgeProfile) {
-        edgefile << E.second.getZExtValue() << " " << E.first.first->getName().str() 
-            << " " << E.first.second->getName().str() << "\n"; 
+    for (auto &E : EdgeProfile) {
+        edgefile << E.second.getZExtValue() << " "
+                 << E.first.first->getName().str() << " "
+                 << E.first.second->getName().str() << "\n";
     }
     edgefile.close();
 
     uint32_t Counter = 0;
     std::ofstream outfile("superblocks.txt", ios::out);
-    
-    for(auto &SV : Superblocks) {
-        outfile << Counter++ <<  " 0 0 0 ";
-        for(auto &BB : SV) {
+
+    for (auto &SV : Superblocks) {
+        outfile << Counter++ << " 0 0 0 ";
+        for (auto &BB : SV) {
             DEBUG(errs() << BB->getName() << " ");
             outfile << BB->getName().str() << " ";
         }
@@ -190,8 +184,7 @@ Superblocks::process(Function &F) {
     }
 }
 
-bool 
-Superblocks::runOnModule(Module &M) {
+bool Superblocks::runOnModule(Module &M) {
     for (auto &F : M)
         if (isTargetFunction(F, FunctionList))
             process(F);
