@@ -687,6 +687,7 @@ Function *MicroWorkloadExtract::extract(
     // Live Out Loop
     for (auto &BB : RevTopoChop) {
         for (auto &I : *BB) {
+            if(isa<PHINode>(&I) && BB == StartBB) continue;
             if (auto Ins = dyn_cast<Instruction>(&I)) {
                 for (auto UI = Ins->use_begin(), UE = Ins->use_end(); UI != UE;
                      UI++) {
