@@ -879,18 +879,20 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
 
     BasicBlock *MergeBB = nullptr;
     if (T->getNumSuccessors() == 2) {
+        errs() << *T << "\n";
         auto *A = T->getSuccessor(0);
         auto *B = T->getSuccessor(1);
         errs() << "A: " << A->getName() << "\n";
-        errs() << "B: " << A->getName() << "\n";
-        if (DT->dominates(LastBB, A)) {
+        errs() << "B: " << B->getName() << "\n";
+        //if (DT->dominates(LastBB, A)) {
+        if(BackEdges.count(make_pair(LastBB, B))) {
             MergeBB = A;
             assert(BackEdges.count(make_pair(LastBB, B)));
         } else {
-            assert(DT->dominates(LastBB, B) &&
-                   "It must dominate only 1 as it has a backedge");
-            assert(BackEdges.count(make_pair(LastBB, A)));
+            //assert(DT->dominates(LastBB, B) &&
+                   //"It must dominate only 1 as it has a backedge");
             MergeBB = B;
+            assert(BackEdges.count(make_pair(LastBB, A)));
         }
     }
 
@@ -916,11 +918,14 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                 // Insert a phi in there which has 2 values,
                 // (load,Success) , (original, LastBB)
                 // rewrite uses with this new phi.
+                // In some cases the user may itself be a phi,
+                // and there could now be 3 or more preds. In this
+                // case add dummy value. 
                 if (PhiMap.count(Val) == 0) {
                     auto *MPhi = PHINode::Create(Val->getType(), 2, "merge",
                                                  &MergeBB->front());
-                    MPhi->addIncoming(Val, LastBB);
                     MPhi->addIncoming(Load, Success);
+                    MPhi->addIncoming(Val, LastBB);
                     PhiMap[Val] = MPhi;
                 }
                 U->replaceUsesOfWith(Val, PhiMap[Val]);
@@ -1226,11 +1231,11 @@ void MicroWorkloadExtract::process(Function &F) {
         L.linkInModule(Mod);
 
         StripDebugInfo(*Composite);
+        writeModule(Mod, (P.Id) + string(".ll"));
+        writeModule(Composite, string("app.inst.ll"));
         assert(!verifyModule(*Composite, &errs()) &&
                "Module verification failed!");
 
-        writeModule(Mod, (P.Id) + string(".ll"));
-        writeModule(Composite, string("app.inst.ll"));
         // Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);
 
         common::generateBinary(*Composite, outFile, optLevel, libPaths,
