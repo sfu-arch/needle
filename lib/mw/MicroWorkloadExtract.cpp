@@ -818,7 +818,9 @@ static SmallVector<BasicBlock *, 16>
 getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
     SmallVector<BasicBlock *, 16> RPath;
     for (auto RB = P.Seq.rbegin(), RE = P.Seq.rend(); RB != RE; RB++) {
-        assert(BlockMap[*RB] && "Path does not exist");
+        if(BlockMap.count(*RB) == 0)
+            errs() << "Missing :" << *RB << "\n";
+        assert(BlockMap.count(*RB) && "Path does not exist");
         RPath.push_back(BlockMap[*RB]);
     }
     return RPath;
@@ -880,20 +882,7 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     BasicBlock *MergeBB = nullptr;
     if (T->getNumSuccessors() == 2) {
         errs() << *T << "\n";
-        auto *A = T->getSuccessor(0);
-        auto *B = T->getSuccessor(1);
-        errs() << "A: " << A->getName() << "\n";
-        errs() << "B: " << B->getName() << "\n";
-        //if (DT->dominates(LastBB, A)) {
-        if(BackEdges.count(make_pair(LastBB, B))) {
-            MergeBB = A;
-            assert(BackEdges.count(make_pair(LastBB, B)));
-        } else {
-            //assert(DT->dominates(LastBB, B) &&
-                   //"It must dominate only 1 as it has a backedge");
-            MergeBB = B;
-            assert(BackEdges.count(make_pair(LastBB, A)));
-        }
+        MergeBB = BasicBlock::Create(Ctx, "mergeblock", &F, nullptr);
     }
 
     SetVector<BasicBlock *> PatchBlocks;
@@ -918,12 +907,9 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                 // Insert a phi in there which has 2 values,
                 // (load,Success) , (original, LastBB)
                 // rewrite uses with this new phi.
-                // In some cases the user may itself be a phi,
-                // and there could now be 3 or more preds. In this
-                // case add dummy value. 
                 if (PhiMap.count(Val) == 0) {
                     auto *MPhi = PHINode::Create(Val->getType(), 2, "merge",
-                                                 &MergeBB->front());
+                                                 MergeBB);
                     MPhi->addIncoming(Load, Success);
                     MPhi->addIncoming(Val, LastBB);
                     PhiMap[Val] = MPhi;
@@ -939,7 +925,7 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                         Phi->addIncoming(Load, Success);
                         errs() << "Val : " << *Val << "\n";
                         errs() << "Modify Phi : " << *Phi << "\n";
-                        PatchBlocks.insert(PB);
+                        //PatchBlocks.insert(PB);
                     }
                 }
             }
@@ -950,21 +936,26 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     // predicated on
     // coming from LastBB but it's not a live out of the extracted
     // region. In this case just copy and create another entry.
-
+    BasicBlock* NotBackedgeTarget = nullptr;
     if (MergeBB) {
-        PatchBlocks.insert(MergeBB);
+        auto *A = T->getSuccessor(0);
+        auto *B = T->getSuccessor(1);
+        if(BackEdges.count(make_pair(LastBB, A)))
+            NotBackedgeTarget = B;
+        else
+            NotBackedgeTarget = A;
+        PatchBlocks.insert(NotBackedgeTarget);
+        BranchInst::Create(NotBackedgeTarget, MergeBB);
+        T->replaceUsesOfWith(NotBackedgeTarget, MergeBB);
     }
 
     for (auto &BB : PatchBlocks) {
         for (auto &I : *BB) {
             if (auto *Phi = dyn_cast<PHINode>(&I)) {
-                // Have an edge from LastBB but no edge from
-                // new created SuccessBB
-                if (Phi->getBasicBlockIndex(LastBB) != -1 &&
-                    Phi->getBasicBlockIndex(Success) == -1) {
-                    Phi->addIncoming(Phi->getIncomingValueForBlock(LastBB),
-                                     Success);
-                }
+                int32_t Idx = Phi->getBasicBlockIndex(LastBB);
+                if( Idx != -1) {
+                    Phi->setIncomingBlock(Idx, MergeBB);  
+                } 
             }
         }
     }
@@ -978,8 +969,9 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         auto *ValPtr =
             GetElementPtrInst::Create(StPtr, GEPIdx, "st_gep", Success);
         auto *Load = new LoadInst(ValPtr, "live_out", Success);
-        auto *NewBr = T->clone();
-        dyn_cast<BranchInst>(NewBr)->setCondition(Load);
+        auto *NewBr = dyn_cast<BranchInst>(T->clone());
+        NewBr->setCondition(Load);
+        NewBr->replaceUsesOfWith(NotBackedgeTarget, MergeBB);    
         NewBr->insertAfter(Load);
     } break;
     case 1:
@@ -1137,9 +1129,10 @@ static void instrumentSELF(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         auto *ValPtr =
             GetElementPtrInst::Create(StPtr, GEPIdx, "st_gep", Success);
         auto *Load = new LoadInst(ValPtr, "live_out", Success);
-        auto *NewBr = T->clone();
-        dyn_cast<BranchInst>(NewBr)->setCondition(Load);
+        auto *NewBr = dyn_cast<BranchInst>(T->clone());
+        NewBr->setCondition(Load);
         NewBr->insertAfter(Load);
+        
     } break;
     case 1:
     case 0:
