@@ -197,7 +197,7 @@ bool EPPDecode::runOnModule(Module &M) {
         }
         errs() << "Path ID: " << paths[i].id.toString(10, false)
                << " Freq: " << paths[i].count << "\n";
-        printPathSrc(blocks);
+        //printPathSrc(blocks);
         DEBUG(errs() << "\n");
     }
 

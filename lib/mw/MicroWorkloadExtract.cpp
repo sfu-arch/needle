@@ -659,6 +659,9 @@ Function *MicroWorkloadExtract::extract(
     auto processLiveOut =
         [&LiveOut, &RevTopoChop, &StartBB, &LastBB, &LiveIn, &notInChop, &DT,
          &LI, &ReachableFromLast](Instruction *Ins, Instruction *UIns) {
+
+            if (isa<PHINode>(UIns) && Ins->getParent() != LastBB) return;
+
             if (isa<PHINode>(UIns) && UIns->getParent() == StartBB) {
                 errs() << "Live Out : " << *Ins << "\n";
                 errs() << "Phi User : " << *UIns << " "
@@ -689,8 +692,8 @@ Function *MicroWorkloadExtract::extract(
         for (auto &I : *BB) {
             if(isa<PHINode>(&I) && BB == StartBB) continue;
             if (auto Ins = dyn_cast<Instruction>(&I)) {
-                for (auto UI = Ins->use_begin(), UE = Ins->use_end(); UI != UE;
-                     UI++) {
+                for (auto UI = Ins->use_begin(), 
+                        UE = Ins->use_end(); UI != UE; UI++) {
                     if (auto UIns = dyn_cast<Instruction>(UI->getUser())) {
                         processLiveOut(Ins, UIns);
                     }
@@ -911,10 +914,22 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                     auto *MPhi = PHINode::Create(Val->getType(), 2, "merge",
                                                  MergeBB);
                     MPhi->addIncoming(Load, Success);
-                    MPhi->addIncoming(Val, LastBB);
+                    // If the user is a Phi, copy the corresponding
+                    // values, block pairs else use val,incoming for each
+                    // predecessor
+                    if(auto* UPhi = dyn_cast<PHINode>(U)) {
+                        for(uint32_t N = 0; N < UPhi->getNumIncomingValues(); N++) {
+                            MPhi->addIncoming(UPhi->getIncomingValue(N), 
+                                    UPhi->getIncomingBlock(N));
+                        }  
+                        UPhi->addIncoming(MPhi, MergeBB);
+                    } else {
+                        MPhi->addIncoming(Val, LastBB);
+                        U->replaceUsesOfWith(Val, PhiMap[Val]);
+                    }
                     PhiMap[Val] = MPhi;
                 }
-                U->replaceUsesOfWith(Val, PhiMap[Val]);
+                //U->replaceUsesOfWith(Val, PhiMap[Val]);
             } else if (auto *Phi = dyn_cast<PHINode>(U)) {
                 auto *PB = Phi->getParent();
                 for (uint32_t N = 0; N < T->getNumSuccessors(); N++) {
@@ -932,10 +947,6 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         }
     }
 
-    // For some phi's in mergebb and the backedge target they may have values
-    // predicated on
-    // coming from LastBB but it's not a live out of the extracted
-    // region. In this case just copy and create another entry.
     BasicBlock* NotBackedgeTarget = nullptr;
     if (MergeBB) {
         auto *A = T->getSuccessor(0);
@@ -944,21 +955,47 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
             NotBackedgeTarget = B;
         else
             NotBackedgeTarget = A;
-        PatchBlocks.insert(NotBackedgeTarget);
+        //T->replaceUsesOfWith(NotBackedgeTarget, MergeBB);
+        // For all preds of NotBackedgeTarget, replace
+        // their branches with MergeBB instead 
+        vector<TerminatorInst*> Terminators;
+        for(auto PB = pred_begin(NotBackedgeTarget), 
+                PE = pred_end(NotBackedgeTarget);
+                PB != PE; PB++) {
+            Terminators.push_back((*PB)->getTerminator());
+        } 
+        for_each(Terminators.begin(), Terminators.end(),
+                [&NotBackedgeTarget, &MergeBB](TerminatorInst* T){
+                    T->replaceUsesOfWith(NotBackedgeTarget, MergeBB);
+            });
         BranchInst::Create(NotBackedgeTarget, MergeBB);
-        T->replaceUsesOfWith(NotBackedgeTarget, MergeBB);
-    }
-
-    for (auto &BB : PatchBlocks) {
-        for (auto &I : *BB) {
-            if (auto *Phi = dyn_cast<PHINode>(&I)) {
-                int32_t Idx = Phi->getBasicBlockIndex(LastBB);
-                if( Idx != -1) {
-                    Phi->setIncomingBlock(Idx, MergeBB);  
-                } 
+        // So now notbackedgetarget has only 1 pred, so fix the phis
+        for(auto &I : *NotBackedgeTarget) {
+            if(auto *Phi = dyn_cast<PHINode>(&I)) {
+                while(Phi->getNumIncomingValues() != 1) {
+                    for(uint32_t N = 0; N < Phi->getNumIncomingValues(); N++) {
+                        if(Phi->getIncomingBlock(N) != MergeBB) {
+                            Phi->removeIncomingValue(N);
+                            break;
+                        }
+                    }
+                }
             }
         }
     }
+
+
+
+    //for (auto &BB : PatchBlocks) {
+        //for (auto &I : *BB) {
+            //if (auto *Phi = dyn_cast<PHINode>(&I)) {
+                //int32_t Idx = Phi->getBasicBlockIndex(LastBB);
+                //if( Idx != -1) {
+                    //Phi->setIncomingBlock(Idx, MergeBB);  
+                //} 
+            //}
+        //}
+    //}
 
     switch (T->getNumSuccessors()) {
     case 2: {
@@ -971,7 +1008,7 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         auto *Load = new LoadInst(ValPtr, "live_out", Success);
         auto *NewBr = dyn_cast<BranchInst>(T->clone());
         NewBr->setCondition(Load);
-        NewBr->replaceUsesOfWith(NotBackedgeTarget, MergeBB);    
+        //NewBr->replaceUsesOfWith(NotBackedgeTarget, MergeBB);    
         NewBr->insertAfter(Load);
     } break;
     case 1:
