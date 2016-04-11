@@ -491,6 +491,26 @@ static void removeCBRChain(Vertex V, BoostGraph &BG) {
     remove_edge(CurrV, PrevV, BG);
 }
 
+
+static void removeDbgIntrin(const Path &P, BoostGraph &BG,
+                             const map<string, BasicBlock *> &BlockMap,
+                             ofstream &Out) {
+    
+    auto TypeMap = boost::get(&VertexProp::Type, BG);
+    for (auto &V : dfsTraverse(BG)) {
+        // This is an anchor intrinsic, remove it since it's 
+        // return value is not used. 
+        if (TypeMap[V] == INTRIN && out_degree(V,BG) == 0) {
+            if(auto *CI = dyn_cast<CallInst>(BG[V].Inst)) {
+                if(CI->getCalledFunction()->getName().startswith("llvm.lifetime")) {
+                    // Same logic as removing cbr chain
+                    removeCBRChain(V, BG);
+                }
+            }
+        }
+    }
+}
+
 static void separateBranches(const Path &P, BoostGraph &BG,
                              const map<string, BasicBlock *> &BlockMap,
                              ofstream &Out) {
@@ -1590,8 +1610,8 @@ static void generateTraceFromPath(Path &P, BoostGraph &BG,
 
     PassManagerBuilder PMB;
     PMB.OptLevel = 3;
-    PMB.SLPVectorize = false;
-    PMB.BBVectorize = false;
+    PMB.SLPVectorize = true;
+    PMB.BBVectorize = true;
     PassManager PM;
     PMB.populateModulePassManager(PM);
     PM.run(*Mod);
@@ -1921,6 +1941,12 @@ void staticHelper(
                     for (auto U = Users.begin(), UE = Users.end(); U != UE;
                          ++U) {
                         auto Ins = dyn_cast<Instruction>(*U);
+                        if(!Ins) {
+                            // Remove this check to watch it break on sjeng
+                            errs() << *CE << "\n";
+                            errs() << **U << "\n";
+                            continue;
+                        }
                         if (Ins->getParent()->getParent() == StaticFunc) {
                             Ins->replaceUsesOfWith(CE, NCE);
                             DEBUG(errs() << "Patched: " << *Ins << "\n");
@@ -2050,7 +2076,7 @@ void staticHelper(
         }
     }
 
-    StatsFile << "\"num_guards\" : " << GuardChecks << "\n";
+    StatsFile << "\"num_guards\" : " << GuardChecks << ",\n";
 
     auto handlePhis = [&VMap, &RevTopoChop, &LiveIn, &BackEdges](PHINode *Phi) {
         auto NV = Phi->getNumIncomingValues();
@@ -2086,6 +2112,7 @@ void staticHelper(
         }
     };
 
+    uint32_t removePhis = 0, totalPhis = 0;
     // Patch the Phis of all the blocks in Topo order
     // apart from the first block (those become inputs)
     for (auto BB = next(RevTopoChop.rbegin()), BE = RevTopoChop.rend();
@@ -2093,9 +2120,15 @@ void staticHelper(
         for (auto &Ins : **BB) {
             if (auto *Phi = dyn_cast<PHINode>(&Ins)) {
                 handlePhis(Phi);
+                if(Phi->getNumIncomingValues() == 1) {
+                    removePhis++;
+                }
+                totalPhis++;
             }
         }
     }
+    StatsFile << "\"num_phi_remain\" : " << totalPhis - removePhis << ",\n";
+    StatsFile << "\"num_phi_total\" : " << totalPhis << "\n";
 
     // Add store instructions to write live-outs to
     // the char array.
@@ -2185,7 +2218,11 @@ static void generateStaticGraphFromPath(const Path &P,
 
     auto Chop = getChop(StartBB, LastBB, BackEdges);
 
+    uint32_t ChopSize = 0;
+    for (auto &B : Chop)
+        ChopSize += B->size();
     StatsFile << "\"num_blocks\" : " << Chop.size() << ",\n";
+    StatsFile << "\"num_ins\" : " << ChopSize << ",\n";
 
     DenseSet<const BasicBlock *> ConstChop;
     for (auto &B : Chop)
@@ -2484,6 +2521,7 @@ void GraphGrok::makeSeqGraph(Function &F) {
         }
 
         if (GenerateTrace == "static") {
+            StatsFile << "\n\"end\" : \"end\" }";
             StatsFile.close();
             continue;
         }
@@ -2507,6 +2545,7 @@ void GraphGrok::makeSeqGraph(Function &F) {
             removePHI(P, SeqChain, BlockMap, StatsFile);
             removeConvert(P, SeqChain, BlockMap, StatsFile);
             separateBranches(P, SeqChain, BlockMap, StatsFile);
+            removeDbgIntrin(P, SeqChain, BlockMap, StatsFile);
             labelGraphLevel(SeqChain);
             // writeGraph(P, SeqChain, string("label"));
 

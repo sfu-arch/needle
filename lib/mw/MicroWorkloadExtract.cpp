@@ -660,13 +660,14 @@ Function *MicroWorkloadExtract::extract(
         [&LiveOut, &RevTopoChop, &StartBB, &LastBB, &LiveIn, &notInChop, &DT,
          &LI, &ReachableFromLast](Instruction *Ins, Instruction *UIns) {
 
-            if (isa<PHINode>(UIns) && Ins->getParent() != LastBB) return;
 
             if (isa<PHINode>(UIns) && UIns->getParent() == StartBB) {
                 errs() << "Live Out : " << *Ins << "\n";
                 errs() << "Phi User : " << *UIns << " "
                        << UIns->getParent()->getName() << "\n";
                 LiveOut.insert(Ins);
+            } else if (isa<PHINode>(UIns) && Ins->getParent() != LastBB) {
+                return;
             } else if (notInChop(UIns) &&
                        // DT->dominates(LastBB, UIns->getParent() ) &&
                        // llvm::isPotentiallyReachable(LastBB,
@@ -902,9 +903,11 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         auto *Load = new LoadInst(ValPtr, "live_out", Success);
         vector<User *> Users(Val->user_begin(), Val->user_end());
         for (auto &U : Users) {
+            assert(U && "User is nullptr.");
+            assert(dyn_cast<Instruction>(U) && "User is not an instruction.");
             auto *UseBB = dyn_cast<Instruction>(U)->getParent();
             if (ReachableFromLast.count(UseBB) && UseBB != LastBB) {
-                errs() << "User : " << *U << " " << UseBB->getName() << "\n";
+                errs() << "User : " << *U << " " << UseBB->getName() << "\n"; // ferret causes this to crash -- some type thing gets fucked
                 assert(T->getNumSuccessors() == 2 &&
                        "Should only happen for backedge blocks");
                 // Insert a phi in there which has 2 values,
@@ -1051,7 +1054,7 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
 
     errs() << *UGEP->getType() << "\n";
     errs() << *NSLoad->getType() << "\n";
-    errs() << *Undo << "\n";
+    //errs() << *Undo << "\n";
 
     CallInst::Create(Undo, Args, "", Fail);
     // CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
