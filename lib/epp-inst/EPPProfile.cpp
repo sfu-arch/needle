@@ -187,8 +187,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
                 if (LoopMap.count(L))
                     LoopMap[L].first = I.second;
                 else
-                    LoopMap.insert(make_pair(
-                        L,
+                    LoopMap.insert(make_pair(L,
                         make_pair(I.second, APInt(256, StringRef("0"), 10))));
             } else {
                 // Entry to Header
@@ -223,29 +222,6 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         auto NewBB = SplitEdgeWrapper(BB, BB, this);
         InsertSelfLoop(NewBB, Id);
 
-        // Ideally, we want to distinguish the incoming path,
-        // and the outgoing path as separate paths, which occur
-        // before and after the self loop invocation. This is however,
-        // very painful and I don' want to do it now. The code below
-        // doesn't work since some self loops (hmmer- P7Viterbi) does not
-        // have a preheader, even after loop-simplify.
-
-        // BasicBlock *PreHeaderBB = nullptr;
-        // for(auto P = pred_begin(BB), E = pred_end(BB); P != E; P++)
-        //     if((*P)->getName().count("preheader"))
-        //         PreHeaderBB = *P;
-
-        // if(!PreHeaderBB)
-        // {
-        //     // FIXME : Debug this sometime
-        //     // Dump the dot format CFG for the function which
-        //     // has this dumbass self loop
-        // }
-        // assert(PreHeaderBB && "Could not find preheader, need to run
-        // loop-simplify");
-        // InsertLogPath(PreHeaderBB, Id);
-        // auto Zap = ConstantInt::get(CounterTy, 0, false);
-        // new StoreInst(Zap, Counter, PreHeaderBB->getTerminator());
     }
 
     // Add the logpath function for all function exiting

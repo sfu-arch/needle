@@ -261,26 +261,27 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
         DEBUG(errs() << pathID << "\n");
     }
 
+    return make_pair(RIRO, sequence);
     // Only one path so it must be REAL
-    if (SelectedEdges.empty()) {
-        return make_pair(RIRO, sequence);
-    }
+    // if (SelectedEdges.empty()) {
+    //     return make_pair(RIRO, sequence);
+    // }
 
-    if (SelectedEdges.front()->Type == EREAL &&
-        SelectedEdges.back()->Type == EREAL)
-        return make_pair(RIRO, sequence);
+    // if (SelectedEdges.front()->Type == EREAL &&
+    //     SelectedEdges.back()->Type == EREAL)
+    //     return make_pair(RIRO, sequence);
 
-    if (SelectedEdges.front()->Type == ENULL &&
-        SelectedEdges.back()->Type == EREAL)
-        return make_pair(FIRO, sequence);
+    // if (SelectedEdges.front()->Type == ENULL &&
+    //     SelectedEdges.back()->Type == EREAL)
+    //     return make_pair(FIRO, sequence);
 
-    if (SelectedEdges.front()->Type == EREAL &&
-        SelectedEdges.back()->Type == ENULL)
-        return make_pair(RIFO, sequence);
+    // if (SelectedEdges.front()->Type == EREAL &&
+    //     SelectedEdges.back()->Type == ENULL)
+    //     return make_pair(RIFO, sequence);
 
-    if (SelectedEdges.front()->Type == ENULL &&
-        SelectedEdges.back()->Type == ENULL)
-        return make_pair(FIFO, sequence);
+    // if (SelectedEdges.front()->Type == ENULL &&
+    //     SelectedEdges.back()->Type == ENULL)
+    //     return make_pair(FIFO, sequence);
 
     assert(false && "This should be unreachable");
     return make_pair(FIFO, sequence);

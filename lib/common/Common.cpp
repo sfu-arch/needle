@@ -192,6 +192,7 @@ void saveModule(Module &m, StringRef filename) {
     WriteBitcodeToFile(&m, out);
 }
 
+
 DenseSet<pair<const BasicBlock *, const BasicBlock *>>
 getBackEdges(BasicBlock *StartBB) {
     SmallVector<std::pair<const BasicBlock *, const BasicBlock *>, 8>
@@ -203,6 +204,11 @@ getBackEdges(BasicBlock *StartBB) {
         BackEdges.insert(BE);
     }
     return BackEdges;
+}
+
+DenseSet<pair<const BasicBlock *, const BasicBlock *>>
+getBackEdges(Function& F) {
+    return getBackEdges(&F.getEntryBlock());
 }
 
 void optimizeModule(Module *Mod) {

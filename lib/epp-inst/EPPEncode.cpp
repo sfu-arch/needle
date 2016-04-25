@@ -10,6 +10,7 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Pass.h"
 #include "Common.h"
+#include "llvm/ADT/MapVector.h"
 
 #include "EPPEncode.h"
 
@@ -71,24 +72,24 @@ static const Loop *getOutermostLoop(const LoopInfo *LI, const BasicBlock *BB) {
     return L;
 }
 
-enum BlockType { LOOPHEAD, LOOPBODY, LOOPLATCH, LOOPEXIT, UNLOOP };
+//enum BlockType { LOOPHEAD, LOOPBODY, LOOPLATCH, LOOPEXIT, UNLOOP };
 
-static BlockType getBlockType(BasicBlock *BB, LoopInfo *LI) {
-    Loop *L = LI->getLoopFor(BB);
-    if (!L)
-        return UNLOOP;
+//static BlockType getBlockType(BasicBlock *BB, LoopInfo *LI) {
+    //Loop *L = LI->getLoopFor(BB);
+    //if (!L)
+        //return UNLOOP;
 
-    if (L->getHeader() == BB)
-        return LOOPHEAD;
+    //if (L->getHeader() == BB)
+        //return LOOPHEAD;
 
-    if (L->getLoopLatch() == BB)
-        return LOOPLATCH;
+    //if (L->getLoopLatch() == BB)
+        //return LOOPLATCH;
 
-    if (L->isLoopExiting(BB))
-        return LOOPEXIT;
+    //if (L->isLoopExiting(BB))
+        //return LOOPEXIT;
 
-    return LOOPBODY;
-}
+    //return LOOPBODY;
+//}
 
 static const vector<BasicBlock *> functionPostorderTraversal(Function &F,
                                                              LoopInfo *LI) {
@@ -146,11 +147,11 @@ static bool isFunctionExiting(BasicBlock *BB) {
 }
 
 static shared_ptr<Edge>
-findEdgeInVal(const BasicBlock *Src, const BasicBlock *Tgt,
+findEdgeInVal(const BasicBlock *Src, const BasicBlock *Tgt, const EdgeType Ty,
               const unordered_map<shared_ptr<Edge>, llvm::APInt> &Val) {
     for (auto &V : Val)
         if (V.first->src() == Src && V.first->tgt() == Tgt &&
-            V.first->Type == EREAL)
+            V.first->Type == Ty)
             return V.first;
 
     assert(false && "This should be unreachable");
@@ -158,39 +159,50 @@ findEdgeInVal(const BasicBlock *Src, const BasicBlock *Tgt,
 }
 
 static void
-functionDFSTreeHelper(BasicBlock *toVisit, set<shared_ptr<Edge>> &ST,
+spanningHelper(BasicBlock *toVisit, set<shared_ptr<Edge>> &ST,
                       DenseSet<BasicBlock *> &Seen,
+                      MapVector<BasicBlock *, SmallVector<pair<BasicBlock*, EdgeType>, 4>> &AltCFG,
                       const unordered_map<shared_ptr<Edge>, llvm::APInt> &Val) {
     Seen.insert(toVisit);
-    for (auto S = succ_begin(toVisit), E = succ_end(toVisit); S != E; ++S) {
-        if (!Seen.count(*S)) {
-            ST.insert(findEdgeInVal(toVisit, *S, Val));
-            functionDFSTreeHelper(*S, ST, Seen, Val);
+    //for (auto S = succ_begin(toVisit), E = succ_end(toVisit); S != E; ++S) {
+    auto &SV = AltCFG[toVisit];
+    for(auto &KV : SV){
+        auto *S = KV.first;
+        auto ET = KV.second;
+        if (!Seen.count(S)) {
+            ST.insert(findEdgeInVal(toVisit, S, ET, Val));
+            spanningHelper(S, ST, Seen, AltCFG, Val);
         }
     }
 }
 
 static set<shared_ptr<Edge>>
-getSpanningTree(Function &F,
-                const unordered_map<shared_ptr<Edge>, llvm::APInt> &Val) {
+getSpanningTree(MapVector<BasicBlock *, SmallVector<pair<BasicBlock*, EdgeType>, 4>> &AltCFG,
+                      const unordered_map<shared_ptr<Edge>, llvm::APInt> &Val) {
     set<shared_ptr<Edge>> SpanningTree;
     DenseSet<BasicBlock *> Seen;
-
-    // Find a spanning tree using DFS of DAG
-    // representation of function.
-    functionDFSTreeHelper(&F.getEntryBlock(), SpanningTree, Seen, Val);
-
+   
+    auto *Entry = AltCFG.back().first;
+    spanningHelper(Entry, SpanningTree, Seen, AltCFG, Val);
+    
     return SpanningTree;
 }
 
 static set<shared_ptr<Edge>>
-getChords(const unordered_map<shared_ptr<Edge>, APInt> &Edges,
+getChords(const unordered_map<shared_ptr<Edge>, APInt> &Val,
           const set<shared_ptr<Edge>> &ST) {
     set<shared_ptr<Edge>> Chords;
+    
+    for(auto &V : Val) {
+        bool found = false;
+        for(auto &SE : ST) {
+            if(*V.first == *SE) {
+                found = true;
+            }
+        }
+        if(!found) Chords.insert(V.first);
+    }
 
-    for (auto &E : Edges)
-        if (ST.count(E.first) == 0)
-            Chords.insert(E.first);
     return Chords;
 }
 
@@ -239,21 +251,16 @@ static void incDFSHelper(APInt Events, BasicBlock *V, shared_ptr<Edge> E,
     }
 }
 
-static void computeIncrement(BasicBlock *Entry, BasicBlock *LastTopoExit,
+static void computeIncrement(BasicBlock *Entry, BasicBlock *Exit,
                              unordered_map<shared_ptr<Edge>, APInt> &Inc,
                              unordered_map<shared_ptr<Edge>, APInt> &Val,
-                             const set<shared_ptr<Edge>> &ST) {
-    auto Chords = getChords(Val, ST);
+                             const set<shared_ptr<Edge>> &ST,
+                             set<shared_ptr<Edge>> &Chords) {
 
     // Add EXIT -> ENTRY chord, Sec 3.3
     // required for correct computation.
-    auto EE = Edge::makeEdge(LastTopoExit, Entry, EOUT);
+    auto EE = Edge::makeEdge(Exit, Entry, EOUT);
     Chords.insert(EE);
-
-    DEBUG(errs() << "\nChords :\n");
-    for (auto &C : Chords)
-        DEBUG(errs() << C->src()->getName() << " -> " << C->tgt()->getName()
-                     << "\n");
 
     // Implements Efficient Event Counting algorithm
     // Figure 4 in the paper.
@@ -266,8 +273,8 @@ static void computeIncrement(BasicBlock *Entry, BasicBlock *LastTopoExit,
 
     // The EXIT->ENTRY edge does not exist in Val,
     // however using Val[C] where C = EXIT->ENTRY
-    // creates a new map entry with default value
-    // of uint64_t (0) and so it's all good.
+    // creates a new map entry with default value,
+    // instead create explicitly here.
 
     Val.insert(make_pair(EE, APInt(256, StringRef("0"), 10)));
 
@@ -287,75 +294,88 @@ void EPPEncode::releaseMemory() {
 void EPPEncode::encode(Function &F) {
     DEBUG(errs() << "Called Encode on " << F.getName() << "\n");
 
-    SetVector<BasicBlock *> BackedgeTargets;
-    BasicBlock *LastTopoExit = nullptr;
+    //SetVector<BasicBlock *> BackedgeTargets;
+    //BasicBlock *LastTopoExit = nullptr;
+    auto POB = functionPostorderTraversal(F, LI);
+    auto Entry = POB.back(), Exit = POB.front();
+    auto BackEdges = common::getBackEdges(F);
 
-    for (auto &POB : functionPostorderTraversal(F, LI)) {
+    // Alternate representation of CFG which has the fake edges
+    // instead of real edges in the following cases:
+    // a) loop backedges replaced as described in the paper
+    // b) loop entry edges removed
+    // c) loop exit edges replaced with edges from loop entry to
+    //    exit target block.
+    
+    MapVector<BasicBlock *, SmallVector<pair<BasicBlock*, EdgeType>, 4>> AltCFG;                        
+
+    // Add all real edges
+    for(auto &BB : POB) {
+        AltCFG.insert(make_pair(BB, SmallVector<pair<BasicBlock*, EdgeType>, 4>()));
+        for(auto S = succ_begin(BB), E = succ_end(BB); S != E; S++) {
+            if(BackEdges.count(make_pair(BB, *S)) || 
+                LI->getLoopFor(BB) != LI->getLoopFor(*S)) continue;
+            AltCFG[BB].push_back(make_pair(*S, EREAL));      
+        }   
+    }   
+
+    // Add all fake edges for loops
+    for(auto &L : *LI) {
+        // 1. Add edge from entry to header
+        // 2. Add edge from latch to exit
+        // 3. Add edge(s) from header to exit block(s) 
+        auto Header = L->getHeader(), 
+             PreHeader = L->getLoopPreheader(),
+             Latch = L->getLoopLatch();
+
+        assert(Latch && PreHeader && "Run loopSimplify");
+        
+        if(Header ==  Latch) {
+            selfLoopMap[selfLoopCounter++] = Header;
+        } else {
+            AltCFG[Entry].push_back(make_pair(Header, EHEAD));
+            AltCFG[Latch].push_back(make_pair(Exit, ELATCH));
+        }
+
+        AltCFG[PreHeader].push_back(make_pair(Exit, ELIN));
+        SmallVector<BasicBlock*, 4> ExitBlocks;
+        L->getExitBlocks(ExitBlocks);
+        for(auto &EB : ExitBlocks) {
+            AltCFG[Entry].push_back(make_pair(EB, ELOUT));
+        }
+    }
+
+    DEBUG(errs() << "AltCFG\n");
+    for(auto &KV : AltCFG) {
+        DEBUG(errs() << KV.first->getName() << " -> ");
+        for(auto &S : KV.second) {
+            DEBUG(errs() << S.first->getName() << " ");
+        }
+        DEBUG(errs() << "\n");
+    }
+
+    // Path Counts
+
+    for(auto &KV : AltCFG) {
+
+        auto *BB = KV.first;
+        auto &Succs = KV.second;
         APInt pathCount(256, StringRef("0"), 10);
 
-        // Save the function topo exit block
-        // to be used later
-        if (!LastTopoExit)
-            LastTopoExit = POB;
-
-        // Leaves
-        if (isFunctionExiting(POB))
+        if (isFunctionExiting(BB))
             pathCount = 1;
 
-        // Normal Successors
-        for (auto S = succ_begin(POB), E = succ_end(POB); S != E; S++) {
-            if (*S == POB) {
-                selfLoopMap[selfLoopCounter++] = POB;
-                continue;
-            }
+        for (auto &S : Succs) {
+            auto *SB = S.first;
+            auto ET = S.second;
+            Val.insert(make_pair(Edge::makeEdge(BB, SB, ET), pathCount));
+            if (numPaths.count(SB) == 0)
+                numPaths.insert(make_pair(SB, APInt(256, StringRef("0"), 10)));
 
-            if (getBlockType(*S, LI) == LOOPHEAD &&
-                getBlockType(POB, LI) == LOOPLATCH) {
-                BackedgeTargets.insert(*S);
-                continue;
-            }
-
-            DEBUG(errs() << "Adding Edge: " << POB->getName() << " "
-                         << (*S)->getName() << " " << pathCount << "\n");
-            Val.insert(make_pair(Edge::makeEdge(POB, *S, EREAL), pathCount));
-
-            if (numPaths.count(*S) == 0)
-                numPaths.insert(make_pair(*S, APInt(256, StringRef("0"), 10)));
-
-            pathCount += numPaths[*S];
+            pathCount += numPaths[SB];
         }
-
-        // NULL edges from ENTRY->HEADER
-        if (POB == &F.getEntryBlock()) {
-            // Add all loop headers as successors
-            // This is OK as we will visit the function
-            // entry last (rev topo order) and all the
-            // targets have been saved.
-            for (auto &BT : BackedgeTargets) {
-                Val.insert(
-                    make_pair(Edge::makeEdge(POB, BT, ENULL), pathCount));
-                assert(numPaths.count(BT) &&
-                       "All the backedge targets should be present");
-                pathCount += numPaths[BT];
-            }
-        }
-
-        // NULL edges from LOOPEXIT->EXIT
-        else if (getBlockType(POB, LI) == LOOPLATCH) {
-            // Add the function exit block as a successor
-            // since this is a backedge source.
-            Val.insert(
-                make_pair(Edge::makeEdge(POB, LastTopoExit, ENULL), pathCount));
-            assert(numPaths.count(LastTopoExit) &&
-                   "LastTopoExit should be initialized already");
-            pathCount += numPaths[LastTopoExit];
-        }
-
-        DEBUG(errs() << "Numpaths " << POB->getName() << " " << pathCount
-                     << "\n");
-        numPaths.insert(make_pair(POB, pathCount));
+        numPaths.insert(make_pair(BB, pathCount));
     }
-    DEBUG(errs() << "\n");
 
     DEBUG(errs() << "\nEdge Weights :\n");
     for (auto &V : Val)
@@ -366,14 +386,22 @@ void EPPEncode::encode(Function &F) {
     for (auto &P : numPaths)
         DEBUG(errs() << P.first->getName() << " -> " << P.second << "\n");
 
-    auto T = getSpanningTree(F, Val);
+
+    auto T = getSpanningTree(AltCFG, Val);
 
     DEBUG(errs() << "\nSpanning Tree :\n");
     for (auto &E : T)
         DEBUG(errs() << E->src()->getName() << " -> " << E->tgt()->getName()
                      << "\n");
 
-    computeIncrement(&F.getEntryBlock(), LastTopoExit, Inc, Val, T);
+    auto Chords = getChords(Val, T);
+
+    DEBUG(errs() << "\nChords :\n");
+    for (auto &C : Chords)
+        DEBUG(errs() << C->src()->getName() << " -> " << C->tgt()->getName()
+                     << "\n");
+
+    computeIncrement(Entry, Exit, Inc, Val, T, Chords);
 
     DEBUG(errs() << "\nVals :\n");
     for (auto &V : Val)
@@ -386,7 +414,7 @@ void EPPEncode::encode(Function &F) {
                      << I.first->tgt()->getName() << " " << I.second << "\n");
 
     // DEBUG(errs() << "NumPaths : " << numPaths[&F.getEntryBlock()] << "\n");
-    errs() << "NumPaths : " << numPaths[&F.getEntryBlock()] << "\n";
+    errs() << "NumPaths : " << numPaths[Entry] << "\n";
 }
 
 char EPPEncode::ID = 0;

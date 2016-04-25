@@ -17,7 +17,12 @@
 
 namespace epp {
 
-enum EdgeType { EREAL, ENULL, EOUT };
+enum EdgeType { EHEAD,
+                ELATCH,
+                ELIN,
+                ELOUT, 
+                EREAL,
+                EOUT };
 
 struct Edge {
     llvm::BasicBlock *Src, *Tgt;
@@ -30,6 +35,13 @@ struct Edge {
     static std::shared_ptr<Edge> makeEdge(llvm::BasicBlock *S,
                                           llvm::BasicBlock *T, EdgeType ET) {
         return std::make_shared<Edge>(S, T, ET);
+    }
+    bool operator==(const Edge& E) {
+        if(E.Src == Src &&
+           E.Tgt == Tgt &&
+           E.Type == Type)
+            return true;
+        return false;
     }
 };
 
