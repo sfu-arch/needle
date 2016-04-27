@@ -9,6 +9,7 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
+#include "llvm/Analysis/CFG.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 #include "EPPEncode.h"
@@ -25,20 +26,6 @@ using namespace std;
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
-
-// cl::list<std::string> FunctionList("epp-fn", cl::value_desc("String"),
-// cl::desc("List of functions to instrument"),
-// cl::OneOrMore, cl::CommaSeparated);
-
-// bool isTargetFunction(const Function &f,
-// const cl::list<std::string> &FunctionList) {
-// if (f.isDeclaration())
-// return false;
-// for (auto &fname : FunctionList)
-// if (fname == f.getName())
-// return true;
-// return false;
-//}
 
 bool EPPProfile::doInitialization(Module &m) {
     assert(FunctionList.size() == 1 &&
@@ -106,15 +93,10 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     Module *M = F.getParent();
     auto &context = M->getContext();
     auto *int64Ty = Type::getInt64Ty(context);
-
     auto *voidTy = Type::getVoidTy(context);
-    auto *incFun =
-        M->getOrInsertFunction("PaThPrOfIlInG_incCount", voidTy, int64Ty,
+    auto *incFun = M->getOrInsertFunction("PaThPrOfIlInG_incCount", voidTy, int64Ty,
                                int64Ty, int64Ty, int64Ty, nullptr);
-
-    auto *logFun =
-        M->getOrInsertFunction("PaThPrOfIlInG_logPath", voidTy, nullptr);
-
+    auto *logFun = M->getOrInsertFunction("PaThPrOfIlInG_logPath", voidTy, nullptr);
     auto *selfLoopFun = M->getOrInsertFunction("PaThPrOfIlInG_selfLoop", voidTy,
                                                int64Ty, nullptr);
 
@@ -123,21 +105,86 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
                      << addPos->getParent()->getName() << "\n");
         auto *I = Increment.getRawData();
         vector<Value *> Args;
-        Args.push_back(ConstantInt::get(int64Ty, I[0], false));
-        Args.push_back(ConstantInt::get(int64Ty, I[1], false));
-        Args.push_back(ConstantInt::get(int64Ty, I[2], false));
-        Args.push_back(ConstantInt::get(int64Ty, I[3], false));
+        for(uint32_t C = 0; C < 4; C++)
+            Args.push_back(ConstantInt::get(int64Ty, I[C], false));
         CallInst::Create(incFun, Args, "", addPos);
-
     };
 
     auto InsertLogPath = [&logFun](BasicBlock *BB) {
-        // DEBUG(errs() << "Inserting LogFunction " << FunctionID << " " <<
-        // BB->getName() << "\n");
         auto logPos = BB->getTerminator();
         CallInst::Create(logFun, "", logPos);
     };
 
+    auto InsertLogPath2 = [&logFun](BasicBlock *BB) {
+        auto logPos = BB->getFirstInsertionPt();
+        CallInst::Create(logFun, "", logPos);
+    };
+
+    auto loopExitSplit = [&context](BasicBlock* Tgt) -> BasicBlock* {
+        auto *BB = BasicBlock::Create(context, "lexit.split", Tgt->getParent());
+        auto *Src = Tgt->getUniquePredecessor();
+        assert(Src && "Should be unique -- guaranteed by loopSimplify");
+        auto *T = Src->getTerminator();
+        T->replaceUsesOfWith(Tgt, BB);
+        //T->setSuccessor(GetSuccessorNumber(Tgt, Src), BB);
+        BranchInst::Create(Tgt, BB);
+        return BB;
+    };
+
+    APInt BackVal(256, 0, true);
+    for(auto &KV : Enc.Inc) {
+        if(KV.first->Type == EOUT) 
+            BackVal = KV.second;
+    }
+
+    unordered_map<Loop *, pair<APInt, APInt>> LoopMap;
+    for(auto *L : *LI) {
+        LoopMap[L] = make_pair(APInt(256, 0, true), APInt(256, 0, true));
+    } 
+
+    for (auto &I : Enc.Inc) {
+        shared_ptr<Edge> E(I.first);
+        auto &X = I.second;
+
+        if (E->Type == EREAL) {
+            auto NewBlock = SplitEdgeWrapper(E->src(), E->tgt(), this);
+            InsertInc(NewBlock->getFirstNonPHI(), X);
+        } else if (E->Type == EOUT) {
+            InsertInc(E->src()->getFirstNonPHI(), X);
+        } else if (E->Type == EHEAD) {
+            auto *L = LI->getLoopFor(E->tgt());
+            LoopMap[L].first = X;
+        } else if (E->Type == ELATCH) {
+            auto *L = LI->getLoopFor(E->src());
+            LoopMap[L].second = X;
+        } else if (E->Type == ELIN) {
+            auto *PH = E->src();            
+            //InsertLogPath(PH);
+            InsertInc(PH->getTerminator(), X + BackVal);
+        } else if (E->Type == ELOUT) {
+            auto NewBlock = loopExitSplit(E->tgt());
+            //InsertLogPath(NewBlock);
+            InsertInc(NewBlock->getTerminator(), X);
+        }
+    }
+
+    for (auto &L : LoopMap) {
+        // Preheader
+        InsertLogPath2(L.first->getLoopPreheader());
+        // Loop exits
+        SmallVector<BasicBlock*, 4> EBs;
+        L.first->getExitBlocks(EBs);
+        for(auto &BB : EBs)
+            InsertLogPath2(BB);
+        auto Latch = L.first->getLoopLatch();
+        assert(Latch && "More than one loop latch exists");
+        auto SplitLatch = SplitEdgeWrapper(Latch, L.first->getHeader(), this);
+        InsertInc(SplitLatch->getFirstNonPHI(), L.second.first + BackVal);
+        InsertLogPath(SplitLatch);
+        InsertInc(SplitLatch->getTerminator(), L.second.second);
+    }
+
+    // Add the counters for all self loops
     auto InsertSelfLoop =
         [&int64Ty, &selfLoopFun](BasicBlock *BB, std::uint64_t SelfLoopId) {
             DEBUG(errs() << "Inserting SelfLoop Increment" << SelfLoopId << " "
@@ -147,75 +194,6 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
             CallInst::Create(selfLoopFun, args, "", logPos);
         };
 
-    APInt BackVal(256, StringRef("0"), 10);
-    unordered_map<Loop *, pair<APInt, APInt>> LoopMap;
-
-    for (auto &I : Enc.Inc) {
-        if (I.second == 0)
-            continue;
-
-        shared_ptr<Edge> E(I.first);
-
-        if (E->Type == EREAL) {
-            // Real Edge instrumentation,
-            // Don't split if you don't have to -
-            // this also avoids a bug in the case where
-            // A->B needs to be split and B->C needs to be
-            // split. If A->B is split before B->C and the
-            // split occurs at B, then the saved Edge B->C
-            // contains invalid pointer.
-            // TODO : Revisit this issue
-            auto NewBlock = SplitEdgeWrapper(E->src(), E->tgt(), this);
-            InsertInc(NewBlock->getFirstNonPHI(), I.second);
-        } else if (E->Type == EOUT) {
-            // Final exit counter increment
-            // Just stick it in the Exiting BB (E->src())
-
-            InsertInc(E->src()->getFirstNonPHI(), I.second);
-            BackVal = I.second;
-        } else {
-            // Fake edge for loops
-            // a) Entry to Header
-            // b) Latch to Header
-            // Collect the info here,
-            // instrument it later.
-
-            Loop *L = LI->getLoopFor(E->src());
-
-            if (L) {
-                // Latch to Header
-                if (LoopMap.count(L))
-                    LoopMap[L].first = I.second;
-                else
-                    LoopMap.insert(make_pair(L,
-                        make_pair(I.second, APInt(256, StringRef("0"), 10))));
-            } else {
-                // Entry to Header
-                L = LI->getLoopFor(E->tgt());
-                if (LoopMap.count(L))
-                    LoopMap[L].second = I.second;
-                else
-                    LoopMap.insert(
-                        make_pair(L, make_pair(APInt(256, StringRef("0"), 10),
-                                               I.second)));
-            }
-        }
-    }
-
-    // Add the Fake OUT and Fake IN edge increments respectively
-    // to the split latch basic block with the path logging
-    // in the middle.
-    for (auto &L : LoopMap) {
-        auto Latch = L.first->getLoopLatch();
-        assert(Latch && "More than one loop latch exists");
-
-        auto SplitLatch = SplitEdgeWrapper(Latch, L.first->getHeader(), this);
-        InsertInc(SplitLatch->getFirstNonPHI(), L.second.first + BackVal);
-        InsertLogPath(SplitLatch);
-        InsertInc(SplitLatch->getTerminator(), L.second.second);
-    }
-
-    // Add the counters for all self loops
     for (auto &KV : Enc.selfLoopMap) {
         auto Id = KV.first;
         auto BB = KV.second;

@@ -309,7 +309,7 @@ void EPPEncode::encode(Function &F) {
     
     MapVector<BasicBlock *, SmallVector<pair<BasicBlock*, EdgeType>, 4>> AltCFG;                        
 
-    // Add all real edges
+    // Add real edges
     for(auto &BB : POB) {
         AltCFG.insert(make_pair(BB, SmallVector<pair<BasicBlock*, EdgeType>, 4>()));
         for(auto S = succ_begin(BB), E = succ_end(BB); S != E; S++) {
