@@ -115,67 +115,83 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         CallInst::Create(logFun, "", logPos);
     };
 
-    auto InsertLogPath2 = [&logFun](BasicBlock *BB) {
-        auto logPos = BB->getFirstInsertionPt();
-        CallInst::Create(logFun, "", logPos);
-    };
-
     auto loopExitSplit = [&context](BasicBlock* Tgt) -> BasicBlock* {
         auto *BB = BasicBlock::Create(context, "lexit.split", Tgt->getParent());
         auto *Src = Tgt->getUniquePredecessor();
         assert(Src && "Should be unique -- guaranteed by loopSimplify");
         auto *T = Src->getTerminator();
         T->replaceUsesOfWith(Tgt, BB);
-        //T->setSuccessor(GetSuccessorNumber(Tgt, Src), BB);
         BranchInst::Create(Tgt, BB);
         return BB;
     };
 
+    auto loopEntrySplit = [&context](BasicBlock* Src) -> BasicBlock* {
+        auto *BB = BasicBlock::Create(context, "lentry.split", Src->getParent());
+        auto *Tgt = Src->getTerminator()->getSuccessor(0);
+        assert(Src->getTerminator()->getNumSuccessors() == 1 && 
+                "Should be unique -- guaranteed by loopSimplify");
+        Src->replaceSuccessorsPhiUsesWith(BB);
+        auto *T = Src->getTerminator();
+        T->replaceUsesOfWith(Tgt, BB);
+        BranchInst::Create(Tgt, BB);
+        return BB;
+    };
+
+    // Maps for all the *special* inc values for loops
+    unordered_map<Loop *, pair<APInt, APInt>> LatchMap;
+    unordered_map<Loop *, pair<BasicBlock*, APInt>> InMap;
+    unordered_map<Loop *, unordered_map<BasicBlock*, APInt>> OutMap;
     APInt BackVal(256, 0, true);
-    for(auto &KV : Enc.Inc) {
-        if(KV.first->Type == EOUT) 
-            BackVal = KV.second;
+
+    // Init Maps
+    for(auto *L : *LI) {
+        LatchMap[L] = make_pair(APInt(256, 0, true), APInt(256, 0, true));
+        InMap[L] = make_pair(L->getLoopPreheader(),APInt(256, 0, true));
+        SmallVector<BasicBlock*, 4> EBs;
+        L->getUniqueExitBlocks(EBs);
+        for(auto &BB : EBs)
+            OutMap[L].insert(make_pair(BB, APInt(256, 0, true)));
     }
 
-    unordered_map<Loop *, pair<APInt, APInt>> LoopMap;
-    for(auto *L : *LI) {
-        LoopMap[L] = make_pair(APInt(256, 0, true), APInt(256, 0, true));
-    } 
+    // Populate Maps
+    for(auto &KV : Enc.Inc) {
+        shared_ptr<Edge> E(KV.first);
+        auto &X = KV.second;
 
+        if(E->Type == EOUT) {
+            BackVal = KV.second;
+        } else if (E->Type == ELATCH) {
+            auto *L = LI->getLoopFor(E->src());
+            LatchMap[L].second = X;
+        } else if (E->Type == EHEAD) {
+            auto *L = LI->getLoopFor(E->tgt());
+            LatchMap[L].first = X;
+        } else if (E->Type == ELIN) {
+            auto *L = LI->getLoopFor(E->tgt());
+            InMap[L].second =  X; 
+        } else if (E->Type == ELOUT) {
+            auto *L = LI->getLoopFor(E->tgt()->getUniquePredecessor());
+            OutMap[L][E->tgt()] = X;
+        }
+    }
+
+    // Split Edges and insert increments for all
+    // real edges as well as last exit increment
     for (auto &I : Enc.Inc) {
         shared_ptr<Edge> E(I.first);
         auto &X = I.second;
-
         if (E->Type == EREAL) {
             auto NewBlock = SplitEdgeWrapper(E->src(), E->tgt(), this);
             InsertInc(NewBlock->getFirstNonPHI(), X);
         } else if (E->Type == EOUT) {
             InsertInc(E->src()->getFirstNonPHI(), X);
-        } else if (E->Type == EHEAD) {
-            auto *L = LI->getLoopFor(E->tgt());
-            LoopMap[L].first = X;
-        } else if (E->Type == ELATCH) {
-            auto *L = LI->getLoopFor(E->src());
-            LoopMap[L].second = X;
-        } else if (E->Type == ELIN) {
-            auto *PH = E->src();            
-            //InsertLogPath(PH);
-            InsertInc(PH->getTerminator(), X + BackVal);
-        } else if (E->Type == ELOUT) {
-            auto NewBlock = loopExitSplit(E->tgt());
-            //InsertLogPath(NewBlock);
-            InsertInc(NewBlock->getTerminator(), X);
         }
     }
 
-    for (auto &L : LoopMap) {
-        // Preheader
-        InsertLogPath2(L.first->getLoopPreheader());
-        // Loop exits
-        SmallVector<BasicBlock*, 4> EBs;
-        L.first->getExitBlocks(EBs);
-        for(auto &BB : EBs)
-            InsertLogPath2(BB);
+    // Insert increments for all latches
+    // This destroys LoopInfo so don't use that anymore
+    for (auto &L : LatchMap) {
+        // Loop Latch
         auto Latch = L.first->getLoopLatch();
         assert(Latch && "More than one loop latch exists");
         auto SplitLatch = SplitEdgeWrapper(Latch, L.first->getHeader(), this);
@@ -199,7 +215,28 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         auto BB = KV.second;
         auto NewBB = SplitEdgeWrapper(BB, BB, this);
         InsertSelfLoop(NewBB, Id);
+    }
 
+    // Insert increments for all loop entry 
+    for(auto &KV : InMap) {
+        Loop* L = KV.first;
+        auto &V = KV.second;
+        auto *NPH = loopEntrySplit(V.first);
+        InsertInc(NPH->getFirstNonPHI(), V.second + BackVal);
+        InsertLogPath(NPH);
+        InsertInc(NPH->getTerminator(), LatchMap[L].second);
+    }
+
+    // Insert increment for all loop exits
+    for(auto &KV : OutMap) {
+        Loop* L = KV.first;
+        for(auto &KV2 : KV.second) {
+            auto &V = KV2.second;
+            auto *BB = loopExitSplit(KV2.first);
+            InsertInc(BB->getFirstNonPHI(), LatchMap[L].first + BackVal);
+            InsertLogPath(BB);
+            InsertInc(BB->getTerminator(), V);
+        }
     }
 
     // Add the logpath function for all function exiting

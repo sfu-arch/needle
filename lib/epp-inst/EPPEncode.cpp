@@ -339,7 +339,7 @@ void EPPEncode::encode(Function &F) {
 
         AltCFG[PreHeader].push_back(make_pair(Exit, ELIN));
         SmallVector<BasicBlock*, 4> ExitBlocks;
-        L->getExitBlocks(ExitBlocks);
+        L->getUniqueExitBlocks(ExitBlocks);
         for(auto &EB : ExitBlocks) {
             AltCFG[Entry].push_back(make_pair(EB, ELOUT));
         }
