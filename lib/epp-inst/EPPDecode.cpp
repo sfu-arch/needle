@@ -263,32 +263,31 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
     }
 
      
-     return make_pair(RIRO, sequence);
+     //return make_pair(RIRO, sequence);
      //Only one path so it must be REAL
-     //if (SelectedEdges.empty()) {
-         //return make_pair(RIRO, sequence);
-     //}
+     if (SelectedEdges.empty()) {
+         return make_pair(RIRO, sequence);
+     }
 
-     //if (SelectedEdges.front()->Type == EREAL &&
-         //SelectedEdges.back()->Type == EREAL)
-         //return make_pair(RIRO, sequence);
+     if (SelectedEdges.front()->Type == EREAL &&
+         SelectedEdges.back()->Type == EREAL)
+         return make_pair(RIRO, sequence);
 
-     //if (SelectedEdges.front()->Type != EREAL &&
-         //SelectedEdges.back()->Type == EREAL)
-         //return make_pair(FIRO, sequence);
+     if (SelectedEdges.front()->Type != EREAL &&
+         SelectedEdges.back()->Type == EREAL)
+         return make_pair(FIRO, sequence);
 
-     //if (SelectedEdges.front()->Type == EREAL &&
-         //SelectedEdges.back()->Type != EREAL )
-         //return make_pair(RIFO, sequence);
+     if (SelectedEdges.front()->Type == EREAL &&
+         SelectedEdges.back()->Type != EREAL )
+         return make_pair(RIFO, sequence);
 
-     //if (SelectedEdges.front()->Type != EREAL &&
-         //SelectedEdges.back()->Type != EREAL)
-         //return make_pair(FIFO, sequence);
+     if (SelectedEdges.front()->Type != EREAL &&
+         SelectedEdges.back()->Type != EREAL)
+         return make_pair(FIFO, sequence);
 
     assert(false && "This should be unreachable");
     return make_pair(FIFO, sequence);
 }
 
 char EPPDecode::ID = 0;
-static RegisterPass<EPPDecode> X("peruse-epp-decode",
-                                 "Efficient Path Profiling -- Decode");
+static RegisterPass<EPPDecode> X("","PASHA - EPPDecode");

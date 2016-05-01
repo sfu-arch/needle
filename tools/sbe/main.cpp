@@ -32,6 +32,7 @@
 #include "AllInliner.h"
 #include "Namer.h"
 #include "Common.h"
+#include "LoopConverter.h"
 
 using namespace std;
 using namespace llvm;
@@ -97,6 +98,8 @@ int main(int argc, char **argv, const char **env) {
     pm.add(new llvm::CallGraphWrapperPass());
     pm.add(new epp::PeruseInliner());
     pm.add(new epp::Namer());
+    pm.add(new pasha::LoopConverter());
+    pm.add(new LoopInfo());
     pm.add(new sb::Superblocks(SeqFilePath));
     pm.add(createVerifierPass());
     pm.run(*module);

@@ -341,7 +341,7 @@ void EPPEncode::encode(Function &F) {
         
         DEBUG(errs() << "Loop : " << Header->getName() << "\n");
         DEBUG(errs() << "Latch : " << Latch->getName() << "\n");
-        assert(Latch && PreHeader && "Run loopSimplify");
+        assert(Latch && PreHeader && "Run LoopSimplify");
         assert(Header !=  Latch && "Run LoopConverter");
         
         AltCFG[Entry].push_back(make_pair(Header, EHEAD));

@@ -32,6 +32,7 @@
 #include "AllInliner.h"
 #include "Namer.h"
 #include "Common.h"
+#include "LoopConverter.h"
 
 using namespace std;
 using namespace llvm;
@@ -137,10 +138,11 @@ int main(int argc, char **argv, const char **env) {
     pm.add(createLoopSimplifyPass());
     pm.add(createBasicAliasAnalysisPass());
     pm.add(createTypeBasedAliasAnalysisPass());
-    pm.add(new LoopInfo());
     pm.add(new llvm::CallGraphWrapperPass());
     pm.add(new epp::PeruseInliner());
     pm.add(new epp::Namer());
+    pm.add(new pasha::LoopConverter());
+    pm.add(new LoopInfo());
     pm.add(llvm::createPostDomTree());
     pm.add(new DominatorTreeWrapperPass());
     pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, 
