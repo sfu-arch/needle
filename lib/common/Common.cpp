@@ -265,4 +265,14 @@ bool checkIntrinsic(CallSite &CS) {
     //}
     return true;
 }
+
+bool isSelfLoop(const BasicBlock* BB) {
+    for(auto S = succ_begin(BB), E = succ_end(BB); S != E; S++) {
+        if(*S == BB) {
+            return true;
+        }
+    }
+    return false;
+}
+
 }

@@ -32,3 +32,4 @@ bool Namer::runOnModule(Module &M) {
 }
 
 char Namer::ID = 0;
+static RegisterPass<Namer> X("", "PASHA - Namer");

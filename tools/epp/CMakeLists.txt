@@ -12,7 +12,7 @@ llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES ${LLVM_TARGETS_TO_BUILD}
         asmparser core linker bitreader bitwriter irreader ipo scalaropts
         analysis target mc support)
 
-target_link_libraries(epp epp-inst inliner namer common ${REQ_LLVM_LIBRARIES})
+target_link_libraries(epp epp-inst inliner namer common loop ${REQ_LLVM_LIBRARIES})
 
 # Platform dependencies.
 target_link_libraries(epp

@@ -143,8 +143,18 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     unordered_map<Loop *, unordered_map<BasicBlock*, APInt>> OutMap;
     APInt BackVal(256, 0, true);
 
+    SmallVector<Loop* , 16> Loops;
+    for(auto &L : *LI) {
+        Loops.push_back(L);
+        assert(L->getLoopDepth() == 1 && 
+                "Expect only top level loops here");
+        for(auto &SL : L->getSubLoops()) {
+           Loops.push_back(SL); 
+        }
+    }
+
     // Init Maps
-    for(auto *L : *LI) {
+    for(auto *L : Loops) {
         LatchMap[L] = make_pair(APInt(256, 0, true), APInt(256, 0, true));
         InMap[L] = make_pair(L->getLoopPreheader(),APInt(256, 0, true));
         SmallVector<BasicBlock*, 4> EBs;
@@ -162,15 +172,22 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
             BackVal = KV.second;
         } else if (E->Type == ELATCH) {
             auto *L = LI->getLoopFor(E->src());
+            assert(L);
             LatchMap[L].second = X;
         } else if (E->Type == EHEAD) {
             auto *L = LI->getLoopFor(E->tgt());
+            assert(L);
             LatchMap[L].first = X;
         } else if (E->Type == ELIN) {
-            auto *L = LI->getLoopFor(E->tgt());
+            auto *T = E->src()->getTerminator();
+            assert(T->getNumSuccessors() == 1 && 
+                    "Should be 1 guaranteed by LoopSimplify");
+            auto *L = LI->getLoopFor(T->getSuccessor(0));
+            assert(L);
             InMap[L].second =  X; 
         } else if (E->Type == ELOUT) {
             auto *L = LI->getLoopFor(E->tgt()->getUniquePredecessor());
+            assert(L);
             OutMap[L][E->tgt()] = X;
         }
     }
@@ -247,5 +264,4 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
 }
 
 char EPPProfile::ID = 0;
-static RegisterPass<EPPProfile> X("peruse-epp-profile",
-                                  "Efficient Path Profiling -- Profile");
+static RegisterPass<EPPProfile> X("","PASHA - EPPProfile");

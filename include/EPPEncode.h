@@ -67,9 +67,12 @@ struct EPPEncode : public llvm::FunctionPass {
     void encode(llvm::Function &f);
     bool isTargetFunction(llvm::Function &f,
                           llvm::cl::list<std::string> &FunctionList) const;
-    bool doInitialization(llvm::Module &m);
-    bool doFinalization(llvm::Module &m);
+    bool doInitialization(llvm::Module &m) override;
+    bool doFinalization(llvm::Module &m) override;
     virtual void releaseMemory() override;
+    const char* getPassName() const override {
+        return "PASHA - EPPEncode";
+    }
 };
 }
 

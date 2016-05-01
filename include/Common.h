@@ -33,6 +33,8 @@ namespace common {
     void lowerSwitch(llvm::Module&, llvm::StringRef);
 
     bool checkIntrinsic(llvm::CallSite&);
+
+    bool isSelfLoop(const llvm::BasicBlock*);
 }
 
 #endif

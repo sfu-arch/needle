@@ -20,8 +20,6 @@ struct EPPProfile : public llvm::ModulePass {
     }
 
     virtual bool runOnModule(llvm::Module &m) override;
-
-    // void instrument(llvm::Function &F, EPPEncode &E, uint64_t Id);
     void instrument(llvm::Function &F, EPPEncode &E);
 
     bool doInitialization(llvm::Module &m);

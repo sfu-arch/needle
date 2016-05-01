@@ -1,3 +1,4 @@
+#define DEBUG_TYPE "epp_decode"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/IR/DebugInfo.h"
@@ -17,7 +18,6 @@ using namespace llvm;
 using namespace epp;
 using namespace std;
 
-#define DEBUG_TYPE "epp_decode"
 
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &, const cl::list<std::string> &);
@@ -194,6 +194,7 @@ bool EPPDecode::runOnModule(Module &M) {
             Outfile << "\n";
         } else {
             pathFail++;
+            errs() << "Path Fail\n";
         }
         errs() << "Path ID: " << paths[i].id.toString(10, false)
                << " Freq: " << paths[i].count << "\n";

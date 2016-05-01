@@ -45,6 +45,7 @@
 #include "AllInliner.h"
 #include "Namer.h"
 #include "Common.h"
+#include "LoopConverter.h"
 
 #include "config.h"
 
@@ -111,10 +112,11 @@ static void instrumentModule(Module &module, std::string, const char *argv0) {
     pm.add(createLoopSimplifyPass());
     pm.add(createBasicAliasAnalysisPass());
     pm.add(createTypeBasedAliasAnalysisPass());
-    pm.add(new LoopInfo());
     pm.add(new llvm::CallGraphWrapperPass());
     pm.add(new epp::PeruseInliner());
     pm.add(new epp::Namer());
+    pm.add(new pasha::LoopConverter());
+    pm.add(new LoopInfo());
     pm.add(new epp::EPPProfile());
     pm.add(createVerifierPass());
     pm.run(module);
@@ -154,10 +156,11 @@ static void interpretResults(Module &module, std::string filename) {
     pm.add(createLoopSimplifyPass());
     pm.add(createBasicAliasAnalysisPass());
     pm.add(createTypeBasedAliasAnalysisPass());
-    pm.add(new LoopInfo());
     pm.add(new llvm::CallGraphWrapperPass());
     pm.add(new epp::PeruseInliner());
     pm.add(new epp::Namer());
+    pm.add(new pasha::LoopConverter());
+    pm.add(new LoopInfo());
     pm.add(new epp::EPPDecode());
     pm.add(createVerifierPass());
     pm.run(module);

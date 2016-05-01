@@ -39,5 +39,4 @@ void PeruseInliner::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 char PeruseInliner::ID = 0;
-static RegisterPass<PeruseInliner> X("",
-                                     "Efficient Path Profiling -- AllInliner");
+static RegisterPass<PeruseInliner> X("","PASHA -- Inliner");

@@ -1,3 +1,4 @@
+#define DEBUG_TYPE "epp_encode"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
@@ -25,7 +26,6 @@ using namespace llvm;
 using namespace epp;
 using namespace std;
 
-#define DEBUG_TYPE "epp_encode"
 
 bool EPPEncode::doInitialization(Module &m) { return false; }
 
@@ -319,23 +319,33 @@ void EPPEncode::encode(Function &F) {
         }   
     }   
 
-    // Add all fake edges for loops
+
+    SmallVector<Loop* , 16> Loops;
     for(auto &L : *LI) {
+        Loops.push_back(L);
+        assert(L->getLoopDepth() == 1 && 
+                "Expect only top level loops here");
+        for(auto &SL : L->getSubLoops()) {
+           Loops.push_back(SL); 
+        }
+    }
+      
+    // Add all fake edges for loops
+    for(auto &L : Loops) {
         // 1. Add edge from entry to header
         // 2. Add edge from latch to exit
         // 3. Add edge(s) from header to exit block(s) 
         auto Header = L->getHeader(), 
              PreHeader = L->getLoopPreheader(),
              Latch = L->getLoopLatch();
-
-        assert(Latch && PreHeader && "Run loopSimplify");
         
-        if(Header ==  Latch) {
-            selfLoopMap[selfLoopCounter++] = Header;
-        } else {
-            AltCFG[Entry].push_back(make_pair(Header, EHEAD));
-            AltCFG[Latch].push_back(make_pair(Exit, ELATCH));
-        }
+        DEBUG(errs() << "Loop : " << Header->getName() << "\n");
+        DEBUG(errs() << "Latch : " << Latch->getName() << "\n");
+        assert(Latch && PreHeader && "Run loopSimplify");
+        assert(Header !=  Latch && "Run LoopConverter");
+        
+        AltCFG[Entry].push_back(make_pair(Header, EHEAD));
+        AltCFG[Latch].push_back(make_pair(Exit, ELATCH));
 
         AltCFG[PreHeader].push_back(make_pair(Exit, ELIN));
         SmallVector<BasicBlock*, 4> ExitBlocks;
@@ -418,4 +428,4 @@ void EPPEncode::encode(Function &F) {
 }
 
 char EPPEncode::ID = 0;
-static RegisterPass<EPPEncode> X("", "Efficient Path Profiling -- Encoding");
+static RegisterPass<EPPEncode> X("", "PASHA - EPPEncode");
