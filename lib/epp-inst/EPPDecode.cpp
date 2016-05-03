@@ -101,7 +101,7 @@ void printPathSrc(std::vector<llvm::BasicBlock *> &blocks) {
             if (loc.getLineNumber() != line || loc.getFilename() != file) {
                 line = loc.getLineNumber();
                 file = loc.getFilename();
-                errs() << "File " << file.str() << " line " << line << "\n";
+                DEBUG(errs() << "File " << file.str() << " line " << line << "\n");
                 // break; // FIXME : This makes it only print once for each BB,
                 // remove to print all
                 // source lines per instruction.
@@ -194,10 +194,10 @@ bool EPPDecode::runOnModule(Module &M) {
             Outfile << "\n";
         } else {
             pathFail++;
-            errs() << "Path Fail\n";
+            DEBUG(errs() << "Path Fail\n");
         }
-        errs() << "Path ID: " << paths[i].id.toString(10, false)
-               << " Freq: " << paths[i].count << "\n";
+        DEBUG(errs() << "Path ID: " << paths[i].id.toString(10, false)
+               << " Freq: " << paths[i].count << "\n");
         //printPathSrc(blocks);
         DEBUG(errs() << "\n");
     }
