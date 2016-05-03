@@ -53,17 +53,24 @@ llvm::APInt EPP(Counter)(256, llvm::StringRef("0"), 10);
 // 3. Mutual recursion WILL break this.
 
 void EPP(incCount)(uint64_t qw0, uint64_t qw1, uint64_t qw2, uint64_t qw3) {
-    uint64_t QW[] = {qw0, qw1, qw2, qw3};
-    llvm::APInt Inc(256, QW);
+    //uint64_t QW[] = {qw0, qw1, qw2, qw3};
+    //llvm::APInt Inc(256, QW);
+    // The constructor for APInt which initializes from an array only 
+    // constructs unsigned APInts. Work around this by creating a signed
+    // APInt first and then modifying the internal storage.
+    llvm::APInt Inc(256, 0, true);
+    auto *data = const_cast<uint64_t*>(Inc.getRawData());
+    data[0] = qw0; data[1] = qw1;
+    data[2] = qw2; data[3] = qw3;
     EPP(Counter) += Inc;
 }
 
 void EPP(selfLoop)(uint64_t loopID) { EPP(selfLoopMap)[loopID] += 1; }
 
 void EPP(logPath)() {
-     std::ofstream txtfile("path-log.txt", std::ios::app);
-     txtfile << EPP(Counter).toString(10, false) << "\n" ;
-     txtfile.close();
+     //std::ofstream txtfile("path-log.txt", std::ios::app);
+     //txtfile << EPP(Counter).toString(10, false) << "\n" ;
+     //txtfile.close();
     EPP(pathMap)[EPP(Counter)] += 1;
     EPP(Counter).clearAllBits();
 }
