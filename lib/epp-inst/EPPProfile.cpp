@@ -118,6 +118,9 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     auto loopExitSplit = [&context](BasicBlock* Tgt) -> BasicBlock* {
         auto *BB = BasicBlock::Create(context, "lexit.split", Tgt->getParent());
         auto *Src = Tgt->getUniquePredecessor();
+        // FIXME : Condition is that loop header dominates exit. So there could
+        // be 2 or more preds where the preds are also dominated by header or
+        // may even be the header itself.
         assert(Src && "Should be unique -- guaranteed by loopSimplify");
         Src->replaceSuccessorsPhiUsesWith(BB);
         auto *T = Src->getTerminator();
@@ -219,21 +222,21 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     }
 
     // Add the counters for all self loops
-    auto InsertSelfLoop =
-        [&int64Ty, &selfLoopFun](BasicBlock *BB, std::uint64_t SelfLoopId) {
-            DEBUG(errs() << "Inserting SelfLoop Increment" << SelfLoopId << " "
-                         << BB->getName() << "\n");
-            auto logPos = BB->getTerminator();
-            Value *args[] = {ConstantInt::get(int64Ty, SelfLoopId, false)};
-            CallInst::Create(selfLoopFun, args, "", logPos);
-        };
+    //auto InsertSelfLoop =
+        //[&int64Ty, &selfLoopFun](BasicBlock *BB, std::uint64_t SelfLoopId) {
+            //DEBUG(errs() << "Inserting SelfLoop Increment" << SelfLoopId << " "
+                         //<< BB->getName() << "\n");
+            //auto logPos = BB->getTerminator();
+            //Value *args[] = {ConstantInt::get(int64Ty, SelfLoopId, false)};
+            //CallInst::Create(selfLoopFun, args, "", logPos);
+        //};
 
-    for (auto &KV : Enc.selfLoopMap) {
-        auto Id = KV.first;
-        auto BB = KV.second;
-        auto NewBB = SplitEdgeWrapper(BB, BB, this);
-        InsertSelfLoop(NewBB, Id);
-    }
+    //for (auto &KV : Enc.selfLoopMap) {
+        //auto Id = KV.first;
+        //auto BB = KV.second;
+        //auto NewBB = SplitEdgeWrapper(BB, BB, this);
+        //InsertSelfLoop(NewBB, Id);
+    //}
 
     // Insert increments for all loop entry 
     for(auto &KV : InMap) {
