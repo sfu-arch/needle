@@ -119,6 +119,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         auto *BB = BasicBlock::Create(context, "lexit.split", Tgt->getParent());
         auto *Src = Tgt->getUniquePredecessor();
         assert(Src && "Should be unique -- guaranteed by loopSimplify");
+        Src->replaceSuccessorsPhiUsesWith(BB);
         auto *T = Src->getTerminator();
         T->replaceUsesOfWith(Tgt, BB);
         BranchInst::Create(Tgt, BB);
