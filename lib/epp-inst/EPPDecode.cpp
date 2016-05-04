@@ -238,6 +238,8 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
         // assert(V.first->src() != V.first->tgt() && "Noooo!");
     }
 
+    errs() << "Created loopup structure\n";
+
     vector<shared_ptr<Edge>> SelectedEdges;
     while (true) {
         sequence.push_back(Position);
