@@ -74,10 +74,6 @@ bool EPPProfile::runOnModule(Module &module) {
 static bool isFunctionExiting(BasicBlock *BB) {
     if (dyn_cast<ReturnInst>(BB->getTerminator()))
         return true;
-
-    // TODO: Check for exception handling
-    // TODO: Check for functions that don't return
-
     return false;
 }
 
@@ -94,9 +90,6 @@ static BasicBlock *SplitEdgeWrapper(BasicBlock *Src, BasicBlock *Tgt,
 }
 
 void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
-    // DEBUG CFG
-    common::printCFG(F);
-
     Module *M = F.getParent();
     auto &context = M->getContext();
     auto *int64Ty = Type::getInt64Ty(context);
@@ -104,17 +97,17 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     auto *incFun = M->getOrInsertFunction("PaThPrOfIlInG_incCount", voidTy, int64Ty,
                                int64Ty, int64Ty, int64Ty, nullptr);
     auto *logFun = M->getOrInsertFunction("PaThPrOfIlInG_logPath", voidTy, nullptr);
-    //auto *selfLoopFun = M->getOrInsertFunction("PaThPrOfIlInG_selfLoop", voidTy,
-                                               //int64Ty, nullptr);
 
     auto InsertInc = [&incFun, &int64Ty](Instruction *addPos, APInt Increment) {
-        DEBUG(errs() << "Inserting Increment " << Increment << " "
-                     << addPos->getParent()->getName() << "\n");
-        auto *I = Increment.getRawData();
-        vector<Value *> Args;
-        for(uint32_t C = 0; C < 4; C++)
-            Args.push_back(ConstantInt::get(int64Ty, I[C], false));
-        CallInst::Create(incFun, Args, "", addPos);
+        if(Increment.ne(APInt(256, 0, true))) {
+            DEBUG(errs() << "Inserting Increment " << Increment << " "
+                         << addPos->getParent()->getName() << "\n");
+            auto *I = Increment.getRawData();
+            vector<Value *> Args;
+            for(uint32_t C = 0; C < 4; C++)
+                Args.push_back(ConstantInt::get(int64Ty, I[C], false));
+            CallInst::Create(incFun, Args, "", addPos);
+        }
     };
 
     auto InsertLogPath = [&logFun](BasicBlock *BB) {
@@ -201,7 +194,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         shared_ptr<Edge> E(I.first);
         auto &X = I.second;
         if (E->Type == EREAL && X.ne(APInt(256, 0, true))) {
-            errs() << "Splitting Real Edge\n";
+            //errs() << "Splitting Real Edge\n";
             auto NewBlock = interpose(E->src(), E->tgt());
             InsertInc(NewBlock->getFirstNonPHI(), X);
         } else if (E->Type == EOUT) {
@@ -214,7 +207,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     for (auto &L : LatchMap) {
         // Loop Latch
         auto Latch = L.first->getLoopLatch();
-        errs() << "Splitting Latch\n";
+        //errs() << "Splitting Latch\n";
         assert(Latch && "More than one loop latch exists");
         auto SplitLatch = interpose(Latch, L.first->getHeader());
         InsertInc(SplitLatch->getFirstNonPHI(), L.second.first + BackVal);
