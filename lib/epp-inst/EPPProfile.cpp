@@ -115,7 +115,23 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         CallInst::Create(logFun, "", logPos);
     };
 
-    auto interpose = [&context]
+    auto blockIndex = [](const PHINode* Phi, const BasicBlock * BB) -> uint32_t {
+        for(uint32_t I = 0; I < Phi->getNumIncomingValues(); I++) {
+            if(Phi->getIncomingBlock(I) == BB)
+                return I;
+        } 
+        assert(false && "Unreachable");
+    };
+
+    auto patchPhis = [&blockIndex](BasicBlock* Src, BasicBlock* Tgt, BasicBlock* New) {
+        for(auto &I : *Tgt) {
+            if(auto *Phi = dyn_cast<PHINode>(&I)) {
+                Phi->setIncomingBlock(blockIndex(Phi, Src), New);
+            }
+        }
+    };
+
+    auto interpose = [&context, &patchPhis]
         (BasicBlock* Src, BasicBlock* Tgt) -> BasicBlock* {
         // Sanity Checks
         auto found = false;
@@ -126,7 +142,8 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
 
         auto *F = Tgt->getParent();
         auto *BB = BasicBlock::Create(context, Src->getName()+".intp", F);
-        Src->replaceSuccessorsPhiUsesWith(BB);
+        //Src->replaceSuccessorsPhiUsesWith(BB);
+        patchPhis(Src, Tgt, BB);
         auto *T = Src->getTerminator();
         T->replaceUsesOfWith(Tgt, BB);
         BranchInst::Create(Tgt, BB);
