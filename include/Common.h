@@ -32,6 +32,10 @@ namespace common {
 
     void lowerSwitch(llvm::Module&, llvm::StringRef);
 
+    void breakCritEdges(llvm::Module&, llvm::StringRef);
+
+    void printCFG(llvm::Function&);
+
     bool checkIntrinsic(llvm::CallSite&);
 
     bool isSelfLoop(const llvm::BasicBlock*);

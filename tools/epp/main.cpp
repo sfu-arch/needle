@@ -208,6 +208,7 @@ int main(int argc, char **argv, const char **env) {
 
     common::optimizeModule(module.get());
     common::lowerSwitch(*module, FunctionList[0]);
+    common::breakCritEdges(*module, FunctionList[0]);
 
     if (!profile.empty()) {
         interpretResults(*module, profile);

@@ -17,6 +17,7 @@
 #include "EPPProfile.h"
 #include <unordered_map>
 #include <cassert>
+#include "Common.h"
 
 
 using namespace llvm;
@@ -86,10 +87,16 @@ static BasicBlock *SplitEdgeWrapper(BasicBlock *Src, BasicBlock *Tgt,
         if (*S == Tgt)
             return SplitEdge(Src, Tgt, Ptr);
 
+    errs() << "Src : " << Src->getName() << "\n"
+           << "Tgt : " << Tgt->getName() << "\n";
+
     assert(false && "SplitEdge bug not solved by MST optimization");
 }
 
 void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
+    // DEBUG CFG
+    common::printCFG(F);
+
     Module *M = F.getParent();
     auto &context = M->getContext();
     auto *int64Ty = Type::getInt64Ty(context);
@@ -114,32 +121,6 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         auto logPos = BB->getTerminator();
         CallInst::Create(logFun, "", logPos);
     };
-
-    //auto loopExitSplit = [&context](BasicBlock* Tgt) -> BasicBlock* {
-        //auto *BB = BasicBlock::Create(context, "lexit.split", Tgt->getParent());
-        //auto *Src = Tgt->getUniquePredecessor();
-        //// FIXME : Condition is that loop header dominates exit. So there could
-        //// be 2 or more preds where the preds are also dominated by header or
-        //// may even be the header itself.
-        //assert(Src && "Should be unique -- guaranteed by loopSimplify");
-        //Src->replaceSuccessorsPhiUsesWith(BB);
-        //auto *T = Src->getTerminator();
-        //T->replaceUsesOfWith(Tgt, BB);
-        //BranchInst::Create(Tgt, BB);
-        //return BB;
-    //};
-
-    //auto loopEntrySplit = [&context](BasicBlock* Src) -> BasicBlock* {
-        //auto *BB = BasicBlock::Create(context, "lentry.split", Src->getParent());
-        //auto *Tgt = Src->getTerminator()->getSuccessor(0);
-        //assert(Src->getTerminator()->getNumSuccessors() == 1 && 
-                //"Should be unique -- guaranteed by loopSimplify");
-        //Src->replaceSuccessorsPhiUsesWith(BB);
-        //auto *T = Src->getTerminator();
-        //T->replaceUsesOfWith(Tgt, BB);
-        //BranchInst::Create(Tgt, BB);
-        //return BB;
-    //};
 
     auto interpose = [&context]
         (BasicBlock* Src, BasicBlock* Tgt) -> BasicBlock* {
@@ -220,7 +201,8 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         shared_ptr<Edge> E(I.first);
         auto &X = I.second;
         if (E->Type == EREAL && X.ne(APInt(256, 0, true))) {
-            auto NewBlock = SplitEdgeWrapper(E->src(), E->tgt(), this);
+            errs() << "Splitting Real Edge\n";
+            auto NewBlock = interpose(E->src(), E->tgt());
             InsertInc(NewBlock->getFirstNonPHI(), X);
         } else if (E->Type == EOUT) {
             InsertInc(E->src()->getFirstNonPHI(), X);
@@ -232,29 +214,13 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     for (auto &L : LatchMap) {
         // Loop Latch
         auto Latch = L.first->getLoopLatch();
+        errs() << "Splitting Latch\n";
         assert(Latch && "More than one loop latch exists");
-        auto SplitLatch = SplitEdgeWrapper(Latch, L.first->getHeader(), this);
+        auto SplitLatch = interpose(Latch, L.first->getHeader());
         InsertInc(SplitLatch->getFirstNonPHI(), L.second.first + BackVal);
         InsertLogPath(SplitLatch);
         InsertInc(SplitLatch->getTerminator(), L.second.second);
     }
-
-    // Add the counters for all self loops
-    //auto InsertSelfLoop =
-        //[&int64Ty, &selfLoopFun](BasicBlock *BB, std::uint64_t SelfLoopId) {
-            //DEBUG(errs() << "Inserting SelfLoop Increment" << SelfLoopId << " "
-                         //<< BB->getName() << "\n");
-            //auto logPos = BB->getTerminator();
-            //Value *args[] = {ConstantInt::get(int64Ty, SelfLoopId, false)};
-            //CallInst::Create(selfLoopFun, args, "", logPos);
-        //};
-
-    //for (auto &KV : Enc.selfLoopMap) {
-        //auto Id = KV.first;
-        //auto BB = KV.second;
-        //auto NewBB = SplitEdgeWrapper(BB, BB, this);
-        //InsertSelfLoop(NewBB, Id);
-    //}
 
     // Insert increments for all loop entry 
     for(auto &KV : InMap) {
@@ -295,6 +261,8 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     for (auto &BB : F)
         if (isFunctionExiting(&BB))
             InsertLogPath(&BB);
+
+    common::printCFG(F);
 }
 
 char EPPProfile::ID = 0;

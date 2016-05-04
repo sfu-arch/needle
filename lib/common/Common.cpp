@@ -1,3 +1,4 @@
+#define DEBUG_TYPE "pasha_common"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/ADT/SmallString.h"
@@ -39,9 +40,9 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Linker/Linker.h"
+#include "llvm/Analysis/CFGPrinter.h"
 #include "Common.h"
 
-#define DEBUG_TYPE "pasha_common"
 
 using namespace llvm;
 using namespace std;
@@ -229,10 +230,33 @@ void lowerSwitch(Function &F) {
     FPM.doFinalization();
 }
 
+void breakCritEdges(Function &F) {
+    legacy::FunctionPassManager FPM(F.getParent());
+    FPM.add(createBreakCriticalEdgesPass());
+    FPM.doInitialization();
+    FPM.run(F);
+    FPM.doFinalization();
+}
+
+void printCFG(Function &F) {
+    legacy::FunctionPassManager FPM(F.getParent());
+    FPM.add(llvm::createCFGPrinterPass());
+    FPM.doInitialization();
+    FPM.run(F);
+    FPM.doFinalization();
+}
+
 void lowerSwitch(Module &M, StringRef FunctionName) {
     for (auto &F : M) {
         if (F.getName() == FunctionName)
             lowerSwitch(F);
+    }
+}
+
+void breakCritEdges(Module &M, StringRef FunctionName) {
+    for (auto &F : M) {
+        if (F.getName() == FunctionName)
+            breakCritEdges(F);
     }
 }
 
