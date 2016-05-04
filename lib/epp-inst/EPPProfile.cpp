@@ -1,3 +1,4 @@
+#define DEBUG_TYPE "epp_profile"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/IR/BasicBlock.h"
@@ -17,7 +18,6 @@
 #include <unordered_map>
 #include <cassert>
 
-#define DEBUG_TYPE "epp_profile"
 
 using namespace llvm;
 using namespace epp;
@@ -97,8 +97,8 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     auto *incFun = M->getOrInsertFunction("PaThPrOfIlInG_incCount", voidTy, int64Ty,
                                int64Ty, int64Ty, int64Ty, nullptr);
     auto *logFun = M->getOrInsertFunction("PaThPrOfIlInG_logPath", voidTy, nullptr);
-    auto *selfLoopFun = M->getOrInsertFunction("PaThPrOfIlInG_selfLoop", voidTy,
-                                               int64Ty, nullptr);
+    //auto *selfLoopFun = M->getOrInsertFunction("PaThPrOfIlInG_selfLoop", voidTy,
+                                               //int64Ty, nullptr);
 
     auto InsertInc = [&incFun, &int64Ty](Instruction *addPos, APInt Increment) {
         DEBUG(errs() << "Inserting Increment " << Increment << " "
@@ -115,30 +115,48 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         CallInst::Create(logFun, "", logPos);
     };
 
-    auto loopExitSplit = [&context](BasicBlock* Tgt) -> BasicBlock* {
-        auto *BB = BasicBlock::Create(context, "lexit.split", Tgt->getParent());
-        auto *Src = Tgt->getUniquePredecessor();
-        // FIXME : Condition is that loop header dominates exit. So there could
-        // be 2 or more preds where the preds are also dominated by header or
-        // may even be the header itself.
-        assert(Src && "Should be unique -- guaranteed by loopSimplify");
-        Src->replaceSuccessorsPhiUsesWith(BB);
-        auto *T = Src->getTerminator();
-        T->replaceUsesOfWith(Tgt, BB);
-        BranchInst::Create(Tgt, BB);
-        return BB;
-    };
+    //auto loopExitSplit = [&context](BasicBlock* Tgt) -> BasicBlock* {
+        //auto *BB = BasicBlock::Create(context, "lexit.split", Tgt->getParent());
+        //auto *Src = Tgt->getUniquePredecessor();
+        //// FIXME : Condition is that loop header dominates exit. So there could
+        //// be 2 or more preds where the preds are also dominated by header or
+        //// may even be the header itself.
+        //assert(Src && "Should be unique -- guaranteed by loopSimplify");
+        //Src->replaceSuccessorsPhiUsesWith(BB);
+        //auto *T = Src->getTerminator();
+        //T->replaceUsesOfWith(Tgt, BB);
+        //BranchInst::Create(Tgt, BB);
+        //return BB;
+    //};
 
-    auto loopEntrySplit = [&context](BasicBlock* Src) -> BasicBlock* {
-        auto *BB = BasicBlock::Create(context, "lentry.split", Src->getParent());
-        auto *Tgt = Src->getTerminator()->getSuccessor(0);
-        assert(Src->getTerminator()->getNumSuccessors() == 1 && 
-                "Should be unique -- guaranteed by loopSimplify");
+    //auto loopEntrySplit = [&context](BasicBlock* Src) -> BasicBlock* {
+        //auto *BB = BasicBlock::Create(context, "lentry.split", Src->getParent());
+        //auto *Tgt = Src->getTerminator()->getSuccessor(0);
+        //assert(Src->getTerminator()->getNumSuccessors() == 1 && 
+                //"Should be unique -- guaranteed by loopSimplify");
+        //Src->replaceSuccessorsPhiUsesWith(BB);
+        //auto *T = Src->getTerminator();
+        //T->replaceUsesOfWith(Tgt, BB);
+        //BranchInst::Create(Tgt, BB);
+        //return BB;
+    //};
+
+    auto interpose = [&context]
+        (BasicBlock* Src, BasicBlock* Tgt) -> BasicBlock* {
+        // Sanity Checks
+        auto found = false;
+        for(auto S = succ_begin(Src), E = succ_end(Src); S != E; S++) 
+            if(*S == Tgt)
+                found = true;
+        assert(found && "Could not find the edge to split");
+
+        auto *F = Tgt->getParent();
+        auto *BB = BasicBlock::Create(context, Src->getName()+".intp", F);
         Src->replaceSuccessorsPhiUsesWith(BB);
         auto *T = Src->getTerminator();
         T->replaceUsesOfWith(Tgt, BB);
         BranchInst::Create(Tgt, BB);
-        return BB;
+        return BB;    
     };
 
     // Maps for all the *special* inc values for loops
@@ -201,7 +219,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     for (auto &I : Enc.Inc) {
         shared_ptr<Edge> E(I.first);
         auto &X = I.second;
-        if (E->Type == EREAL) {
+        if (E->Type == EREAL && X.ne(APInt(256, 0, true))) {
             auto NewBlock = SplitEdgeWrapper(E->src(), E->tgt(), this);
             InsertInc(NewBlock->getFirstNonPHI(), X);
         } else if (E->Type == EOUT) {
@@ -242,7 +260,11 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     for(auto &KV : InMap) {
         Loop* L = KV.first;
         auto &V = KV.second;
-        auto *NPH = loopEntrySplit(V.first);
+        auto *PreHeader = V.first;
+        auto *Header = L->getHeader();
+        assert(Header == PreHeader->getTerminator()->getSuccessor(0) &&
+                "Should be guaranteed by Loop Simplify");
+        auto *NPH = interpose(PreHeader, Header);
         InsertInc(NPH->getFirstNonPHI(), V.second + BackVal);
         InsertLogPath(NPH);
         InsertInc(NPH->getTerminator(), LatchMap[L].second);
@@ -251,12 +273,20 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     // Insert increment for all loop exits
     for(auto &KV : OutMap) {
         Loop* L = KV.first;
+        // There may be multiple exit blocks
         for(auto &KV2 : KV.second) {
             auto &V = KV2.second;
-            auto *BB = loopExitSplit(KV2.first);
-            InsertInc(BB->getFirstNonPHI(), LatchMap[L].first + BackVal);
-            InsertLogPath(BB);
-            InsertInc(BB->getTerminator(), V);
+            auto *ExitBlock = KV2.first;
+            // Each exit may have multiple preds,
+            // but they will all have the same instrumentation
+            for(auto P = pred_begin(ExitBlock), E = pred_end(ExitBlock);
+                    P != E; P++) {
+                auto *BB = interpose(*P, ExitBlock);
+                InsertInc(BB->getFirstNonPHI(), LatchMap[L].first + BackVal);
+                InsertLogPath(BB);
+                InsertInc(BB->getTerminator(), V);
+                
+            }
         }
     }
 
