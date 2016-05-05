@@ -20,7 +20,8 @@ namespace epp {
 enum EdgeType { EHEAD,
                 ELATCH,
                 ELIN,
-                ELOUT, 
+                ELOUT1, // To Exit
+                ELOUT2, // From Entry 
                 EREAL,
                 EOUT };
 

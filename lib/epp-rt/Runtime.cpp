@@ -45,7 +45,7 @@ extern "C" {
 
 llvm::DenseMap<llvm::APInt, uint64_t, llvm::DenseMapAPIntKeyInfo> EPP(pathMap);
 std::unordered_map<uint64_t, uint64_t> EPP(selfLoopMap);
-llvm::APInt EPP(Counter)(256, llvm::StringRef("0"), 10);
+llvm::APInt EPP(Counter)(256, 0, true);
 
 // Maintaining the counter in the runtime depends on 2 things:
 // 1. Only one function is being instrumented
@@ -68,9 +68,9 @@ void EPP(incCount)(uint64_t qw0, uint64_t qw1, uint64_t qw2, uint64_t qw3) {
 void EPP(selfLoop)(uint64_t loopID) { EPP(selfLoopMap)[loopID] += 1; }
 
 void EPP(logPath)() {
-     //std::ofstream txtfile("path-log.txt", std::ios::app);
-     //txtfile << EPP(Counter).toString(10, false) << "\n" ;
-     //txtfile.close();
+    //std::ofstream txtfile("path-log.txt", std::ios::app);
+    //txtfile << EPP(Counter).toString(10, false) << "\n" ;
+    //txtfile.close();
     EPP(pathMap)[EPP(Counter)] += 1;
     EPP(Counter).clearAllBits();
 }
@@ -79,7 +79,7 @@ void EPP(save)() {
     std::ofstream txtfile("path-profile-results.txt", std::ios::out);
     txtfile << EPP(pathMap).size() << "\n";
     for (auto &KV : EPP(pathMap))
-        txtfile << KV.first.toString(10, false) << " " << KV.second << "\n";
+        txtfile << KV.first.toString(10, true) << " " << KV.second << "\n";
     txtfile.close();
 
     std::ofstream txtfile2("self-loop.txt", std::ios::out);

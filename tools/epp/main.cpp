@@ -183,6 +183,7 @@ int main(int argc, char **argv, const char **env) {
         TargetRegistry::printRegisteredTargetsForVersion);
     cl::ParseCommandLineOptions(argc, argv);
 
+
     // Construct an IR file from the filename passed on the command line.
     SMDiagnostic err;
     unique_ptr<Module> module = parseIRFile(inPath.getValue(), err, context);

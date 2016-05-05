@@ -331,6 +331,13 @@ void EPPEncode::encode(Function &F) {
     }
       
     // Add all fake edges for loops
+
+    typedef pair<BasicBlock *, BasicBlock *> Key;
+    auto PairCmp = [](const Key &A, const Key &B) -> bool {
+        return A.first < B.first || (A.first == B.first && A.second < B.second);
+    };
+    set<Key, decltype(PairCmp)> ExitEdges(PairCmp); 
+
     for(auto &L : Loops) {
         // 1. Add edge from entry to header
         // 2. Add edge from latch to exit
@@ -346,13 +353,24 @@ void EPPEncode::encode(Function &F) {
         
         AltCFG[Entry].push_back(make_pair(Header, EHEAD));
         AltCFG[Latch].push_back(make_pair(Exit, ELATCH));
-
         AltCFG[PreHeader].push_back(make_pair(Exit, ELIN));
-        SmallVector<BasicBlock*, 4> ExitBlocks;
-        L->getUniqueExitBlocks(ExitBlocks);
-        for(auto &EB : ExitBlocks) {
-            AltCFG[Entry].push_back(make_pair(EB, ELOUT));
+
+        SmallVector<pair<const BasicBlock*, 
+            const BasicBlock*>, 4> LoopExitEdges;
+        L->getExitEdges(LoopExitEdges);
+        for(auto &E : ExitEdges) {
+            auto *Src = const_cast<BasicBlock*>(E.first);
+            auto *Tgt = const_cast<BasicBlock*>(E.second);
+            // Exit edges can be the same for two or more 
+            // (nested) loops.
+            ExitEdges.insert(make_pair(Src, Tgt));
         }
+    }
+
+    for(auto &S : ExitEdges) {
+        auto *Src = S.first, *Tgt = S.second;
+        AltCFG[Src].push_back(make_pair(Exit, ELOUT1));
+        AltCFG[Entry].push_back(make_pair(Tgt, ELOUT2));
     }
 
     DEBUG(errs() << "AltCFG\n");
