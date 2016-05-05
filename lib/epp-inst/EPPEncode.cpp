@@ -21,6 +21,7 @@
 #include <unordered_set>
 #include <stack>
 #include <cassert>
+#include <fstream>
 
 using namespace llvm;
 using namespace epp;
@@ -294,6 +295,8 @@ void EPPEncode::releaseMemory() {
 void EPPEncode::encode(Function &F) {
     DEBUG(errs() << "Called Encode on " << F.getName() << "\n");
 
+    common::printCFG(F);
+
     //SetVector<BasicBlock *> BackedgeTargets;
     //BasicBlock *LastTopoExit = nullptr;
     auto POB = functionPostorderTraversal(F, LI);
@@ -358,7 +361,7 @@ void EPPEncode::encode(Function &F) {
         SmallVector<pair<const BasicBlock*, 
             const BasicBlock*>, 4> LoopExitEdges;
         L->getExitEdges(LoopExitEdges);
-        for(auto &E : ExitEdges) {
+        for(auto &E : LoopExitEdges) {
             auto *Src = const_cast<BasicBlock*>(E.first);
             auto *Tgt = const_cast<BasicBlock*>(E.second);
             // Exit edges can be the same for two or more 
@@ -383,11 +386,23 @@ void EPPEncode::encode(Function &F) {
     }
 
     // Dot Printer for AltCFG
-    
+    const char *EdgeTypeStr[] = {"EHEAD", "ELATCH", "ELIN", "ELOUT1", "ELOUT2", "EREAL", "EOUT"};
+    ofstream DotFile("altcfg.dot", ios::out);
+    DotFile << "digraph \"AltCFG\" {\n label=\"AltCFG\";\n";
     for(auto &KV : AltCFG) {
+        DotFile << "\tNode" << KV.first << " [shape=record, label=\"" 
+            << KV.first->getName().str() << "\"];\n";
         for(auto &S : KV.second) {
+            DotFile << "\tNode" << KV.first << " -> Node" << S.first << "[style=";
+            if(S.second == EREAL)
+                DotFile << "solid,";
+            else
+                DotFile << "dotted,";
+            DotFile << "label=\"" << EdgeTypeStr[S.second] << "\"";
+            DotFile << "];\n";
         }
     }
+    DotFile << "}\n";
 
 
     // Path Counts

@@ -102,7 +102,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     auto InsertInc = [&incFun, &int64Ty](Instruction *addPos, APInt Increment) {
             DEBUG(errs() << "Inserting Increment " << Increment << " "
                          << addPos->getParent()->getName() << "\n");
-        if(Increment.ne(APInt(256, 0, true))) {
+        if(Increment.ne(APInt(256, 0, true)) || true) {
             auto *I = Increment.getRawData();
             vector<Value *> Args;
             for(uint32_t C = 0; C < 4; C++)

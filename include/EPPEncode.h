@@ -17,6 +17,7 @@
 
 namespace epp {
 
+
 enum EdgeType { EHEAD,
                 ELATCH,
                 ELIN,
@@ -24,6 +25,7 @@ enum EdgeType { EHEAD,
                 ELOUT2, // From Entry 
                 EREAL,
                 EOUT };
+
 
 struct Edge {
     llvm::BasicBlock *Src, *Tgt;
