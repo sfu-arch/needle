@@ -208,7 +208,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
 
     // Populate Maps
     bool found = false;
-    for(auto &KV : Enc.Val) {
+    for(auto &KV : Enc.Inc) {
         shared_ptr<Edge> E(KV.first);
         auto &X = KV.second;
 
@@ -255,7 +255,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     // Split Edges and insert increments for all
     // real edges as well as last exit increment
     DEBUG(errs() << "EREAL and EOUT\n");
-    for (auto &I : Enc.Val) {
+    for (auto &I : Enc.Inc) {
         shared_ptr<Edge> E(I.first);
         auto &X = I.second;
         if (E->Type == EREAL && X.ne(APInt(256, 0, true))) {
