@@ -382,6 +382,14 @@ void EPPEncode::encode(Function &F) {
         DEBUG(errs() << "\n");
     }
 
+    // Dot Printer for AltCFG
+    
+    for(auto &KV : AltCFG) {
+        for(auto &S : KV.second) {
+        }
+    }
+
+
     // Path Counts
 
     for(auto &KV : AltCFG) {
