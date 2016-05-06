@@ -162,7 +162,7 @@ findEdgeInVal(const BasicBlock *Src, const BasicBlock *Tgt, const EdgeType Ty,
 static void
 spanningHelper(BasicBlock *toVisit, set<shared_ptr<Edge>> &ST,
                       DenseSet<BasicBlock *> &Seen,
-                      MapVector<BasicBlock *, SmallVector<pair<BasicBlock*, EdgeType>, 4>> &AltCFG,
+                      MapVector<BasicBlock *, SetVector<pair<BasicBlock*, EdgeType>>> &AltCFG,
                       const unordered_map<shared_ptr<Edge>, llvm::APInt> &Val) {
     Seen.insert(toVisit);
     //for (auto S = succ_begin(toVisit), E = succ_end(toVisit); S != E; ++S) {
@@ -178,7 +178,7 @@ spanningHelper(BasicBlock *toVisit, set<shared_ptr<Edge>> &ST,
 }
 
 static set<shared_ptr<Edge>>
-getSpanningTree(MapVector<BasicBlock *, SmallVector<pair<BasicBlock*, EdgeType>, 4>> &AltCFG,
+getSpanningTree(MapVector<BasicBlock *, SetVector<pair<BasicBlock*, EdgeType>>> &AltCFG,
                       const unordered_map<shared_ptr<Edge>, llvm::APInt> &Val) {
     set<shared_ptr<Edge>> SpanningTree;
     DenseSet<BasicBlock *> Seen;
@@ -334,12 +334,13 @@ void EPPEncode::encode(Function &F) {
     // b) loop entry edges removed
     // c) loop exit edges replaced with edges from loop entry to
     //    exit target block.
-    
-    MapVector<BasicBlock *, SmallVector<pair<BasicBlock*, EdgeType>, 4>> AltCFG;                        
+    // There can be only one edge for each Src->Tgt so we use a SetVector
+    // instead of a SmallVector.
+    MapVector<BasicBlock *, SetVector<pair<BasicBlock*, EdgeType>>> AltCFG;                        
 
     // Add real edges
     for(auto &BB : POB) {
-        AltCFG.insert(make_pair(BB, SmallVector<pair<BasicBlock*, EdgeType>, 4>()));
+        AltCFG.insert(make_pair(BB, SetVector<pair<BasicBlock*, EdgeType>>()));
         for(auto S = succ_begin(BB), E = succ_end(BB); S != E; S++) {
             if(BackEdges.count(make_pair(BB, *S)) || 
                     LI->getLoopFor(BB) != LI->getLoopFor(*S)) {
@@ -348,7 +349,7 @@ void EPPEncode::encode(Function &F) {
                 DEBUG(errs() << "LoopFor : " << LI->getLoopFor(BB) << " - " << LI->getLoopFor(*S) << "\n");
                 continue;
             } 
-            AltCFG[BB].push_back(make_pair(*S, EREAL));      
+            AltCFG[BB].insert(make_pair(*S, EREAL));      
         }   
     }   
 
@@ -358,10 +359,10 @@ void EPPEncode::encode(Function &F) {
     // Add all fake edges for loops
 
     typedef pair<BasicBlock *, BasicBlock *> Key;
-    auto PairCmp = [](const Key &A, const Key &B) -> bool {
-        return A.first < B.first || (A.first == B.first && A.second < B.second);
-    };
-    set<Key, decltype(PairCmp)> ExitEdges(PairCmp); 
+    //auto PairCmp = [](const Key &A, const Key &B) -> bool {
+        //return A.first < B.first || (A.first == B.first && A.second < B.second);
+    //};
+    SetVector<Key> ExitEdges; 
 
     for(auto &L : Loops) {
         // 1. Add edge from entry to header
@@ -378,13 +379,13 @@ void EPPEncode::encode(Function &F) {
         assert(Latch && PreHeader && "Run LoopSimplify");
         assert(Header !=  Latch && "Run LoopConverter");
         
-        AltCFG[Entry].push_back(make_pair(Header, EHEAD));
-        AltCFG[Latch].push_back(make_pair(Exit, ELATCH));
-        AltCFG[PreHeader].push_back(make_pair(Exit, ELIN));
+        AltCFG[Entry].insert(make_pair(Header, EHEAD));
+        AltCFG[Latch].insert(make_pair(Exit, ELATCH));
+        AltCFG[PreHeader].insert(make_pair(Exit, ELIN));
 
         SmallVector<pair<const BasicBlock*, 
             const BasicBlock*>, 4> LoopExitEdges;
-        L->getExitEdges(LoopExitEdges);
+        L->getExitEdges(LoopExitEdges); // Should be deterministic
         for(auto &E : LoopExitEdges) {
             auto *Src = const_cast<BasicBlock*>(E.first);
             auto *Tgt = const_cast<BasicBlock*>(E.second);
@@ -396,8 +397,12 @@ void EPPEncode::encode(Function &F) {
 
     for(auto &S : ExitEdges) {
         auto *Src = S.first, *Tgt = S.second;
-        AltCFG[Src].push_back(make_pair(Exit, ELOUT1));
-        AltCFG[Entry].push_back(make_pair(Tgt, ELOUT2));
+        // Cant have single source multiple exit blocks
+        AltCFG[Src].insert(make_pair(Exit, ELOUT1));
+        // But we can have multiple source and single 
+        // exit block so check before inserting. 
+        // Use SetVector inside AltCFG representation
+        AltCFG[Entry].insert(make_pair(Tgt, ELOUT2));
     }
 
     // Debugging the AltCFG
