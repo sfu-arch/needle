@@ -136,17 +136,27 @@ bool EPPDecode::runOnModule(Module &M) {
             }
         }
     }
-
     inFile.close();
 
-    ifstream inFile2(selfloop.c_str(), ios::in);
-    assert(inFile2.is_open() && "Could not open file for reading");
-    uint64_t SelfLoopId, Freq, totalSelfLoopCount;
-    inFile2 >> totalSelfLoopCount;
-    while (inFile2 >> SelfLoopId >> Freq) {
-        SelfProfileMap[SelfLoopId] = Freq;
+    for (auto &V : Enc->Val) {
+        auto Src = V.first->src();
+        if (ValBySrc.count(Src) == 0)
+            ValBySrc[Src] = vector<shared_ptr<Edge>>();
+
+        if (V.first->src() != V.first->tgt())
+            ValBySrc[Src].push_back(V.first);
+        // assert(V.first->src() != V.first->tgt() && "Noooo!");
     }
-    inFile2.close();
+
+
+    //ifstream inFile2(selfloop.c_str(), ios::in);
+    //assert(inFile2.is_open() && "Could not open file for reading");
+    //uint64_t SelfLoopId, Freq, totalSelfLoopCount;
+    //inFile2 >> totalSelfLoopCount;
+    //while (inFile2 >> SelfLoopId >> Freq) {
+        //SelfProfileMap[SelfLoopId] = Freq;
+    //}
+    //inFile2.close();
 
     // Sort the paths in descending order of their frequency
     std::sort(paths.begin(), paths.end(), [](const Path &P1, const Path &P2) {
@@ -205,18 +215,22 @@ bool EPPDecode::runOnModule(Module &M) {
     DEBUG(errs() << "Path Check Fails : " << pathFail << "\n");
 
     // Dump self loops (if any)
-    for (auto KV : SelfProfileMap) {
-        auto Id = KV.first;
-        auto Count = KV.second;
-        assert(Enc->selfLoopMap.count(Id) > 0 && "Self Loop not found");
-        vector<BasicBlock *> Path;
-        Path.push_back(Enc->selfLoopMap[Id]);
-        auto C = pathCheck(Path);
-        if (C)
-            Outfile << (totalPathCount + 1 + Id) << " " << Count << " 4 " << C
-                    << " " << Path[0]->getName().str() << " \n";
-    }
+    //for (auto KV : SelfProfileMap) {
+        //auto Id = KV.first;
+        //auto Count = KV.second;
+        //assert(Enc->selfLoopMap.count(Id) > 0 && "Self Loop not found");
+        //vector<BasicBlock *> Path;
+        //Path.push_back(Enc->selfLoopMap[Id]);
+        //auto C = pathCheck(Path);
+        //if (C)
+            //Outfile << (totalPathCount + 1 + Id) << " " << Count << " 4 " << C
+                    //<< " " << Path[0]->getName().str() << " \n";
+    //}
     return false;
+}
+
+void EPPDecode::releaseMemory() {
+    ValBySrc.clear();
 }
 
 std::pair<PathType, std::vector<llvm::BasicBlock *>>
@@ -227,19 +241,8 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
     DEBUG(errs() << "Decode Called On: " << pathID << "\n");
 
     // Data structure for faster lookup
-    map<BasicBlock *, vector<shared_ptr<Edge>>> ValBySrc;
-    for (auto &V : Enc.Val) {
-        auto Src = V.first->src();
-        if (ValBySrc.count(Src) == 0)
-            ValBySrc[Src] = vector<shared_ptr<Edge>>();
-
-        if (V.first->src() != V.first->tgt())
-            ValBySrc[Src].push_back(V.first);
-        // assert(V.first->src() != V.first->tgt() && "Noooo!");
-    }
-
     // FIXME : This should only happen once 
-    errs() << "Created loopup structure\n";
+    //map<BasicBlock *, vector<shared_ptr<Edge>>> ValBySrc;
 
     vector<shared_ptr<Edge>> SelectedEdges;
     while (true) {

@@ -68,9 +68,9 @@ void EPP(incCount)(uint64_t qw0, uint64_t qw1, uint64_t qw2, uint64_t qw3) {
 void EPP(selfLoop)(uint64_t loopID) { EPP(selfLoopMap)[loopID] += 1; }
 
 void EPP(logPath)() {
-    std::ofstream txtfile("path-log.txt", std::ios::app);
-    txtfile << EPP(Counter).toString(10, true) << "\n" ;
-    txtfile.close();
+    //std::ofstream txtfile("path-log.txt", std::ios::app);
+    //txtfile << EPP(Counter).toString(10, true) << "\n" ;
+    //txtfile.close();
     EPP(pathMap)[EPP(Counter)] += 1;
     EPP(Counter).clearAllBits();
 }

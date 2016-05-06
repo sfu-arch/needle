@@ -5,6 +5,8 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Analysis/LoopInfo.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/IR/CallSite.h"
 
 #include <string>
@@ -39,6 +41,8 @@ namespace common {
     bool checkIntrinsic(llvm::CallSite&);
 
     bool isSelfLoop(const llvm::BasicBlock*);
-}
 
+    llvm::SetVector<llvm::Loop *>
+    getLoops(llvm::LoopInfo *);
+}
 #endif

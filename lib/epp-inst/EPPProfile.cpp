@@ -100,9 +100,9 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     auto *logFun = M->getOrInsertFunction("PaThPrOfIlInG_logPath", voidTy, nullptr);
 
     auto InsertInc = [&incFun, &int64Ty](Instruction *addPos, APInt Increment) {
+        if(Increment.ne(APInt(256, 0, true))) {
             DEBUG(errs() << "Inserting Increment " << Increment << " "
                          << addPos->getParent()->getName() << "\n");
-        if(Increment.ne(APInt(256, 0, true)) || true) {
             auto *I = Increment.getRawData();
             vector<Value *> Args;
             for(uint32_t C = 0; C < 4; C++)
@@ -176,15 +176,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
 
     APInt BackVal(256, 0, true);
 
-    SmallVector<Loop* , 16> Loops;
-    for(auto &L : *LI) {
-        Loops.push_back(L);
-        assert(L->getLoopDepth() == 1 && 
-                "Expect only top level loops here");
-        for(auto &SL : L->getSubLoops()) {
-           Loops.push_back(SL); 
-        }
-    }
+    auto Loops = common::getLoops(LI);
 
     // Init Maps
     for(auto *L : Loops) {

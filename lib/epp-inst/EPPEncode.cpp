@@ -316,10 +316,11 @@ void EPPEncode::releaseMemory() {
     selfLoopCounter = 0;
 }
 
+
 void EPPEncode::encode(Function &F) {
     DEBUG(errs() << "Called Encode on " << F.getName() << "\n");
 
-    common::printCFG(F);
+    //common::printCFG(F);
 
     //SetVector<BasicBlock *> BackedgeTargets;
     //BasicBlock *LastTopoExit = nullptr;
@@ -342,9 +343,9 @@ void EPPEncode::encode(Function &F) {
         for(auto S = succ_begin(BB), E = succ_end(BB); S != E; S++) {
             if(BackEdges.count(make_pair(BB, *S)) || 
                     LI->getLoopFor(BB) != LI->getLoopFor(*S)) {
-                errs() << "Skipping : " << BB->getName() << " - " << S->getName() << "\n";
-                errs() << "BackEdgesCount : " << BackEdges.count(make_pair(BB, *S)) << "\n"; 
-                errs() << "LoopFor : " << LI->getLoopFor(BB) << " - " << LI->getLoopFor(*S) << "\n";
+                DEBUG(errs() << "Skipping : " << BB->getName() << " - " << S->getName() << "\n");
+                DEBUG(errs() << "BackEdgesCount : " << BackEdges.count(make_pair(BB, *S)) << "\n");
+                DEBUG(errs() << "LoopFor : " << LI->getLoopFor(BB) << " - " << LI->getLoopFor(*S) << "\n");
                 continue;
             } 
             AltCFG[BB].push_back(make_pair(*S, EREAL));      
@@ -352,15 +353,7 @@ void EPPEncode::encode(Function &F) {
     }   
 
 
-    SmallVector<Loop* , 16> Loops;
-    for(auto &L : *LI) {
-        Loops.push_back(L);
-        assert(L->getLoopDepth() == 1 && 
-                "Expect only top level loops here");
-        for(auto &SL : L->getSubLoops()) {
-           Loops.push_back(SL); 
-        }
-    }
+    auto Loops = common::getLoops(LI);
       
     // Add all fake edges for loops
 
@@ -378,9 +371,9 @@ void EPPEncode::encode(Function &F) {
              PreHeader = L->getLoopPreheader(),
              Latch = L->getLoopLatch();
         
-        (errs() << "Header : " << Header->getName() << "\n");
-        (errs() << "PreHeader : " << PreHeader->getName() << "\n");
-        (errs() << "Latch : " << Latch->getName() << "\n");
+        DEBUG(errs() << "Header : " << Header->getName() << "\n");
+        DEBUG(errs() << "PreHeader : " << PreHeader->getName() << "\n");
+        DEBUG(errs() << "Latch : " << Latch->getName() << "\n");
 
         assert(Latch && PreHeader && "Run LoopSimplify");
         assert(Header !=  Latch && "Run LoopConverter");
@@ -419,6 +412,7 @@ void EPPEncode::encode(Function &F) {
     }
 
     // Dot Printer for AltCFG
+    /****** Debug
     const char *EdgeTypeStr[] = {"EHEAD", "ELATCH", "ELIN", "ELOUT1", "ELOUT2", "EREAL", "EOUT"};
     ofstream DotFile("altcfg.dot", ios::out);
     DotFile << "digraph \"AltCFG\" {\n label=\"AltCFG\";\n";
@@ -436,6 +430,7 @@ void EPPEncode::encode(Function &F) {
         }
     }
     DotFile << "}\n";
+    ******/
 
 
     // Path Counts
@@ -499,6 +494,7 @@ void EPPEncode::encode(Function &F) {
 
     // DEBUG(errs() << "NumPaths : " << numPaths[&F.getEntryBlock()] << "\n");
     errs() << "NumPaths : " << numPaths[Entry] << "\n";
+
 }
 
 char EPPEncode::ID = 0;

@@ -299,4 +299,23 @@ bool isSelfLoop(const BasicBlock* BB) {
     return false;
 }
 
+
+static
+void getLoopsHelper(SetVector<Loop*>& Loops, Loop* L) {
+    Loops.insert(L);
+    for(auto &SL : L->getSubLoops()) {
+        getLoopsHelper(Loops, SL);
+    }
+}
+
+
+SetVector<Loop *>
+getLoops(LoopInfo *LI) {
+    SetVector<Loop*> Loops;
+    for(auto &L : *LI) {
+        getLoopsHelper(Loops, L);
+    }
+    return Loops;
+}
+
 }
