@@ -186,9 +186,30 @@ getSpanningTree(MapVector<BasicBlock *, SmallVector<pair<BasicBlock*, EdgeType>,
     auto *Entry = AltCFG.back().first;
     spanningHelper(Entry, SpanningTree, Seen, AltCFG, Val);
 
-    errs() << "Seen : " << Seen.size() << "\n";
-    errs() << "AltCFG : " << AltCFG.size() << "\n";
-    
+    // Debug
+    if(Seen.size() != AltCFG.size()) {
+        for(auto RB = AltCFG.rbegin(), RE = AltCFG.rend(); 
+                RB != RE; RB++) {
+            auto *BB = (*RB).first;
+            if(Seen.count(BB) == 0) {
+                errs() << "Unreachable : " << BB->getName() << "\n";
+                errs() << "Preds : \n";
+                for(auto P = pred_begin(BB), 
+                        E = pred_end(BB); P != E; P++) {
+                    errs() << (*P)->getName() << "\n";
+                } 
+                errs() << "Succs : \n";
+                for(auto S = succ_begin(BB), 
+                        E = succ_end(BB); S != E; S++) {
+                    errs() << (*S)->getName() << "\n";
+                } 
+                assert(false && "Found unseen block");
+            }
+        }
+    }
+    assert(Seen.size() == AltCFG.size() 
+            && "Checking reachability");
+
     return SpanningTree;
 }
 
@@ -320,7 +341,12 @@ void EPPEncode::encode(Function &F) {
         AltCFG.insert(make_pair(BB, SmallVector<pair<BasicBlock*, EdgeType>, 4>()));
         for(auto S = succ_begin(BB), E = succ_end(BB); S != E; S++) {
             if(BackEdges.count(make_pair(BB, *S)) || 
-                LI->getLoopFor(BB) != LI->getLoopFor(*S)) continue;
+                    LI->getLoopFor(BB) != LI->getLoopFor(*S)) {
+                errs() << "Skipping : " << BB->getName() << " - " << S->getName() << "\n";
+                errs() << "BackEdgesCount : " << BackEdges.count(make_pair(BB, *S)) << "\n"; 
+                errs() << "LoopFor : " << LI->getLoopFor(BB) << " - " << LI->getLoopFor(*S) << "\n";
+                continue;
+            } 
             AltCFG[BB].push_back(make_pair(*S, EREAL));      
         }   
     }   
@@ -352,8 +378,10 @@ void EPPEncode::encode(Function &F) {
              PreHeader = L->getLoopPreheader(),
              Latch = L->getLoopLatch();
         
-        DEBUG(errs() << "Loop : " << Header->getName() << "\n");
-        DEBUG(errs() << "Latch : " << Latch->getName() << "\n");
+        (errs() << "Header : " << Header->getName() << "\n");
+        (errs() << "PreHeader : " << PreHeader->getName() << "\n");
+        (errs() << "Latch : " << Latch->getName() << "\n");
+
         assert(Latch && PreHeader && "Run LoopSimplify");
         assert(Header !=  Latch && "Run LoopConverter");
         
