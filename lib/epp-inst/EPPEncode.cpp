@@ -185,6 +185,9 @@ getSpanningTree(MapVector<BasicBlock *, SmallVector<pair<BasicBlock*, EdgeType>,
    
     auto *Entry = AltCFG.back().first;
     spanningHelper(Entry, SpanningTree, Seen, AltCFG, Val);
+
+    errs() << "Seen : " << Seen.size() << "\n";
+    errs() << "AltCFG : " << AltCFG.size() << "\n";
     
     return SpanningTree;
 }
@@ -376,6 +379,8 @@ void EPPEncode::encode(Function &F) {
         AltCFG[Entry].push_back(make_pair(Tgt, ELOUT2));
     }
 
+    // Debugging the AltCFG
+    
     DEBUG(errs() << "AltCFG\n");
     for(auto &KV : AltCFG) {
         DEBUG(errs() << KV.first->getName() << " -> ");
