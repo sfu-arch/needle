@@ -164,29 +164,8 @@ getSpanningTree(MapVector<BasicBlock *, SetVector<pair<BasicBlock*, EdgeType>>> 
     auto *Entry = AltCFG.back().first;
     spanningHelper(Entry, SpanningTree, Seen, AltCFG, Val);
 
-    // Debug
-    if(Seen.size() != AltCFG.size()) {
-        for(auto RB = AltCFG.rbegin(), RE = AltCFG.rend(); 
-                RB != RE; RB++) {
-            auto *BB = (*RB).first;
-            if(Seen.count(BB) == 0) {
-                errs() << "Unreachable : " << BB->getName() << "\n";
-                errs() << "Preds : \n";
-                for(auto P = pred_begin(BB), 
-                        E = pred_end(BB); P != E; P++) {
-                    errs() << (*P)->getName() << "\n";
-                } 
-                errs() << "Succs : \n";
-                for(auto S = succ_begin(BB), 
-                        E = succ_end(BB); S != E; S++) {
-                    errs() << (*S)->getName() << "\n";
-                } 
-                assert(false && "Found unseen block");
-            }
-        }
-    }
     assert(Seen.size() == AltCFG.size() 
-            && "Checking reachability");
+            && "Some nodes unreachable -- check AltCFG");
 
     return SpanningTree;
 }

@@ -47,7 +47,7 @@ llvm::DenseMap<llvm::APInt, uint64_t, llvm::DenseMapAPIntKeyInfo> EPP(pathMap);
 //std::unordered_map<uint64_t, uint64_t> EPP(selfLoopMap);
 llvm::APInt EPP(Counter)(128, 0, true);
 
-// Maintaining the counter in the runtime depends on 2 things:
+// Maintaining the counter in the runtime depends on 3 things:
 // 1. Only one function is being instrumented
 // 2. The function being instrumented is not called recursively
 // 3. Mutual recursion WILL break this.
