@@ -78,6 +78,7 @@ struct EPPEncode : public llvm::FunctionPass {
         return "PASHA - EPPEncode";
     }
 };
+
 }
 
 #endif

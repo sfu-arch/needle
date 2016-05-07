@@ -84,16 +84,16 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     auto *int64Ty = Type::getInt64Ty(context);
     auto *voidTy = Type::getVoidTy(context);
     auto *incFun = M->getOrInsertFunction("PaThPrOfIlInG_incCount", voidTy, int64Ty,
-                               int64Ty, int64Ty, int64Ty, nullptr);
+                               int64Ty, nullptr);
     auto *logFun = M->getOrInsertFunction("PaThPrOfIlInG_logPath", voidTy, nullptr);
 
     auto InsertInc = [&incFun, &int64Ty](Instruction *addPos, APInt Increment) {
-        if(Increment.ne(APInt(256, 0, true))) {
+        if(Increment.ne(APInt(128, 0, true))) {
             DEBUG(errs() << "Inserting Increment " << Increment << " "
                          << addPos->getParent()->getName() << "\n");
             auto *I = Increment.getRawData();
             vector<Value *> Args;
-            for(uint32_t C = 0; C < 4; C++)
+            for(uint32_t C = 0; C < 2; C++)
                 Args.push_back(ConstantInt::get(int64Ty, I[C], false));
             CallInst::Create(incFun, Args, "", addPos);
         }
@@ -152,14 +152,14 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     };
     map<Key, Val, decltype(PairCmp)> OutMap(PairCmp); 
 
-    APInt BackVal(256, 0, true);
+    APInt BackVal(128, 0, true);
 
     auto Loops = common::getLoops(LI);
 
     // Init Maps
     for(auto *L : Loops) {
-        LatchMap[L] = make_pair(APInt(256, 0, true), APInt(256, 0, true));
-        InMap[L] = make_pair(L->getLoopPreheader(),APInt(256, 0, true));
+        LatchMap[L] = make_pair(APInt(128, 0, true), APInt(128, 0, true));
+        InMap[L] = make_pair(L->getLoopPreheader(),APInt(128, 0, true));
         SmallVector<pair<const BasicBlock*, 
             const BasicBlock*>, 4> ExitEdges;
         L->getExitEdges(ExitEdges);
@@ -168,7 +168,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
             auto *Src = const_cast<BasicBlock*>(E.first);
             auto *Tgt = const_cast<BasicBlock*>(E.second);
             OutMap.insert(make_pair(make_pair(Src, Tgt), 
-                        make_pair(APInt(256, 0, true), APInt(256, 0, true))));
+                        make_pair(APInt(128, 0, true), APInt(128, 0, true))));
         }
     }
 
@@ -228,7 +228,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     for (auto &I : Enc.Inc) {
         shared_ptr<Edge> E(I.first);
         auto &X = I.second;
-        if (E->Type == EREAL && X.ne(APInt(256, 0, true))) {
+        if (E->Type == EREAL && X.ne(APInt(128, 0, true))) {
             //errs() << "Splitting Real Edge\n";
             auto NewBlock = interpose(E->src(), E->tgt());
             InsertInc(NewBlock->getFirstNonPHI(), X);

@@ -44,28 +44,28 @@ extern "C" {
 // }
 
 llvm::DenseMap<llvm::APInt, uint64_t, llvm::DenseMapAPIntKeyInfo> EPP(pathMap);
-std::unordered_map<uint64_t, uint64_t> EPP(selfLoopMap);
-llvm::APInt EPP(Counter)(256, 0, true);
+//std::unordered_map<uint64_t, uint64_t> EPP(selfLoopMap);
+llvm::APInt EPP(Counter)(128, 0, true);
 
 // Maintaining the counter in the runtime depends on 2 things:
 // 1. Only one function is being instrumented
 // 2. The function being instrumented is not called recursively
 // 3. Mutual recursion WILL break this.
 
-void EPP(incCount)(uint64_t qw0, uint64_t qw1, uint64_t qw2, uint64_t qw3) {
+void EPP(incCount)(uint64_t qw0, uint64_t qw1) {
     //uint64_t QW[] = {qw0, qw1, qw2, qw3};
     //llvm::APInt Inc(256, QW);
     // The constructor for APInt which initializes from an array only 
     // constructs unsigned APInts. Work around this by creating a signed
     // APInt first and then modifying the internal storage.
-    llvm::APInt Inc(256, 0, true);
+    llvm::APInt Inc(128, 0, true);
     auto *data = const_cast<uint64_t*>(Inc.getRawData());
     data[0] = qw0; data[1] = qw1;
-    data[2] = qw2; data[3] = qw3;
+    //data[2] = qw2; data[3] = qw3;
     EPP(Counter) += Inc;
 }
 
-void EPP(selfLoop)(uint64_t loopID) { EPP(selfLoopMap)[loopID] += 1; }
+//void EPP(selfLoop)(uint64_t loopID) { EPP(selfLoopMap)[loopID] += 1; }
 
 void EPP(logPath)() {
     //std::ofstream txtfile("path-log.txt", std::ios::app);
@@ -82,10 +82,10 @@ void EPP(save)() {
         txtfile << KV.first.toString(10, true) << " " << KV.second << "\n";
     txtfile.close();
 
-    std::ofstream txtfile2("self-loop.txt", std::ios::out);
-    txtfile2 << EPP(selfLoopMap).size() << "\n";
-    for (auto &KV : EPP(selfLoopMap))
-        txtfile2 << KV.first << " " << KV.second << "\n";
-    txtfile2.close();
+    //std::ofstream txtfile2("self-loop.txt", std::ios::out);
+    //txtfile2 << EPP(selfLoopMap).size() << "\n";
+    //for (auto &KV : EPP(selfLoopMap))
+        //txtfile2 << KV.first << " " << KV.second << "\n";
+    //txtfile2.close();
 }
 }

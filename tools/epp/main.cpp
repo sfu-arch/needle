@@ -1,3 +1,4 @@
+#define DEBUG_TYPE "pasha_epp_tool"
 #include "llvm/ADT/Triple.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/AsmParser/Parser.h"
@@ -49,7 +50,6 @@
 
 #include "config.h"
 
-#define DEBUG_TYPE "peruse_epp"
 
 using namespace std;
 using namespace llvm;
@@ -65,9 +65,9 @@ cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
 cl::opt<string> profile("p", cl::desc("Path to path profiling results"),
                         cl::value_desc("filename"));
 
-cl::opt<string> selfloop("s",
-                         cl::desc("Path to self loop path profiling results"),
-                         cl::value_desc("filename"));
+//cl::opt<string> selfloop("s",
+                         //cl::desc("Path to self loop path profiling results"),
+                         //cl::value_desc("filename"));
 
 cl::opt<unsigned>
     numberOfPaths("n", cl::desc("Number of most frequent paths to compute"),

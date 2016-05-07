@@ -23,7 +23,7 @@ extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &, const cl::list<std::string> &);
 
 extern cl::opt<std::string> profile;
-extern cl::opt<std::string> selfloop;
+//extern cl::opt<std::string> selfloop;
 
 void printPath(std::vector<llvm::BasicBlock *> &Blocks,
                std::ofstream &Outfile) {
@@ -39,17 +39,12 @@ struct Path {
     uint64_t count;
 
     bool operator<(const Path &other) const { return count < other.count; }
-
-    // Path() : Func(nullptr), id(APInt(256, StringRef("0"), 10)), count(0) {}
+    // Path() : Func(nullptr), id(APInt(128, 0, true)), count(0) {}
 };
 
 static bool isFunctionExiting(BasicBlock *BB) {
     if (BB->getTerminator()->getNumSuccessors() == 0)
         return true;
-
-    // TODO: Check for exception handling
-    // TODO: Check for functions that don't return
-
     return false;
 }
 
@@ -80,7 +75,6 @@ static uint64_t pathCheck(vector<BasicBlock *> &Blocks) {
             }
         }
         uint64_t N = BB->getInstList().size();
-        assert(NumIns + N > NumIns && "Overflow check failed");
         NumIns += N;
     }
 
@@ -111,13 +105,10 @@ void printPathSrc(std::vector<llvm::BasicBlock *> &blocks) {
 }
 
 bool EPPDecode::runOnModule(Module &M) {
-    // FILE *infile = fopen(ProfileDumpFile.c_str(), "r");
     ifstream inFile(profile.c_str(), ios::in);
     assert(inFile.is_open() && "Could not open file for reading");
 
     uint64_t totalPathCount;
-    // fread(&totalPathCount, sizeof(totalPathCount), 1, infile);
-
     inFile >> totalPathCount;
 
     std::vector<Path> paths;
@@ -131,7 +122,7 @@ bool EPPDecode::runOnModule(Module &M) {
             string PathIdStr;
             uint64_t PathCount;
             while (inFile >> PathIdStr >> PathCount) {
-                APInt PathId(256, StringRef(PathIdStr), 10);
+                APInt PathId(128, StringRef(PathIdStr), 10);
                 paths.push_back({&F, PathId, PathCount});
             }
         }
@@ -149,22 +140,13 @@ bool EPPDecode::runOnModule(Module &M) {
     }
 
 
-    //ifstream inFile2(selfloop.c_str(), ios::in);
-    //assert(inFile2.is_open() && "Could not open file for reading");
-    //uint64_t SelfLoopId, Freq, totalSelfLoopCount;
-    //inFile2 >> totalSelfLoopCount;
-    //while (inFile2 >> SelfLoopId >> Freq) {
-        //SelfProfileMap[SelfLoopId] = Freq;
-    //}
-    //inFile2.close();
-
     // Sort the paths in descending order of their frequency
     std::sort(paths.begin(), paths.end(), [](const Path &P1, const Path &P2) {
         return P1.count > P2.count;
     });
 
-    std::vector<std::pair<PathType, std::vector<llvm::BasicBlock *>>>
-        bbSequences;
+    std::vector<std::pair<PathType, 
+        std::vector<llvm::BasicBlock *>>> bbSequences;
     bbSequences.reserve(totalPathCount);
     for (auto &path : paths) {
         bbSequences.push_back(decode(*path.Func, path.id, *Enc));
@@ -196,7 +178,7 @@ bool EPPDecode::runOnModule(Module &M) {
 
         if (auto Count = pathCheck(blocks)) {
             DEBUG(errs() << i << " " << paths[i].count << " ");
-            Outfile << paths[i].id.toString(10, false) << " " << paths[i].count
+            Outfile << paths[i].id.toString(10, true) << " " << paths[i].count
                     << " ";
             Outfile << static_cast<int>(pType) << " ";
             Outfile << Count << " ";
@@ -206,7 +188,7 @@ bool EPPDecode::runOnModule(Module &M) {
             pathFail++;
             DEBUG(errs() << "Path Fail\n");
         }
-        DEBUG(errs() << "Path ID: " << paths[i].id.toString(10, false)
+        DEBUG(errs() << "Path ID: " << paths[i].id.toString(10, true)
                << " Freq: " << paths[i].count << "\n");
         //printPathSrc(blocks);
         DEBUG(errs() << "\n");
@@ -214,18 +196,6 @@ bool EPPDecode::runOnModule(Module &M) {
 
     DEBUG(errs() << "Path Check Fails : " << pathFail << "\n");
 
-    // Dump self loops (if any)
-    //for (auto KV : SelfProfileMap) {
-        //auto Id = KV.first;
-        //auto Count = KV.second;
-        //assert(Enc->selfLoopMap.count(Id) > 0 && "Self Loop not found");
-        //vector<BasicBlock *> Path;
-        //Path.push_back(Enc->selfLoopMap[Id]);
-        //auto C = pathCheck(Path);
-        //if (C)
-            //Outfile << (totalPathCount + 1 + Id) << " " << Count << " 4 " << C
-                    //<< " " << Path[0]->getName().str() << " \n";
-    //}
     return false;
 }
 
@@ -240,10 +210,6 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
 
     DEBUG(errs() << "Decode Called On: " << pathID << "\n");
 
-    // Data structure for faster lookup
-    // FIXME : This should only happen once 
-    //map<BasicBlock *, vector<shared_ptr<Edge>>> ValBySrc;
-
     vector<shared_ptr<Edge>> SelectedEdges;
     while (true) {
         sequence.push_back(Position);
@@ -251,11 +217,11 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
             break;
 
         // Find the edge with the max weight <= pathID
-        APInt Wt(256, StringRef("0"), 10);
+        APInt Wt(128, 0, true);
         shared_ptr<Edge> Select = nullptr;
-        // for(auto &E : getEdgesBySource(Position, Enc.Val))
         for (auto &E : ValBySrc[Position]) {
-            // if(Enc.Val[E] >= Wt && Enc.Val[E] <= pathID)
+            // Unsigned comparisons are OK since Vals are always +ve
+            // Inc can be negative.
             if (Enc.Val[E].uge(Wt) && Enc.Val[E].ule(pathID)) {
                 Select = E;
                 Wt = Enc.Val[E];
@@ -268,7 +234,6 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
         DEBUG(errs() << pathID << "\n");
     }
 
-     
      //return make_pair(RIRO, sequence);
      //Only one path so it must be REAL
      if (SelectedEdges.empty()) {

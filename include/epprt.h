@@ -35,9 +35,9 @@ struct DenseMapAPIntKeyInfo {
 };
 }
 
-void EPP(selfLoop)(uint64_t loopID);
+//void EPP(selfLoop)(uint64_t loopID);
 
-void EPP(incCount)(uint64_t qw0, uint64_t qw1, uint64_t qw2, uint64_t qw3);
+void EPP(incCount)(uint64_t qw0, uint64_t qw1);
 
 void EPP(logPath)();
 

@@ -123,9 +123,6 @@ static bool isFunctionExiting(BasicBlock *BB) {
     if (BB->getTerminator()->getNumSuccessors() == 0)
         return true;
 
-    // TODO: Check for functions that don't return
-    // TODO: longjump ?
-
     return false;
 }
 
@@ -147,7 +144,6 @@ spanningHelper(BasicBlock *toVisit, set<shared_ptr<Edge>> &ST,
                       MapVector<BasicBlock *, SetVector<pair<BasicBlock*, EdgeType>>> &AltCFG,
                       const unordered_map<shared_ptr<Edge>, llvm::APInt> &Val) {
     Seen.insert(toVisit);
-    //for (auto S = succ_begin(toVisit), E = succ_end(toVisit); S != E; ++S) {
     auto &SV = AltCFG[toVisit];
     for(auto &KV : SV){
         auto *S = KV.first;
@@ -215,14 +211,11 @@ getChords(const unordered_map<shared_ptr<Edge>, APInt> &Val,
 
 static APInt dir(shared_ptr<Edge> E, shared_ptr<Edge> F) {
     if (E == nullptr)
-        return APInt(256, StringRef("1"), 10);
-    // return 1;
+        return APInt(128, 1, true);
     else if (E->src() == F->tgt() || E->tgt() == F->src())
-        return APInt(256, StringRef("1"), 10);
-    // return 1;
+        return APInt(128, 1, true);
     else
-        return APInt(256, StringRef("-1"), 10);
-    // return -1;
+        return APInt(128, -1, true);
 }
 
 static void incDFSHelper(APInt Events, BasicBlock *V, shared_ptr<Edge> E,
@@ -273,9 +266,9 @@ static void computeIncrement(BasicBlock *Entry, BasicBlock *Exit,
     // Figure 4 in the paper.
 
     for (auto &C : Chords)
-        Inc[C] = APInt(256, StringRef("0"), 10);
+        Inc[C] = APInt(128, 0, true);
 
-    incDFSHelper(APInt(256, StringRef("0"), 10), Entry, nullptr, ST, Chords,
+    incDFSHelper(APInt(128, 0, true), Entry, nullptr, ST, Chords,
                  Val, Inc);
 
     // The EXIT->ENTRY edge does not exist in Val,
@@ -283,7 +276,7 @@ static void computeIncrement(BasicBlock *Entry, BasicBlock *Exit,
     // creates a new map entry with default value,
     // instead create explicitly here.
 
-    Val.insert(make_pair(EE, APInt(256, StringRef("0"), 10)));
+    Val.insert(make_pair(EE, APInt(128, 0, true)));
 
     for (auto &C : Chords) {
         Inc[C] = Inc[C] + Val[C];
@@ -324,9 +317,6 @@ void EPPEncode::encode(Function &F) {
         for(auto S = succ_begin(BB), E = succ_end(BB); S != E; S++) {
             if(BackEdges.count(make_pair(BB, *S)) || 
                     LI->getLoopFor(BB) != LI->getLoopFor(*S)) {
-                DEBUG(errs() << "Skipping : " << BB->getName() << " - " << S->getName() << "\n");
-                DEBUG(errs() << "BackEdgesCount : " << BackEdges.count(make_pair(BB, *S)) << "\n");
-                DEBUG(errs() << "LoopFor : " << LI->getLoopFor(BB) << " - " << LI->getLoopFor(*S) << "\n");
                 continue;
             } 
             AltCFG[BB].insert(make_pair(*S, EREAL));      
@@ -421,7 +411,7 @@ void EPPEncode::encode(Function &F) {
 
         auto *BB = KV.first;
         auto &Succs = KV.second;
-        APInt pathCount(256, StringRef("0"), 10);
+        APInt pathCount(128, 0, true);
 
         if (isFunctionExiting(BB))
             pathCount = 1;
@@ -431,9 +421,12 @@ void EPPEncode::encode(Function &F) {
             auto ET = S.second;
             Val.insert(make_pair(Edge::makeEdge(BB, SB, ET), pathCount));
             if (numPaths.count(SB) == 0)
-                numPaths.insert(make_pair(SB, APInt(256, StringRef("0"), 10)));
+                numPaths.insert(make_pair(SB, APInt(128, 0, true)));
 
-            pathCount += numPaths[SB];
+            // This is the only place we need to check for overflow.
+            bool Ov = false;
+            pathCount = pathCount.sadd_ov(numPaths[SB], Ov);
+            assert(!Ov && "Integer Overflow");
         }
         numPaths.insert(make_pair(BB, pathCount));
     }
@@ -474,7 +467,6 @@ void EPPEncode::encode(Function &F) {
         DEBUG(errs() << I.first->src()->getName() << " -> "
                      << I.first->tgt()->getName() << " " << I.second << "\n");
 
-    // DEBUG(errs() << "NumPaths : " << numPaths[&F.getEntryBlock()] << "\n");
     errs() << "NumPaths : " << numPaths[Entry] << "\n";
 
 }
