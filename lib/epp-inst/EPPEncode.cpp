@@ -73,24 +73,6 @@ static const Loop *getOutermostLoop(const LoopInfo *LI, const BasicBlock *BB) {
     return L;
 }
 
-//enum BlockType { LOOPHEAD, LOOPBODY, LOOPLATCH, LOOPEXIT, UNLOOP };
-
-//static BlockType getBlockType(BasicBlock *BB, LoopInfo *LI) {
-    //Loop *L = LI->getLoopFor(BB);
-    //if (!L)
-        //return UNLOOP;
-
-    //if (L->getHeader() == BB)
-        //return LOOPHEAD;
-
-    //if (L->getLoopLatch() == BB)
-        //return LOOPLATCH;
-
-    //if (L->isLoopExiting(BB))
-        //return LOOPEXIT;
-
-    //return LOOPBODY;
-//}
 
 static const vector<BasicBlock *> functionPostorderTraversal(Function &F,
                                                              LoopInfo *LI) {
@@ -322,8 +304,6 @@ void EPPEncode::encode(Function &F) {
 
     //common::printCFG(F);
 
-    //SetVector<BasicBlock *> BackedgeTargets;
-    //BasicBlock *LastTopoExit = nullptr;
     auto POB = functionPostorderTraversal(F, LI);
     auto Entry = POB.back(), Exit = POB.front();
     auto BackEdges = common::getBackEdges(F);
@@ -359,9 +339,6 @@ void EPPEncode::encode(Function &F) {
     // Add all fake edges for loops
 
     typedef pair<BasicBlock *, BasicBlock *> Key;
-    //auto PairCmp = [](const Key &A, const Key &B) -> bool {
-        //return A.first < B.first || (A.first == B.first && A.second < B.second);
-    //};
     SetVector<Key> ExitEdges; 
 
     for(auto &L : Loops) {

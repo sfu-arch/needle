@@ -78,18 +78,6 @@ static bool isFunctionExiting(BasicBlock *BB) {
     return false;
 }
 
-//static BasicBlock *SplitEdgeWrapper(BasicBlock *Src, BasicBlock *Tgt,
-                                    //ModulePass *Ptr) {
-    //for (auto S = succ_begin(Src), E = succ_end(Src); S != E; S++)
-        //if (*S == Tgt)
-            //return SplitEdge(Src, Tgt, Ptr);
-
-    //errs() << "Src : " << Src->getName() << "\n"
-           //<< "Tgt : " << Tgt->getName() << "\n";
-
-    //assert(false && "SplitEdge bug not solved by MST optimization");
-//}
-
 void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     Module *M = F.getParent();
     auto &context = M->getContext();
@@ -157,16 +145,6 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     unordered_map<Loop *, pair<APInt, APInt>> LatchMap;
     unordered_map<Loop *, pair<BasicBlock*, APInt>> InMap;
 
-    //typedef pair<const BasicBlock *, const BasicBlock *> Key;
-    //typedef pair<APInt, APInt> Val;
-    //auto PairCmp = [](const Key &A, const Key &B) -> bool {
-        //return A.first < B.first || (A.first == B.first && A.second < B.second);
-    //};
-    //typedef map<Key, Val, decltype(PairCmp)> ExitEdgeData; 
-
-    //unordered_map<Loop *, shared_ptr<ExitEdgeData>> OutMap;
-    
-    //typedef tuple<BasicBlock*, BasicBlock*, APInt, APInt> ExitEdgeData;
     typedef pair<BasicBlock *, BasicBlock *> Key;
     typedef pair<APInt, APInt> Val;
     auto PairCmp = [](const Key &A, const Key &B) -> bool {
@@ -304,7 +282,6 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         if (isFunctionExiting(&BB))
             InsertLogPath(&BB);
 
-    //common::printCFG(F);
 }
 
 char EPPProfile::ID = 0;
