@@ -54,16 +54,14 @@ struct EPPEncode : public llvm::FunctionPass {
     static char ID;
 
     llvm::LoopInfo *LI;
-    uint64_t selfLoopCounter;
     llvm::DenseMap<llvm::BasicBlock *, llvm::APInt> numPaths;
-    llvm::DenseMap<uint64_t, llvm::BasicBlock *> selfLoopMap;
     std::unordered_map<std::shared_ptr<Edge>, llvm::APInt> Val;
     std::unordered_map<std::shared_ptr<Edge>, llvm::APInt> Inc;
 
-    EPPEncode() : llvm::FunctionPass(ID), LI(nullptr), selfLoopCounter(0) {}
+    EPPEncode() : llvm::FunctionPass(ID), LI(nullptr) {}
 
     virtual void getAnalysisUsage(llvm::AnalysisUsage &au) const override {
-        au.addRequired<llvm::LoopInfo>();
+        au.addRequired<llvm::LoopInfoWrapperPass>();
         au.setPreservesAll();
     }
 
@@ -79,6 +77,22 @@ struct EPPEncode : public llvm::FunctionPass {
     }
 };
 
-}
+typedef std::pair<llvm::BasicBlock*, EdgeType> BlockEdgeTy;
 
+struct BlockEdgeTyKeyInfo {
+    static inline BlockEdgeTy getEmptyKey() {
+        return std::make_pair(nullptr,EHEAD);
+    }
+    static inline BlockEdgeTy getTombstoneKey() {
+        return std::make_pair(nullptr,EOUT);
+    }
+    static unsigned getHashValue(const BlockEdgeTy &Key) {
+        return static_cast<unsigned>(hash_value(Key));
+    }
+    static bool isEqual(const BlockEdgeTy &LHS, 
+            const BlockEdgeTy &RHS) {
+        return LHS.first == RHS.first && LHS.second == RHS.second;
+    }
+};
+}
 #endif

@@ -28,12 +28,15 @@ using namespace epp;
 using namespace std;
 
 
+typedef pair<BasicBlock*, EdgeType> AltTgtTy;
+typedef SetVector<AltTgtTy, vector<AltTgtTy>, 
+        DenseSet<AltTgtTy, BlockEdgeTyKeyInfo>> SuccListTy;                        
+typedef MapVector<BasicBlock *, SuccListTy> AltCFGTy;
+
 bool EPPEncode::doInitialization(Module &m) { return false; }
-
 bool EPPEncode::doFinalization(Module &m) { return false; }
-
 bool EPPEncode::runOnFunction(Function &func) {
-    LI = &getAnalysis<LoopInfo>();
+    LI = &getAnalysis<LoopInfoWrapperPass>(func).getLoopInfo();
     encode(func);
     return false;
 }
@@ -141,7 +144,7 @@ findEdgeInVal(const BasicBlock *Src, const BasicBlock *Tgt, const EdgeType Ty,
 static void
 spanningHelper(BasicBlock *toVisit, set<shared_ptr<Edge>> &ST,
                       DenseSet<BasicBlock *> &Seen,
-                      MapVector<BasicBlock *, SetVector<pair<BasicBlock*, EdgeType>>> &AltCFG,
+                      AltCFGTy &AltCFG,
                       const unordered_map<shared_ptr<Edge>, llvm::APInt> &Val) {
     Seen.insert(toVisit);
     auto &SV = AltCFG[toVisit];
@@ -156,8 +159,8 @@ spanningHelper(BasicBlock *toVisit, set<shared_ptr<Edge>> &ST,
 }
 
 static set<shared_ptr<Edge>>
-getSpanningTree(MapVector<BasicBlock *, SetVector<pair<BasicBlock*, EdgeType>>> &AltCFG,
-                      const unordered_map<shared_ptr<Edge>, llvm::APInt> &Val) {
+getSpanningTree(AltCFGTy &AltCFG,
+                const unordered_map<shared_ptr<Edge>, llvm::APInt> &Val) {
     set<shared_ptr<Edge>> SpanningTree;
     DenseSet<BasicBlock *> Seen;
    
@@ -267,7 +270,7 @@ void EPPEncode::releaseMemory() {
     numPaths.clear();
     Val.clear();
     Inc.clear();
-    selfLoopCounter = 0;
+    //selfLoopCounter = 0;
 }
 
 
@@ -288,11 +291,11 @@ void EPPEncode::encode(Function &F) {
     //    exit target block.
     // There can be only one edge for each Src->Tgt so we use a SetVector
     // instead of a SmallVector.
-    MapVector<BasicBlock *, SetVector<pair<BasicBlock*, EdgeType>>> AltCFG;                        
+    AltCFGTy AltCFG;                        
 
     // Add real edges
     for(auto &BB : POB) {
-        AltCFG.insert(make_pair(BB, SetVector<pair<BasicBlock*, EdgeType>>()));
+        AltCFG.insert(make_pair(BB, SuccListTy()));
         for(auto S = succ_begin(BB), E = succ_end(BB); S != E; S++) {
             if(BackEdges.count(make_pair(BB, *S)) || 
                     LI->getLoopFor(BB) != LI->getLoopFor(*S)) {

@@ -56,7 +56,7 @@ bool EPPProfile::runOnModule(Module &module) {
 
     for (auto &func : module) {
         if (isTargetFunction(func, FunctionList)) {
-            LI = &getAnalysis<LoopInfo>(func);
+            LI = &getAnalysis<LoopInfoWrapperPass>(func).getLoopInfo();
             auto &enc = getAnalysis<EPPEncode>(func);
             assert(!hasRecursiveCall(func) &&
                    "Pathprofiling is not implemented for recursive functions");
@@ -271,7 +271,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         auto *Src = KV.first.first, *Tgt = KV.first.second;
         auto A = KV.second.first, B = KV.second.second;
         auto *N = interpose(Src, Tgt);
-        InsertInc(N->getFirstInsertionPt(), A + BackVal);
+        InsertInc(N->getTerminator(), A + BackVal);
         InsertLogPath(N);
         InsertInc(N->getTerminator(), B);
     }

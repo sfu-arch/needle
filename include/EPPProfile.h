@@ -15,7 +15,7 @@ struct EPPProfile : public llvm::ModulePass {
     EPPProfile() : llvm::ModulePass(ID), LI(nullptr) {}
 
     virtual void getAnalysisUsage(llvm::AnalysisUsage &au) const override {
-        au.addRequired<llvm::LoopInfo>();
+        au.addRequired<llvm::LoopInfoWrapperPass>();
         au.addRequired<EPPEncode>();
     }
 
