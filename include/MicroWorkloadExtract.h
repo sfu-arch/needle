@@ -84,7 +84,7 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
     virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
         AU.addRequired<llvm::AliasAnalysis>();
         AU.addRequired<llvm::DominatorTreeWrapperPass>();
-        AU.addRequired<llvm::LoopInfo>();
+        AU.addRequired<llvm::LoopInfoWrapperPass>();
         AU.addRequired<llvm::PostDominatorTree>();
     }
 };

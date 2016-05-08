@@ -21,7 +21,6 @@ using namespace std;
 
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &, const cl::list<std::string> &);
-
 extern cl::opt<std::string> profile;
 //extern cl::opt<std::string> selfloop;
 
@@ -38,8 +37,10 @@ struct Path {
     APInt id;
     uint64_t count;
 
-    bool operator<(const Path &other) const { return count < other.count; }
-    // Path() : Func(nullptr), id(APInt(128, 0, true)), count(0) {}
+    bool operator<(const Path &other) const { 
+        return (count < other.count) || 
+            (count == other.count && id.ule(other.id));
+    }
 };
 
 static bool isFunctionExiting(BasicBlock *BB) {
@@ -90,11 +91,10 @@ void printPathSrc(std::vector<llvm::BasicBlock *> &blocks) {
             if (!n) {
                 continue;
             }
-
-            DILocation loc(n);
-            if (loc.getLineNumber() != line || loc.getFilename() != file) {
-                line = loc.getLineNumber();
-                file = loc.getFilename();
+            DebugLoc Loc(n);
+            if (Loc->getLine() != line || Loc->getFilename() != file) {
+                line = Loc->getLine();
+                file = Loc->getFilename();
                 DEBUG(errs() << "File " << file.str() << " line " << line << "\n");
                 // break; // FIXME : This makes it only print once for each BB,
                 // remove to print all

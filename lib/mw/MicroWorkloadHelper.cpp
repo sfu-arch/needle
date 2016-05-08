@@ -2,7 +2,7 @@
 #include <boost/algorithm/string.hpp>
 #include "llvm/Transforms/Utils/CodeExtractor.h"
 #include "llvm/IR/Verifier.h"
-#include "llvm/PassManager.h"
+#include "llvm/IR/PassManager.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/Transforms/Utils/Cloning.h"
@@ -53,7 +53,7 @@ static bool replaceGuardsHelper(Function &F, BasicBlock *RetBlock, Pass *P) {
                     // Arg 1 : The dominant side of the branch (true or false)
                     Value *Arg0 = CI->getArgOperand(0);
                     auto *Arg1 = cast<ConstantInt>(CI->getArgOperand(1));
-                    auto *NewBlock = SplitBlock(&BB, CI, P);
+                    auto *NewBlock = SplitBlock(&BB, CI);
                     CI->eraseFromParent();
                     BB.getTerminator()->eraseFromParent();
                     if (Arg1->isOne()) {
@@ -96,7 +96,8 @@ void MicroWorkloadHelper::addUndoLog() {
 
     auto isAliasingStore = [&AA, &Stores](StoreInst *SI) -> bool {
         for (auto &S : Stores) {
-            if (AA.isMustAlias(AA.getLocation(SI), AA.getLocation(S)))
+            //if (AA.isMustAlias(AA.getLocation(SI), AA.getLocation(S)))
+            if (AA.isMustAlias(MemoryLocation::get(SI), MemoryLocation::get(S)))
                 return true;
         }
         return false;
@@ -147,7 +148,7 @@ void MicroWorkloadHelper::addUndoLog() {
         Idx[1] = ConstantInt::get(Type::getInt32Ty(Ctx), LogIndex * 8);
         LogIndex++;
         GetElementPtrInst *AddrGEP =
-            GetElementPtrInst::Create(ULog, Idx, "", SI);
+            GetElementPtrInst::Create(ULog->getType(), ULog, Idx, "", SI);
         auto *AddrCast = new PtrToIntInst(Ptr, Int64Ty, "", SI);
         auto *AddrBI =
             new BitCastInst(AddrGEP, PointerType::getInt64PtrTy(Ctx), "", SI);
@@ -156,7 +157,7 @@ void MicroWorkloadHelper::addUndoLog() {
         Idx[1] = ConstantInt::get(Type::getInt32Ty(Ctx), LogIndex * 8);
         LogIndex++;
         GetElementPtrInst *ValGEP =
-            GetElementPtrInst::Create(ULog, Idx, "", SI);
+            GetElementPtrInst::Create(ULog->getType(), ULog, Idx, "", SI);
         auto *ValBI =
             new BitCastInst(ValGEP, PointerType::get(LI->getType(), 0), "", SI);
         new StoreInst(LI, ValBI, false, SI);
@@ -174,7 +175,7 @@ void MicroWorkloadHelper::addUndoLog() {
     auto *Memset = Intrinsic::getDeclaration(Mod, Intrinsic::memset, Tys);
     auto *Zero = ConstantInt::get(Int64Ty, 0, false);
     Idx[1] = Zero;
-    auto *UGEP = GetElementPtrInst::Create(
+    auto *UGEP = GetElementPtrInst::Create(ULog->getType(),
         ULog, Idx, "", Offload->getEntryBlock().getFirstNonPHI());
     Value *Params[] = {
         UGEP, ConstantInt::get(Int8Ty, 0, false),
@@ -213,7 +214,6 @@ bool MicroWorkloadHelper::runOnModule(Module &M) {
 }
 
 bool MicroWorkloadHelper::doInitialization(Module &M) { return false; }
-
 bool MicroWorkloadHelper::doFinalization(Module &M) { return false; }
 
 char MicroWorkloadHelper::ID = 0;
