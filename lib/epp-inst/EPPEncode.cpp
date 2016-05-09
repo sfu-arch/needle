@@ -36,7 +36,7 @@ typedef MapVector<BasicBlock *, SuccListTy> AltCFGTy;
 bool EPPEncode::doInitialization(Module &m) { return false; }
 bool EPPEncode::doFinalization(Module &m) { return false; }
 bool EPPEncode::runOnFunction(Function &func) {
-    LI = &getAnalysis<LoopInfoWrapperPass>(func).getLoopInfo();
+    LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
     encode(func);
     return false;
 }
