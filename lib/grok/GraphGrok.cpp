@@ -4,7 +4,8 @@
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/Utils/CodeExtractor.h"
 #include "llvm/IR/Verifier.h"
-#include "llvm/PassManager.h"
+#include "llvm/IR/PassManager.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include <boost/graph/breadth_first_search.hpp>
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/Transforms/Utils/Cloning.h"
@@ -555,7 +556,7 @@ static void liveInHelper(Path &P, Value *Val) {
     // in the trace.
 }
 
-static void liveInLiveOut(PostDominatorTree *PostDomTree, AliasAnalysis *AA,
+static void liveInLiveOut(PostDominatorTree *PostDomTree, AAResults *AA,
                           Path &P, BoostGraph &BG,
                           map<string, BasicBlock *> &BlockMap, ofstream &Out) {
     map<Instruction *, Vertex> InsVertexMap;
@@ -656,15 +657,15 @@ static void liveInLiveOut(PostDominatorTree *PostDomTree, AliasAnalysis *AA,
     Out << "\"mem_live_out\" : " << P.MemOut.size() << ",\n";
 
     // Use alias analysis to reduce mem_live_in / mem_live_out count
-    vector<AliasAnalysis::Location> LiveInLocations(P.MemIn.size());
-    vector<AliasAnalysis::Location> LiveOutLocations(P.MemOut.size());
+    vector<MemoryLocation> LiveInLocations(P.MemIn.size());
+    vector<MemoryLocation> LiveOutLocations(P.MemOut.size());
 
     // Too bad we don't have polymorphic lambdas in c++11
-    auto ToLocation = [&AA](const Value *Ins) -> AliasAnalysis::Location {
+    auto ToLocation = [&AA](const Value *Ins) -> MemoryLocation {
         if (auto LI = dyn_cast<LoadInst>(Ins))
-            return AA->getLocation(LI);
+            return MemoryLocation::get(LI);
         if (auto SI = dyn_cast<StoreInst>(Ins))
-            return AA->getLocation(SI);
+            return MemoryLocation::get(SI);
         assert(false && "Unreachable");
     };
 
@@ -674,8 +675,8 @@ static void liveInLiveOut(PostDominatorTree *PostDomTree, AliasAnalysis *AA,
               ToLocation);
 
     auto uniqueLocationCount =
-        [&AA](vector<AliasAnalysis::Location> &Locs) -> uint32_t {
-            vector<AliasAnalysis::Location> UniqueLocations;
+        [&AA](vector<MemoryLocation> &Locs) -> uint32_t {
+            vector<MemoryLocation> UniqueLocations;
             for (auto &L : Locs) {
                 bool Found = false;
                 for (auto &M : UniqueLocations) {
@@ -1229,9 +1230,8 @@ void traceHelper(Function *TraceFunc, Function *GuardFunc,
 
     // Add store instructions to write live-outs to
     // the char array.
-    assert(P.LiveOut.size() < INT32_MAX && "Very large number of live outs");
 
-    const DataLayout *DL = TraceFunc->getParent()->getDataLayout();
+    const DataLayout *DL = &TraceFunc->getParent()->getDataLayout();
     int32_t OutIndex = 0;
     auto Int32Ty = IntegerType::getInt32Ty(Context);
     ConstantInt *Zero = ConstantInt::get(Int32Ty, 0);
@@ -1244,8 +1244,8 @@ void traceHelper(Function *TraceFunc, Function *GuardFunc,
         }
         ConstantInt *Index = ConstantInt::get(Int32Ty, OutIndex);
         Value *GEPIndices[] = {Zero, Index};
-        auto *GEP = GetElementPtrInst::Create(LiveOutArray, GEPIndices, "idx",
-                                              TraceBlock);
+        auto *GEP = GetElementPtrInst::Create(LiveOutArray->getType(), 
+                LiveOutArray, GEPIndices, "idx", TraceBlock);
         BitCastInst *BC = new BitCastInst(
             GEP, PointerType::get(LO->getType(), 0), "cast", TraceBlock);
         new StoreInst(LO, BC, false, TraceBlock);
@@ -1257,7 +1257,7 @@ void traceHelper(Function *TraceFunc, Function *GuardFunc,
     Value *RewriteVal = nullptr;
 
     for (auto Val : P.LiveIn) {
-        RewriteVal = AI++;
+        RewriteVal = &*AI++;
         std::vector<User *> Users(Val->user_begin(), Val->user_end());
         for (std::vector<User *>::iterator use = Users.begin(),
                                            useE = Users.end();
@@ -1530,7 +1530,7 @@ static void generateChainsTxt(const BoostGraph &BG) {
 static void generateTraceFromPath(Path &P, BoostGraph &BG,
                                   map<string, BasicBlock *> &BlockMap) {
     auto BB = (*BlockMap.begin()).second;
-    auto DataLayoutStr = BB->getDataLayout();
+    auto DataLayoutStr = BB->getModule()->getDataLayout();
     auto TargetTripleStr = BB->getParent()->getParent()->getTargetTriple();
 
     DEBUG(errs() << "Generating Trace " << P.Id << "\n");
@@ -1564,7 +1564,7 @@ static void generateTraceFromPath(Path &P, BoostGraph &BG,
 
     // Create the Output Array as a global variable
     uint32_t LiveOutSize = 0;
-    const DataLayout *DL = Mod->getDataLayout();
+    const DataLayout *DL = &Mod->getDataLayout();
     for_each(P.LiveOut.begin(), P.LiveOut.end(),
              [&LiveOutSize, &DL](const Value *Val) {
                  LiveOutSize += DL->getTypeStoreSize(Val->getType());
@@ -1612,7 +1612,7 @@ static void generateTraceFromPath(Path &P, BoostGraph &BG,
     PMB.OptLevel = 3;
     PMB.SLPVectorize = true;
     PMB.BBVectorize = true;
-    PassManager PM;
+    legacy::PassManager PM;
     PMB.populateModulePassManager(PM);
     PM.run(*Mod);
 
@@ -1886,7 +1886,7 @@ void staticHelper(
     AI = StaticFunc->arg_begin();
     // Patch instructions to arguments,
     for (auto Val : LiveIn) {
-        Value *RewriteVal = AI++;
+        Value *RewriteVal = &*AI++;
         rewriteUses(Val, RewriteVal);
     }
 
@@ -2132,7 +2132,7 @@ void staticHelper(
 
     // Add store instructions to write live-outs to
     // the char array.
-    const DataLayout *DL = StaticFunc->getParent()->getDataLayout();
+    const DataLayout *DL = &StaticFunc->getParent()->getDataLayout();
     int32_t OutIndex = 0;
     auto Int32Ty = IntegerType::getInt32Ty(Context);
     ConstantInt *Zero = ConstantInt::get(Int32Ty, 0);
@@ -2147,7 +2147,7 @@ void staticHelper(
             auto *Block = cast<Instruction>(LO)->getParent();
             ConstantInt *Index = ConstantInt::get(Int32Ty, OutIndex);
             Value *GEPIndices[] = {Zero, Index};
-            auto *GEP = GetElementPtrInst::Create(LOA, GEPIndices, "idx",
+            auto *GEP = GetElementPtrInst::Create(LOA->getType(), LOA, GEPIndices, "idx",
                                                   Block->getTerminator());
             BitCastInst *BC =
                 new BitCastInst(GEP, PointerType::get(LO->getType(), 0), "cast",
@@ -2238,7 +2238,7 @@ static void generateStaticGraphFromPath(const Path &P,
     bool isGood = verifyChop(Chop);
     StatsFile << "\"valid\" : " << (isGood ? "true,\n" : "false,\n");
 
-    auto DataLayoutStr = StartBB->getDataLayout();
+    auto DataLayoutStr = StartBB->getModule()->getDataLayout();
     auto TargetTripleStr = StartBB->getParent()->getParent()->getTargetTriple();
 
     Module *Mod = new Module(P.Id + string("-static"), getGlobalContext());
@@ -2391,7 +2391,7 @@ static void generateStaticGraphFromPath(const Path &P,
 
     // // Create the Output Array as a global variable
     uint32_t LiveOutSize = 0;
-    const DataLayout *DL = Mod->getDataLayout();
+    const DataLayout *DL = &Mod->getDataLayout();
     for_each(LiveOut.begin(), LiveOut.end(),
              [&LiveOutSize, &DL](const Value *Val) {
                  LiveOutSize += DL->getTypeStoreSize(Val->getType());
@@ -2424,7 +2424,7 @@ static void generateStaticGraphFromPath(const Path &P,
     PMB.OptLevel = 3;
     PMB.SLPVectorize = false;
     PMB.BBVectorize = false;
-    PassManager PM;
+    legacy::PassManager PM;
     PMB.populateModulePassManager(PM);
     PM.run(*Mod);
 
@@ -2442,7 +2442,7 @@ static void generateStaticGraphFromPath(const Path &P,
 
 void GraphGrok::makeSeqGraph(Function &F) {
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
-    AA = &getAnalysis<AliasAnalysis>();
+    auto &AA = getAnalysis<AAResultsWrapperPass>().getAAResults();
 
     map<string, BasicBlock *> BlockMap;
 
@@ -2541,7 +2541,7 @@ void GraphGrok::makeSeqGraph(Function &F) {
         // not generating IR will
         // break after removing these operations.
         if (GenerateTrace == "unset") {
-            liveInLiveOut(PostDomTree, AA, P, SeqChain, BlockMap, StatsFile);
+            liveInLiveOut(PostDomTree, &AA, P, SeqChain, BlockMap, StatsFile);
             removePHI(P, SeqChain, BlockMap, StatsFile);
             removeConvert(P, SeqChain, BlockMap, StatsFile);
             separateBranches(P, SeqChain, BlockMap, StatsFile);
@@ -2566,7 +2566,7 @@ void GraphGrok::makeSeqGraph(Function &F) {
             writeGraph(P, SeqChain, string("post"));
             StatsFile << "\"end\" : \"end\" }";
         } else if (GenerateTrace == "dynamic") {
-            liveInLiveOut(PostDomTree, AA, P, SeqChain, BlockMap, StatsFile);
+            liveInLiveOut(PostDomTree, &AA, P, SeqChain, BlockMap, StatsFile);
             removePHI(P, SeqChain, BlockMap, StatsFile);
             // writeGraph(P, SeqChain, string("phi"));
             // Need to label the graph, since we want to

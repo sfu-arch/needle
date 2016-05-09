@@ -1,6 +1,5 @@
+#define DEBUG_TYPE "pasha_inliner"
 #include "AllInliner.h"
-
-#define DEBUG_TYPE "inline"
 
 using namespace llvm;
 using namespace epp;
@@ -14,7 +13,7 @@ InlineCost PeruseInliner::getInlineCost(CallSite CS) {
     if (Callee && !Callee->isDeclaration() &&
         isTargetFunction(*(CS.getInstruction()->getParent()->getParent()),
                          FunctionList) &&
-        ICA->isInlineViable(*Callee)) {
+        llvm::isInlineViable(*Callee)) {
         InlineStats
             << "Parent: "
             << CS.getInstruction()->getParent()->getParent()->getName().str()

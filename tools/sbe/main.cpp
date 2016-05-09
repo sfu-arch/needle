@@ -9,7 +9,7 @@
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/PassManager.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Pass.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/IR/Verifier.h"
@@ -18,9 +18,11 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetLibraryInfo.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Analysis/BasicAliasAnalysis.h"
+#include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 
 #include <string>
 #include <thread>
@@ -89,18 +91,18 @@ int main(int argc, char **argv, const char **env) {
     common::lowerSwitch(*module, FunctionList[0]);
     common::breakCritEdges(*module, FunctionList[0]);
 
-    PassManager pm;
-    pm.add(new DataLayoutPass());
+    legacy::PassManager pm;
+    //pm.add(new DataLayoutPass());
     pm.add(new llvm::AssumptionCacheTracker());
     pm.add(createLoopSimplifyPass());
-    pm.add(createBasicAliasAnalysisPass());
-    pm.add(createTypeBasedAliasAnalysisPass());
-    pm.add(new LoopInfo());
+    pm.add(createBasicAAWrapperPass());
+    pm.add(createTypeBasedAAWrapperPass());
+    pm.add(new LoopInfoWrapperPass());
     pm.add(new llvm::CallGraphWrapperPass());
     pm.add(new epp::PeruseInliner());
     pm.add(new epp::Namer());
     pm.add(new pasha::LoopConverter());
-    pm.add(new LoopInfo());
+    pm.add(new LoopInfoWrapperPass());
     pm.add(new sb::Superblocks(SeqFilePath));
     pm.add(createVerifierPass());
     pm.run(*module);

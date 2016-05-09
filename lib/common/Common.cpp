@@ -16,7 +16,7 @@
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Linker/Linker.h"
 #include "llvm/MC/SubtargetFeature.h"
-#include "llvm/PassManager.h"
+#include "llvm/IR/PassManager.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/Pass.h"
@@ -36,7 +36,7 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetLibraryInfo.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Linker/Linker.h"
@@ -90,47 +90,46 @@ void compile(Module &m, string outputPath, char optLevel) {
                                     options, RelocModel, CMModel, level));
     assert(machine.get() && "Could not allocate target machine!");
 
-    if (GenerateSoftFloatCalls) {
-        FloatABIForCalls = FloatABI::Soft;
+    if (FloatABIForCalls != FloatABI::Default) {
+        options.FloatABIType = FloatABI::Soft;
     }
 
     error_code EC;
-    auto out = ::make_unique<tool_output_file>(outputPath.c_str(), EC,
+    auto Out = ::make_unique<tool_output_file>(outputPath.c_str(), EC,
                                                sys::fs::F_None);
     if (EC) {
         report_fatal_error("Unable to create file:\n " + EC.message());
     }
 
     // Build up all of the passes that we want to do to the module.
-    PassManager pm;
+    legacy::PassManager pm;
 
     // Add target specific info and transforms
-    pm.add(new TargetLibraryInfo(triple));
-    machine->addAnalysisPasses(pm);
+    pm.add(new TargetLibraryInfoWrapperPass(triple));
+    //machine->addAnalysisPasses(pm);
 
     // if (const DataLayout *dl = machine->createDataLayout()) {
     //      m.setDataLayout(dl);
     // }
-    pm.add(new DataLayoutPass());
+    m.setDataLayout(machine->createDataLayout());
 
     { // Bound this scope
-        formatted_raw_ostream fos(out->os());
-
+        //formatted_raw_ostream fos(out->os());
+        raw_pwrite_stream *OS = &Out->os();
         FileType = TargetMachine::CGFT_ObjectFile;
         // Ask the target to add backend passes as necessary.
-        if (machine->addPassesToEmitFile(pm, fos, FileType)) {
+        if (machine->addPassesToEmitFile(pm, *OS, FileType)) {
             report_fatal_error("target does not support generation "
                                "of this file type!\n");
         }
 
         // Before executing passes, print the final values of the LLVM options.
         cl::PrintOptionValues();
-
         pm.run(m);
     }
 
     // Keep the output binary if we've been successful to this point.
-    out->keep();
+    Out->keep();
 }
 
 void link(const string &objectFile, const string &outputFile, char optLevel,
@@ -217,7 +216,7 @@ void optimizeModule(Module *Mod) {
     PMB.OptLevel = 2;
     PMB.SLPVectorize = false;
     PMB.BBVectorize = false;
-    PassManager PM;
+    legacy::PassManager PM;
     PMB.populateModulePassManager(PM);
     PM.run(*Mod);
 }

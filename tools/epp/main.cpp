@@ -13,7 +13,7 @@
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Linker/Linker.h"
 #include "llvm/MC/SubtargetFeature.h"
-#include "llvm/PassManager.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileUtilities.h"
@@ -30,10 +30,12 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetLibraryInfo.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Linker/Linker.h"
+#include "llvm/Analysis/BasicAliasAnalysis.h"
+#include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/LoopInfo.h"
@@ -106,17 +108,17 @@ bool isTargetFunction(const Function &f,
 
 static void instrumentModule(Module &module, std::string, const char *argv0) {
     // Build up all of the passes that we want to run on the module.
-    PassManager pm;
-    pm.add(new DataLayoutPass());
+    legacy::PassManager pm;
+    //pm.add(new DataLayoutWrapperPass());
     pm.add(new llvm::AssumptionCacheTracker());
     pm.add(createLoopSimplifyPass());
-    pm.add(createBasicAliasAnalysisPass());
-    pm.add(createTypeBasedAliasAnalysisPass());
+    pm.add(llvm::createBasicAAWrapperPass());
+    pm.add(createTypeBasedAAWrapperPass());
     pm.add(new llvm::CallGraphWrapperPass());
     pm.add(new epp::PeruseInliner());
     pm.add(new epp::Namer());
     pm.add(new pasha::LoopConverter());
-    pm.add(new LoopInfo());
+    pm.add(new LoopInfoWrapperPass());
     pm.add(new epp::EPPProfile());
     pm.add(createVerifierPass());
     pm.run(module);
@@ -150,17 +152,17 @@ static void interpretResults(Module &module, std::string filename) {
     // for some obscure function in 403.gcc. So here I
     // only run it for my function of interest.
 
-    PassManager pm;
-    pm.add(new DataLayoutPass());
+    legacy::PassManager pm;
+    //pm.add(new DataLayoutPass());
     pm.add(new llvm::AssumptionCacheTracker());
     pm.add(createLoopSimplifyPass());
-    pm.add(createBasicAliasAnalysisPass());
-    pm.add(createTypeBasedAliasAnalysisPass());
+    pm.add(createBasicAAWrapperPass());
+    pm.add(createTypeBasedAAWrapperPass());
     pm.add(new llvm::CallGraphWrapperPass());
     pm.add(new epp::PeruseInliner());
     pm.add(new epp::Namer());
     pm.add(new pasha::LoopConverter());
-    pm.add(new LoopInfo());
+    pm.add(new LoopInfoWrapperPass());
     pm.add(new epp::EPPDecode());
     pm.add(createVerifierPass());
     pm.run(module);
@@ -195,17 +197,18 @@ int main(int argc, char **argv, const char **env) {
     }
 
     // Merge all the modules provided in the command line
-    Linker LK(module.get());
-    for (auto &P : linkM) {
-        unique_ptr<Module> L = parseIRFile(P, err, context);
-        if (L.get()) {
-            if (LK.linkInModule(L.get())) {
-                errs() << "Error linking module : " << P << "\n";
-            }
-        } else {
-            errs() << "Error reading bitcode to link : " << P << "\n";
-        }
-    }
+    // FIXME
+    //Linker LK(module.get());
+    //for (auto &P : linkM) {
+        //unique_ptr<Module> L = parseIRFile(P, err, context);
+        //if (L.get()) {
+            //if (LK.linkInModule(L.get())) {
+                //errs() << "Error linking module : " << P << "\n";
+            //}
+        //} else {
+            //errs() << "Error reading bitcode to link : " << P << "\n";
+        //}
+    //}
 
     common::optimizeModule(module.get());
     common::lowerSwitch(*module, FunctionList[0]);

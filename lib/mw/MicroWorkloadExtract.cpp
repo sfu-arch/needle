@@ -3,7 +3,7 @@
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/Utils/CodeExtractor.h"
 #include "llvm/IR/Verifier.h"
-#include "llvm/IR/PassManager.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/Transforms/Utils/Cloning.h"
@@ -1223,17 +1223,17 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
 
 static void runHelperPasses(Function *Offload, Function *Undo,
                             Module *Generated) {
-    ModulePassManager PM;
-    PM.addPass(createBasicAAWrapperPass());
-    PM.addPass(llvm::createTypeBasedAAWrapperPass());
-    PM.addPass(new MicroWorkloadHelper(Offload, Undo));
+    legacy::PassManager PM;
+    PM.add(createBasicAAWrapperPass());
+    PM.add(llvm::createTypeBasedAAWrapperPass());
+    PM.add(new MicroWorkloadHelper(Offload, Undo));
     PM.run(*Generated);
 }
 
 void MicroWorkloadExtract::process(Function &F) {
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
     auto *DT = &getAnalysis<DominatorTreeWrapperPass>(F).getDomTree();
-    auto *LI = &getAnalysis<LoopInfo>(F);
+    auto *LI = &getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
 
     map<string, BasicBlock *> BlockMap;
     for (auto &BB : F)
@@ -1260,21 +1260,22 @@ void MicroWorkloadExtract::process(Function &F) {
                    P.PType);
 
         Module *Composite = new Module(P.Id, getGlobalContext());
-        Linker L(Composite);
-        L.linkInModule(F.getParent());
-        L.linkInModule(UndoMod);
-        L.linkInModule(Mod);
+        // FIXME :
+        //Linker L(Composite);
+        //L.linkInModule(F.getParent());
+        //L.linkInModule(UndoMod);
+        //L.linkInModule(Mod);
 
-        StripDebugInfo(*Composite);
-        writeModule(Mod, (P.Id) + string(".ll"));
-        writeModule(Composite, string("app.inst.ll"));
-        assert(!verifyModule(*Composite, &errs()) &&
-               "Module verification failed!");
+        //StripDebugInfo(*Composite);
+        //writeModule(Mod, (P.Id) + string(".ll"));
+        //writeModule(Composite, string("app.inst.ll"));
+        //assert(!verifyModule(*Composite, &errs()) &&
+               //"Module verification failed!");
 
-        // Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);
+        //// Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);
 
-        common::generateBinary(*Composite, outFile, optLevel, libPaths,
-                               libraries);
+        //common::generateBinary(*Composite, outFile, optLevel, libPaths,
+                               //libraries);
 
         delete Mod;
         delete Composite;

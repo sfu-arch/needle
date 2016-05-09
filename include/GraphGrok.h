@@ -119,7 +119,7 @@ struct GraphGrok : public llvm::ModulePass {
                         std::map<std::string, llvm::BasicBlock *> &BlockMap);
 
     virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
-        AU.addRequired<llvm::AliasAnalysis>();
+        AU.addRequired<llvm::AAResultsWrapperPass>();
         AU.addRequired<llvm::DominatorTreeWrapperPass>();
         AU.addRequired<llvm::PostDominatorTree>();
         AU.setPreservesAll();

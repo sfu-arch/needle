@@ -70,7 +70,7 @@ struct Superblocks : public llvm::ModulePass {
         llvm::DenseSet<std::pair<const llvm::BasicBlock *, const llvm::BasicBlock *>>& BackEdges);
 
     virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
-        AU.addRequired<llvm::LoopInfo>();
+        AU.addRequired<llvm::LoopInfoWrapperPass>();
         AU.setPreservesAll();
     }
 };

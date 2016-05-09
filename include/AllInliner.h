@@ -23,15 +23,12 @@ using namespace llvm;
 namespace epp {
 struct PeruseInliner : public Inliner {
     static char ID;
-    InlineCostAnalysis *ICA;
 
   public:
     PeruseInliner() : Inliner(ID, -2000000000, true) {
-        ICA = new InlineCostAnalysis();    
     }
 
     ~PeruseInliner() {
-        delete ICA;
     }
 
     std::ofstream InlineStats;

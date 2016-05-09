@@ -1,7 +1,8 @@
+#define DEBUG_TYPE "pasha_superblock"
 #include "Superblocks.h"
 #include <boost/algorithm/string.hpp>
 #include "llvm/IR/Verifier.h"
-#include "llvm/PassManager.h"
+#include "llvm/IR/PassManager.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/Transforms/Utils/Cloning.h"
@@ -18,7 +19,6 @@
 #include <fstream>
 #include "Common.h"
 
-#define DEBUG_TYPE "pasha_sb"
 
 using namespace llvm;
 using namespace sb;
@@ -128,12 +128,11 @@ void printPathSrc(SmallVector<llvm::BasicBlock *, 8> &blocks) {
             if (!n) {
                 continue;
             }
-
-            DILocation loc(n);
-            if (loc.getLineNumber() != line || loc.getFilename() != file) {
-                line = loc.getLineNumber();
-                file = loc.getFilename();
-                errs() << "File " << file.str() << " line " << line << "\n";
+            DebugLoc Loc(n);
+            if (Loc->getLine() != line || Loc->getFilename() != file) {
+                line = Loc->getLine();
+                file = Loc->getFilename();
+                DEBUG(errs() << "File " << file.str() << " line " << line << "\n");
                 // break; // FIXME : This makes it only print once for each BB,
                 // remove to print all
                 // source lines per instruction.
@@ -152,7 +151,7 @@ void Superblocks::process(Function &F) {
     auto BackEdges = common::getBackEdges(&F.getEntryBlock());
 
     SmallVector<SmallVector<BasicBlock *, 8>, 32> Superblocks;
-    LoopInfo &LI = getAnalysis<LoopInfo>(F);
+    LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
     vector<Loop *> InnerLoops = getInnermostLoops(LI);
     DEBUG(errs() << "Num Loops: " << InnerLoops.size() << "\n");
     for (auto &L : InnerLoops) {
