@@ -92,7 +92,7 @@ void MicroWorkloadHelper::addUndoLog() {
     SmallVector<StoreInst *, 16> Stores;
 
     auto TopoBlocks = getFunctionRPO(*Offload);
-    auto &AA = getAnalysis<AliasAnalysis>();
+    auto &AA = getAnalysis<AAResultsWrapperPass>().getAAResults();
 
     auto isAliasingStore = [&AA, &Stores](StoreInst *SI) -> bool {
         for (auto &S : Stores) {

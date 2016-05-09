@@ -8,6 +8,8 @@
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/BasicAliasAnalysis.h"
+#include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Dominators.h"
@@ -287,7 +289,7 @@ void MicroWorkloadExtract::extractHelper(
     AI = StaticFunc->arg_begin();
     // Patch instructions to arguments,
     for (auto Val : LiveIn) {
-        Value *RewriteVal = AI++;
+        Value *RewriteVal = &*AI++;
         rewriteUses(Val, RewriteVal);
     }
 
@@ -431,10 +433,8 @@ void MicroWorkloadExtract::extractHelper(
                 }
             } else {
                 // Trace will replace the terminator inst with a direct branch
-                // to
-                // the successor, the DCE pass will remove the comparison and
-                // the
-                // simplification with merge the basic blocks later.
+                // to the successor, the DCE pass will remove the comparison and
+                // the simplification with merge the basic blocks later.
                 if (T->getNumSuccessors() > 0) {
                     auto *SuccBB = *prev(IT);
                     vector<BasicBlock *> Succs(succ_begin(*IT), succ_end(*IT));
@@ -530,8 +530,8 @@ void MicroWorkloadExtract::extractHelper(
         assert(LO && "Live Out not remapped");
         auto *Block = cast<Instruction>(LO)->getParent();
         Idx[1] = ConstantInt::get(Type::getInt32Ty(Context), OutIndex);
-        GetElementPtrInst *StructGEP = GetElementPtrInst::Create(
-            StructPtr, Idx, "", Block->getTerminator());
+        GetElementPtrInst *StructGEP = GetElementPtrInst::Create((&*StructPtr)->getType(), 
+                &*StructPtr, Idx, "", Block->getTerminator());
         auto *SI = new StoreInst(LO, StructGEP, Block->getTerminator());
         MDNode *N = MDNode::get(Context, MDString::get(Context, "true"));
         SI->setMetadata("LO", N);
@@ -743,7 +743,7 @@ Function *MicroWorkloadExtract::extract(
         errs() << *V << "\n";
     }
 
-    auto DataLayoutStr = StartBB->getDataLayout();
+    auto DataLayoutStr = Mod->getDataLayout();
     auto TargetTripleStr = StartBB->getParent()->getParent()->getTargetTriple();
     Mod->setDataLayout(DataLayoutStr);
     Mod->setTargetTriple(TargetTripleStr);
@@ -862,10 +862,12 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
 
     GetElementPtrInst *StPtr = nullptr;
     // if(LiveOut.size()) {
+    // If there are no live outs then this will add an empty
+    // struct. 
     auto InsertionPt = F.getEntryBlock().getFirstInsertionPt();
     auto *StructTy = getLiveOutStructType(LiveOut, Mod);
-    auto *LOS = new AllocaInst(StructTy, nullptr, "", InsertionPt);
-    StPtr = GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", InsertionPt);
+    auto *LOS = new AllocaInst(StructTy, "", &*InsertionPt);
+    StPtr = GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", &*InsertionPt);
     Params.push_back(StPtr);
     //}
 
@@ -899,7 +901,7 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         Value *StIdx = ConstantInt::get(Int32Ty, Idx, false);
         Value *GEPIdx[2] = {Zero, StIdx};
         auto *ValPtr =
-            GetElementPtrInst::Create(StPtr, GEPIdx, "st_gep", Success);
+            GetElementPtrInst::Create(StPtr->getType(), StPtr, GEPIdx, "st_gep", Success);
         auto *Load = new LoadInst(ValPtr, "live_out", Success);
         vector<User *> Users(Val->user_begin(), Val->user_end());
         for (auto &U : Users) {
@@ -1007,7 +1009,7 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         Value *StIdx = ConstantInt::get(Int32Ty, LiveOut.size() - 1, false);
         Value *GEPIdx[2] = {Zero, StIdx};
         auto *ValPtr =
-            GetElementPtrInst::Create(StPtr, GEPIdx, "st_gep", Success);
+            GetElementPtrInst::Create(StPtr->getType(), StPtr, GEPIdx, "st_gep", Success);
         auto *Load = new LoadInst(ValPtr, "live_out", Success);
         auto *NewBr = dyn_cast<BranchInst>(T->clone());
         NewBr->setCondition(Load);
@@ -1026,7 +1028,7 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
             Value *StIdx = ConstantInt::get(Int32Ty, LiveOut.size() - 1, false);
             Value *GEPIdx[2] = {Zero, StIdx};
             auto *ValPtr =
-                GetElementPtrInst::Create(StPtr, GEPIdx, "st_gep", Success);
+                GetElementPtrInst::Create(StPtr->getType(),StPtr, GEPIdx, "st_gep", Success);
             auto *Load = new LoadInst(ValPtr, "live_out", Success);
             ReturnInst::Create(Mod->getContext(), Load, Success);
         } else {
@@ -1087,12 +1089,12 @@ static void instrumentSELF(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     // Call offload function and check the return
     auto *StructTy = getLiveOutStructType(LiveOut, Mod);
     auto InsertionPt = F.getEntryBlock().getFirstInsertionPt();
-    auto *LOS = new AllocaInst(StructTy, nullptr, "", InsertionPt);
+    auto *LOS = new AllocaInst(StructTy, "", &*InsertionPt);
     auto *Int64Ty = Type::getInt64Ty(Mod->getContext());
     auto *Int32Ty = Type::getInt32Ty(Mod->getContext());
     ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
     auto *StPtr =
-        GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", InsertionPt);
+        GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", &*InsertionPt);
 
     vector<Value *> Params;
     for (auto &V : LiveIn)
@@ -1126,7 +1128,7 @@ static void instrumentSELF(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         Value *StIdx = ConstantInt::get(Int32Ty, Idx, false);
         Value *GEPIdx[2] = {Zero, StIdx};
         auto *ValPtr =
-            GetElementPtrInst::Create(StPtr, GEPIdx, "st_gep", Success);
+            GetElementPtrInst::Create(StPtr->getType(),StPtr, GEPIdx, "st_gep", Success);
         auto *Load = new LoadInst(ValPtr, "live_out", Success);
         vector<User *> Users(Val->user_begin(), Val->user_end());
         for (auto &U : Users) {
@@ -1138,7 +1140,7 @@ static void instrumentSELF(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
             } else if (ReachableFromLast.count(UseBB) && UseBB != SSplit) {
                 if (PhiMap.count(Val) == 0) {
                     auto *Phi = PHINode::Create(Load->getType(), 2, "merge",
-                                                MergeBB->begin());
+                                                &*MergeBB->begin());
                     Phi->addIncoming(Val, SSplit);
                     Phi->addIncoming(Load, Success);
                     PhiMap[Val] = Phi;
@@ -1167,7 +1169,7 @@ static void instrumentSELF(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         Value *StIdx = ConstantInt::get(Int32Ty, LiveOut.size() - 1, false);
         Value *GEPIdx[2] = {Zero, StIdx};
         auto *ValPtr =
-            GetElementPtrInst::Create(StPtr, GEPIdx, "st_gep", Success);
+            GetElementPtrInst::Create(StPtr->getType(), StPtr, GEPIdx, "st_gep", Success);
         auto *Load = new LoadInst(ValPtr, "live_out", Success);
         auto *NewBr = dyn_cast<BranchInst>(T->clone());
         NewBr->setCondition(Load);
@@ -1221,10 +1223,10 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
 
 static void runHelperPasses(Function *Offload, Function *Undo,
                             Module *Generated) {
-    PassManager PM;
-    PM.add(createBasicAliasAnalysisPass());
-    PM.add(createTypeBasedAliasAnalysisPass());
-    PM.add(new MicroWorkloadHelper(Offload, Undo));
+    ModulePassManager PM;
+    PM.addPass(createBasicAAWrapperPass());
+    PM.addPass(llvm::createTypeBasedAAWrapperPass());
+    PM.addPass(new MicroWorkloadHelper(Offload, Undo));
     PM.run(*Generated);
 }
 
