@@ -92,7 +92,7 @@ void MicroWorkloadHelper::addUndoLog() {
     SmallVector<StoreInst *, 16> Stores;
 
     auto TopoBlocks = getFunctionRPO(*Offload);
-    auto &AA = getAnalysis<AAResultsWrapperPass>().getAAResults();
+    auto &AA = getAnalysis<AAResultsWrapperPass>(*Offload).getAAResults();
 
     auto isAliasingStore = [&AA, &Stores](StoreInst *SI) -> bool {
         for (auto &S : Stores) {
@@ -148,7 +148,7 @@ void MicroWorkloadHelper::addUndoLog() {
         Idx[1] = ConstantInt::get(Type::getInt32Ty(Ctx), LogIndex * 8);
         LogIndex++;
         GetElementPtrInst *AddrGEP =
-            GetElementPtrInst::Create(ULog->getType(), ULog, Idx, "", SI);
+            GetElementPtrInst::Create(cast<PointerType>(ULog->getType())->getElementType(), ULog, Idx, "", SI);
         auto *AddrCast = new PtrToIntInst(Ptr, Int64Ty, "", SI);
         auto *AddrBI =
             new BitCastInst(AddrGEP, PointerType::getInt64PtrTy(Ctx), "", SI);
@@ -157,7 +157,7 @@ void MicroWorkloadHelper::addUndoLog() {
         Idx[1] = ConstantInt::get(Type::getInt32Ty(Ctx), LogIndex * 8);
         LogIndex++;
         GetElementPtrInst *ValGEP =
-            GetElementPtrInst::Create(ULog->getType(), ULog, Idx, "", SI);
+            GetElementPtrInst::Create(cast<PointerType>(ULog->getType())->getElementType(), ULog, Idx, "", SI);
         auto *ValBI =
             new BitCastInst(ValGEP, PointerType::get(LI->getType(), 0), "", SI);
         new StoreInst(LI, ValBI, false, SI);
@@ -175,7 +175,7 @@ void MicroWorkloadHelper::addUndoLog() {
     auto *Memset = Intrinsic::getDeclaration(Mod, Intrinsic::memset, Tys);
     auto *Zero = ConstantInt::get(Int64Ty, 0, false);
     Idx[1] = Zero;
-    auto *UGEP = GetElementPtrInst::Create(ULog->getType(),
+    auto *UGEP = GetElementPtrInst::Create(cast<PointerType>(ULog->getType())->getElementType(),
         ULog, Idx, "", Offload->getEntryBlock().getFirstNonPHI());
     Value *Params[] = {
         UGEP, ConstantInt::get(Int8Ty, 0, false),

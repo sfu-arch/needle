@@ -530,7 +530,8 @@ void MicroWorkloadExtract::extractHelper(
         assert(LO && "Live Out not remapped");
         auto *Block = cast<Instruction>(LO)->getParent();
         Idx[1] = ConstantInt::get(Type::getInt32Ty(Context), OutIndex);
-        GetElementPtrInst *StructGEP = GetElementPtrInst::Create((&*StructPtr)->getType(), 
+        // cast<PointerType>(Ptr->getType()->getScalarType())->getElementType()
+        GetElementPtrInst *StructGEP = GetElementPtrInst::Create(cast<PointerType>(StructPtr->getType())->getElementType(),
                 &*StructPtr, Idx, "", Block->getTerminator());
         auto *SI = new StoreInst(LO, StructGEP, Block->getTerminator());
         MDNode *N = MDNode::get(Context, MDString::get(Context, "true"));
@@ -901,7 +902,7 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         Value *StIdx = ConstantInt::get(Int32Ty, Idx, false);
         Value *GEPIdx[2] = {Zero, StIdx};
         auto *ValPtr =
-            GetElementPtrInst::Create(StPtr->getType(), StPtr, GEPIdx, "st_gep", Success);
+            GetElementPtrInst::Create(cast<PointerType>(StPtr->getType())->getElementType(), StPtr, GEPIdx, "st_gep", Success);
         auto *Load = new LoadInst(ValPtr, "live_out", Success);
         vector<User *> Users(Val->user_begin(), Val->user_end());
         for (auto &U : Users) {
