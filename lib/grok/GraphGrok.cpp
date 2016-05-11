@@ -2442,7 +2442,7 @@ static void generateStaticGraphFromPath(const Path &P,
 
 void GraphGrok::makeSeqGraph(Function &F) {
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
-    auto &AA = getAnalysis<AAResultsWrapperPass>().getAAResults();
+    auto &AA = getAnalysis<AAResultsWrapperPass>(F).getAAResults();
 
     map<string, BasicBlock *> BlockMap;
 
