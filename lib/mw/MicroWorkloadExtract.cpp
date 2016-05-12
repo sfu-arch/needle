@@ -1,4 +1,7 @@
+#define DEBUG_TYPE "pasha_mwe"
 #include "MicroWorkloadExtract.h"
+#include "llvm/IRReader/IRReader.h"
+#include "llvm/Support/SourceMgr.h"
 #include <boost/algorithm/string.hpp>
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/Utils/CodeExtractor.h"
@@ -23,7 +26,6 @@
 #include "llvm/Linker/Linker.h"
 #include "Common.h"
 
-#define DEBUG_TYPE "mw"
 
 using namespace llvm;
 using namespace mwe;
@@ -33,10 +35,11 @@ extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
 
-extern cl::opt<char> optLevel;
-extern cl::list<string> libPaths;
-extern cl::list<string> libraries;
-extern cl::opt<string> outFile;
+//extern cl::opt<char> optLevel;
+//extern cl::list<string> libPaths;
+//extern cl::list<string> libraries;
+//extern cl::opt<string> outFile;
+//extern cl::opt<std::string> UndoLib;
 
 void MicroWorkloadExtract::readSequences() {
     ifstream SeqFile(SeqFilePath.c_str(), ios::in);
@@ -772,7 +775,7 @@ Function *MicroWorkloadExtract::extract(
 
     // Create the trace function
     Function *StaticFunc = Function::Create(
-        StFuncType, GlobalValue::ExternalLinkage, "__offload_func", Mod);
+        StFuncType, GlobalValue::ExternalLinkage, "__offload_func_" + Mod->getName(), Mod);
 
     // Create an external function which is used to
     // model all guard checks. First arg is the condition, second is whether
@@ -833,7 +836,7 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
 
 static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                            FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
-                           SetVector<Value *> &LiveOut, DominatorTree *DT) {
+                           SetVector<Value *> &LiveOut, DominatorTree *DT, string& Id) {
 
     BasicBlock *StartBB = Blocks.back(), *LastBB = Blocks.front();
     auto BackEdges = common::getBackEdges(StartBB);
@@ -846,7 +849,7 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
 
     auto *Offload =
-        cast<Function>(Mod->getOrInsertFunction("__offload_func", OffloadTy));
+        cast<Function>(Mod->getOrInsertFunction("__offload_func_"+Id, OffloadTy));
 
     auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
     SSplit->setName(StartBB->getName() + ".split");
@@ -1041,6 +1044,8 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     }
 
     ArrayType *LogArrTy = ArrayType::get(IntegerType::get(Ctx, 8), 0);
+
+    //FIXME : These need to become internal to each new module
     auto *ULog = Mod->getOrInsertGlobal("__undo_log", LogArrTy);
     auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores",
                                             IntegerType::getInt32Ty(Ctx));
@@ -1070,142 +1075,142 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
 static void instrumentSELF(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                            FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
                            SetVector<Value *> &LiveOut, DominatorTree *DT) {
+    assert(false && "There should be no self loops");
+    //BasicBlock *StartBB = Blocks.back(); //, *LastBB = Blocks.front();
 
-    BasicBlock *StartBB = Blocks.back(); //, *LastBB = Blocks.front();
+    //auto &Ctx = F.getContext();
+    //auto *Mod = F.getParent();
 
-    auto &Ctx = F.getContext();
-    auto *Mod = F.getParent();
+    //auto *Offload = Mod->getOrInsertFunction("__offload_func", OffloadTy);
 
-    auto *Offload = Mod->getOrInsertFunction("__offload_func", OffloadTy);
+    //auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
+    //SSplit->setName(StartBB->getName() + ".split");
 
-    auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
-    SSplit->setName(StartBB->getName() + ".split");
+    //auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
+    //auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
 
-    auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
-    auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
+    //StartBB->getTerminator()->eraseFromParent();
+    //// Get all the live-ins
+    //// Allocate a struct to get the live-outs filled in
+    //// Call offload function and check the return
+    //auto *StructTy = getLiveOutStructType(LiveOut, Mod);
+    //auto InsertionPt = F.getEntryBlock().getFirstInsertionPt();
+    //auto *LOS = new AllocaInst(StructTy, "", &*InsertionPt);
+    //auto *Int64Ty = Type::getInt64Ty(Mod->getContext());
+    //auto *Int32Ty = Type::getInt32Ty(Mod->getContext());
+    //ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
+    //auto *StPtr =
+        //GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", &*InsertionPt);
 
-    StartBB->getTerminator()->eraseFromParent();
-    // Get all the live-ins
-    // Allocate a struct to get the live-outs filled in
-    // Call offload function and check the return
-    auto *StructTy = getLiveOutStructType(LiveOut, Mod);
-    auto InsertionPt = F.getEntryBlock().getFirstInsertionPt();
-    auto *LOS = new AllocaInst(StructTy, "", &*InsertionPt);
-    auto *Int64Ty = Type::getInt64Ty(Mod->getContext());
-    auto *Int32Ty = Type::getInt32Ty(Mod->getContext());
-    ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
-    auto *StPtr =
-        GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", &*InsertionPt);
+    //vector<Value *> Params;
+    //for (auto &V : LiveIn)
+        //Params.push_back(V);
+    //Params.push_back(StPtr);
 
-    vector<Value *> Params;
-    for (auto &V : LiveIn)
-        Params.push_back(V);
-    Params.push_back(StPtr);
+    //auto *CI = CallInst::Create(Offload, Params, "", StartBB);
+    //BranchInst::Create(Success, Fail, CI, StartBB);
 
-    auto *CI = CallInst::Create(Offload, Params, "", StartBB);
-    BranchInst::Create(Success, Fail, CI, StartBB);
+    //// Success -- Unpack struct
+    //// CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
 
-    // Success -- Unpack struct
-    // CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
+    //auto *T = SSplit->getTerminator();
+    //uint32_t hasLastLiveOut = 1;
 
-    auto *T = SSplit->getTerminator();
-    uint32_t hasLastLiveOut = 1;
+    //BasicBlock *MergeBB = nullptr;
+    //if (T->getSuccessor(0) == StartBB) {
+        //MergeBB = T->getSuccessor(1);
+    //} else {
+        //MergeBB = T->getSuccessor(0);
+    //}
 
-    BasicBlock *MergeBB = nullptr;
-    if (T->getSuccessor(0) == StartBB) {
-        MergeBB = T->getSuccessor(1);
-    } else {
-        MergeBB = T->getSuccessor(0);
-    }
+    //auto BackEdges = common::getBackEdges(SSplit);
+    //auto ReachableFromLast = fSliceDFS(SSplit, BackEdges);
 
-    auto BackEdges = common::getBackEdges(SSplit);
-    auto ReachableFromLast = fSliceDFS(SSplit, BackEdges);
+    //ValueToValueMapTy PhiMap;
+    //for (uint32_t Idx = 0; Idx < LiveOut.size() - hasLastLiveOut; Idx++) {
+        //auto *Val = LiveOut[Idx];
+        //// GEP Indices always need to i32 types for historical
+        //// reasons.
+        //Value *StIdx = ConstantInt::get(Int32Ty, Idx, false);
+        //Value *GEPIdx[2] = {Zero, StIdx};
+        //auto *ValPtr =
+            //GetElementPtrInst::Create(StPtr->getType(),StPtr, GEPIdx, "st_gep", Success);
+        //auto *Load = new LoadInst(ValPtr, "live_out", Success);
+        //vector<User *> Users(Val->user_begin(), Val->user_end());
+        //for (auto &U : Users) {
+            //auto *UseBB = dyn_cast<Instruction>(U)->getParent();
+            //if (UseBB == StartBB) {
+                //auto *Phi = dyn_cast<PHINode>(U);
+                //assert(Phi && "Only PhiNode users in StartBB");
+                //Phi->addIncoming(Load, Success);
+            //} else if (ReachableFromLast.count(UseBB) && UseBB != SSplit) {
+                //if (PhiMap.count(Val) == 0) {
+                    //auto *Phi = PHINode::Create(Load->getType(), 2, "merge",
+                                                //&*MergeBB->begin());
+                    //Phi->addIncoming(Val, SSplit);
+                    //Phi->addIncoming(Load, Success);
+                    //PhiMap[Val] = Phi;
+                //}
+                //U->replaceUsesOfWith(Val, PhiMap[Val]);
+            //}
+        //}
+    //}
 
-    ValueToValueMapTy PhiMap;
-    for (uint32_t Idx = 0; Idx < LiveOut.size() - hasLastLiveOut; Idx++) {
-        auto *Val = LiveOut[Idx];
-        // GEP Indices always need to i32 types for historical
-        // reasons.
-        Value *StIdx = ConstantInt::get(Int32Ty, Idx, false);
-        Value *GEPIdx[2] = {Zero, StIdx};
-        auto *ValPtr =
-            GetElementPtrInst::Create(StPtr->getType(),StPtr, GEPIdx, "st_gep", Success);
-        auto *Load = new LoadInst(ValPtr, "live_out", Success);
-        vector<User *> Users(Val->user_begin(), Val->user_end());
-        for (auto &U : Users) {
-            auto *UseBB = dyn_cast<Instruction>(U)->getParent();
-            if (UseBB == StartBB) {
-                auto *Phi = dyn_cast<PHINode>(U);
-                assert(Phi && "Only PhiNode users in StartBB");
-                Phi->addIncoming(Load, Success);
-            } else if (ReachableFromLast.count(UseBB) && UseBB != SSplit) {
-                if (PhiMap.count(Val) == 0) {
-                    auto *Phi = PHINode::Create(Load->getType(), 2, "merge",
-                                                &*MergeBB->begin());
-                    Phi->addIncoming(Val, SSplit);
-                    Phi->addIncoming(Load, Success);
-                    PhiMap[Val] = Phi;
-                }
-                U->replaceUsesOfWith(Val, PhiMap[Val]);
-            }
-        }
-    }
+    //for (auto &I : *MergeBB) {
+        //if (auto *Phi = dyn_cast<PHINode>(&I)) {
+            //// Have an edge from LastBB but no edge from
+            //// new created SuccessBB
+            //if (Phi->getBasicBlockIndex(SSplit) != -1 &&
+                //Phi->getBasicBlockIndex(Success) == -1) {
+                //Phi->addIncoming(Phi->getIncomingValueForBlock(SSplit),
+                                 //Success);
+            //}
+        //}
+    //}
 
-    for (auto &I : *MergeBB) {
-        if (auto *Phi = dyn_cast<PHINode>(&I)) {
-            // Have an edge from LastBB but no edge from
-            // new created SuccessBB
-            if (Phi->getBasicBlockIndex(SSplit) != -1 &&
-                Phi->getBasicBlockIndex(Success) == -1) {
-                Phi->addIncoming(Phi->getIncomingValueForBlock(SSplit),
-                                 Success);
-            }
-        }
-    }
-
-    switch (T->getNumSuccessors()) {
-    case 2: {
-        // Last value in the live out array is the branch
-        // condition, load it and branch accordingly.
-        Value *StIdx = ConstantInt::get(Int32Ty, LiveOut.size() - 1, false);
-        Value *GEPIdx[2] = {Zero, StIdx};
-        auto *ValPtr =
-            GetElementPtrInst::Create(StPtr->getType(), StPtr, GEPIdx, "st_gep", Success);
-        auto *Load = new LoadInst(ValPtr, "live_out", Success);
-        auto *NewBr = dyn_cast<BranchInst>(T->clone());
-        NewBr->setCondition(Load);
-        NewBr->insertAfter(Load);
+    //switch (T->getNumSuccessors()) {
+    //case 2: {
+        //// Last value in the live out array is the branch
+        //// condition, load it and branch accordingly.
+        //Value *StIdx = ConstantInt::get(Int32Ty, LiveOut.size() - 1, false);
+        //Value *GEPIdx[2] = {Zero, StIdx};
+        //auto *ValPtr =
+            //GetElementPtrInst::Create(StPtr->getType(), StPtr, GEPIdx, "st_gep", Success);
+        //auto *Load = new LoadInst(ValPtr, "live_out", Success);
+        //auto *NewBr = dyn_cast<BranchInst>(T->clone());
+        //NewBr->setCondition(Load);
+        //NewBr->insertAfter(Load);
         
-    } break;
-    case 1:
-    case 0:
-    default:
-        assert(false && "Unexpected num successors");
-    }
+    //} break;
+    //case 1:
+    //case 0:
+    //default:
+        //assert(false && "Unexpected num successors");
+    //}
 
-    ArrayType *LogArrTy = ArrayType::get(IntegerType::get(Ctx, 8), 0);
-    auto *ULog = Mod->getOrInsertGlobal("__undo_log", LogArrTy);
-    auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores",
-                                            IntegerType::getInt32Ty(Ctx));
-    Type *ParamTy[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx)};
-    auto *UndoTy = FunctionType::get(Type::getVoidTy(Ctx), ParamTy, false);
-    auto *Undo = Mod->getOrInsertFunction("__undo_mem", UndoTy);
+    //ArrayType *LogArrTy = ArrayType::get(IntegerType::get(Ctx, 8), 0);
+    //auto *ULog = Mod->getOrInsertGlobal("__undo_log", LogArrTy);
+    //auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores",
+                                            //IntegerType::getInt32Ty(Ctx));
+    //Type *ParamTy[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx)};
+    //auto *UndoTy = FunctionType::get(Type::getVoidTy(Ctx), ParamTy, false);
+    //auto *Undo = Mod->getOrInsertFunction("__undo_mem", UndoTy);
 
-    vector<Value *> Idx = {Zero, Zero};
-    auto *UGEP = GetElementPtrInst::CreateInBounds(ULog, Idx, "", Fail);
-    auto *UNS = GetElementPtrInst::CreateInBounds(NumStore, {Zero}, "", Fail);
-    auto *NSLoad = new LoadInst(UNS, "", Fail);
-    // Fail -- Undo memory
-    vector<Value *> Args = {UGEP, NSLoad};
-    CallInst::Create(Undo, Args, "", Fail);
-    // CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
-    BranchInst::Create(SSplit, Fail);
+    //vector<Value *> Idx = {Zero, Zero};
+    //auto *UGEP = GetElementPtrInst::CreateInBounds(ULog, Idx, "", Fail);
+    //auto *UNS = GetElementPtrInst::CreateInBounds(NumStore, {Zero}, "", Fail);
+    //auto *NSLoad = new LoadInst(UNS, "", Fail);
+    //// Fail -- Undo memory
+    //vector<Value *> Args = {UGEP, NSLoad};
+    //CallInst::Create(Undo, Args, "", Fail);
+    //// CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
+    //BranchInst::Create(SSplit, Fail);
 }
 
 static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                        FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
                        SetVector<Value *> &LiveOut, DominatorTree *DT,
-                       mwe::PathType Type) {
+                       mwe::PathType Type, string& Id ) {
 
     switch (Type) {
     case FIRO:
@@ -1214,7 +1219,7 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                "Path Types FIRO and RIFO not supported for extraction");
     case RIRO:
     case FIFO:
-        instrumentPATH(F, Blocks, OffloadTy, LiveIn, LiveOut, DT);
+        instrumentPATH(F, Blocks, OffloadTy, LiveIn, LiveOut, DT, Id);
         break;
     case SELF:
         instrumentSELF(F, Blocks, OffloadTy, LiveIn, LiveOut, DT);
@@ -1242,7 +1247,11 @@ void MicroWorkloadExtract::process(Function &F) {
 
     for (auto &P : Sequences) {
 
-        Module *Mod = new Module(P.Id, getGlobalContext());
+        //Module *Mod = new Module(P.Id, getGlobalContext());
+        //unique_ptr<Module> Mod = std::make_unique<Module>(P.Id, getGlobalContext());
+        ExtractedModules.push_back(std::make_unique<Module>(P.Id, getGlobalContext()));
+        Module *Mod = ExtractedModules.back().get();
+        Mod->setDataLayout(F.getParent()->getDataLayout());
         SmallVector<BasicBlock *, 16> Blocks =
             extractAsChop ? getChopBlocks(P, BlockMap)
                           : getTraceBlocks(P, BlockMap);
@@ -1258,28 +1267,14 @@ void MicroWorkloadExtract::process(Function &F) {
         runHelperPasses(Offload, nullptr, Mod);
 
         instrument(F, Blocks, Offload->getFunctionType(), LiveIn, LiveOut, DT,
-                   P.PType);
+                   P.PType, P.Id);
 
-        Module *Composite = new Module(P.Id, getGlobalContext());
-        // FIXME :
-        //Linker L(Composite);
-        //L.linkInModule(F.getParent());
-        //L.linkInModule(UndoMod);
-        //L.linkInModule(Mod);
+        writeModule(Mod, (P.Id) + string(".ll"));
+        
 
-        //StripDebugInfo(*Composite);
-        //writeModule(Mod, (P.Id) + string(".ll"));
         //writeModule(Composite, string("app.inst.ll"));
-        //assert(!verifyModule(*Composite, &errs()) &&
-               //"Module verification failed!");
-
-        //// Replace with LLVMWriteBitcodeToFile(const Module *M, char* Path);
-
-        //common::generateBinary(*Composite, outFile, optLevel, libPaths,
-                               //libraries);
-
-        delete Mod;
-        delete Composite;
+        assert(!verifyModule(*Mod, &errs()) &&
+               "Module verification failed!");
     }
 }
 
