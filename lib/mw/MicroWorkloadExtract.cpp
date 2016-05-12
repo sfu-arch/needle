@@ -1249,7 +1249,7 @@ void MicroWorkloadExtract::process(Function &F) {
 
         //Module *Mod = new Module(P.Id, getGlobalContext());
         //unique_ptr<Module> Mod = std::make_unique<Module>(P.Id, getGlobalContext());
-        ExtractedModules.push_back(std::make_unique<Module>(P.Id, getGlobalContext()));
+        ExtractedModules.push_back(llvm::make_unique<Module>(P.Id, getGlobalContext()));
         Module *Mod = ExtractedModules.back().get();
         Mod->setDataLayout(F.getParent()->getDataLayout());
         SmallVector<BasicBlock *, 16> Blocks =
