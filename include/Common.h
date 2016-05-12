@@ -33,8 +33,10 @@ namespace common {
     void optimizeModule(llvm::Module*);
 
     void lowerSwitch(llvm::Module&, llvm::StringRef);
+    void lowerSwitch(llvm::Function&);
 
     void breakCritEdges(llvm::Module&, llvm::StringRef);
+    void breakCritEdges(llvm::Function&);
 
     void printCFG(llvm::Function&);
 

@@ -30,11 +30,12 @@
 
 #include "AllInliner.h"
 #include "Namer.h"
+#include "Simplify.h"
 #include "MicroWorkloadExtract.h"
 #include "AllInliner.h"
 #include "Namer.h"
 #include "Common.h"
-#include "LoopConverter.h"
+//#include "LoopConverter.h"
 
 using namespace std;
 using namespace llvm;
@@ -126,8 +127,8 @@ int main(int argc, char **argv, const char **env) {
     vector<unique_ptr<Module>> ExtractedModules;
 
     common::optimizeModule(module.get());
-    common::lowerSwitch(*module, FunctionList[0]);
-    common::breakCritEdges(*module, FunctionList[0]);
+    //common::lowerSwitch(*module, FunctionList[0]);
+    //common::breakCritEdges(*module, FunctionList[0]);
 
     legacy::PassManager pm;
     //pm.add(new DataLayoutPass());
@@ -137,8 +138,9 @@ int main(int argc, char **argv, const char **env) {
     pm.add(createTypeBasedAAWrapperPass());
     pm.add(new llvm::CallGraphWrapperPass());
     pm.add(new epp::PeruseInliner());
+    pm.add(new pasha::Simplify(FunctionList[0]));
     pm.add(new epp::Namer());
-    pm.add(new pasha::LoopConverter());
+    //pm.add(new pasha::LoopConverter());
     pm.add(new LoopInfoWrapperPass());
     pm.add(llvm::createPostDomTree());
     pm.add(new DominatorTreeWrapperPass());

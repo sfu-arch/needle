@@ -48,7 +48,8 @@
 #include "AllInliner.h"
 #include "Namer.h"
 #include "Common.h"
-#include "LoopConverter.h"
+//#include "LoopConverter.h"
+#include "Simplify.h"
 
 #include "config.h"
 
@@ -106,7 +107,7 @@ bool isTargetFunction(const Function &f,
     return false;
 }
 
-static void instrumentModule(Module &module, std::string, const char *argv0) {
+static void instrumentModule(Module &module, std::string outFile, const char *argv0) {
     // Build up all of the passes that we want to run on the module.
     legacy::PassManager pm;
     //pm.add(new DataLayoutWrapperPass());
@@ -116,8 +117,9 @@ static void instrumentModule(Module &module, std::string, const char *argv0) {
     pm.add(createTypeBasedAAWrapperPass());
     pm.add(new llvm::CallGraphWrapperPass());
     pm.add(new epp::PeruseInliner());
+    pm.add(new pasha::Simplify(FunctionList[0]));
     pm.add(new epp::Namer());
-    pm.add(new pasha::LoopConverter());
+    //pm.add(new pasha::LoopConverter());
     pm.add(new LoopInfoWrapperPass());
     pm.add(new epp::EPPProfile());
     pm.add(createVerifierPass());
@@ -160,8 +162,9 @@ static void interpretResults(Module &module, std::string filename) {
     pm.add(createTypeBasedAAWrapperPass());
     pm.add(new llvm::CallGraphWrapperPass());
     pm.add(new epp::PeruseInliner());
+    pm.add(new pasha::Simplify(FunctionList[0]));
     pm.add(new epp::Namer());
-    pm.add(new pasha::LoopConverter());
+    //pm.add(new pasha::LoopConverter());
     pm.add(new LoopInfoWrapperPass());
     pm.add(new epp::EPPDecode());
     pm.add(createVerifierPass());
@@ -196,23 +199,9 @@ int main(int argc, char **argv, const char **env) {
         return -1;
     }
 
-    // Merge all the modules provided in the command line
-    // FIXME
-    //Linker LK(module.get());
-    //for (auto &P : linkM) {
-        //unique_ptr<Module> L = parseIRFile(P, err, context);
-        //if (L.get()) {
-            //if (LK.linkInModule(L.get())) {
-                //errs() << "Error linking module : " << P << "\n";
-            //}
-        //} else {
-            //errs() << "Error reading bitcode to link : " << P << "\n";
-        //}
-    //}
-
     common::optimizeModule(module.get());
-    common::lowerSwitch(*module, FunctionList[0]);
-    common::breakCritEdges(*module, FunctionList[0]);
+    //common::lowerSwitch(*module, FunctionList[0]);
+    //common::breakCritEdges(*module, FunctionList[0]);
 
     if (!profile.empty()) {
         interpretResults(*module, profile);
