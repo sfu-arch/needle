@@ -834,6 +834,69 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
     return RPath;
 }
 
+static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
+                           FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
+                           SetVector<Value *> &LiveOut, DominatorTree *DT, string& Id) {
+    // Setup Basic Control Flow
+    BasicBlock *StartBB = Blocks.back(), *LastBB = Blocks.front();
+    auto BackEdges = common::getBackEdges(StartBB);
+    auto ReachableFromLast = fSliceDFS(LastBB, BackEdges);
+    auto &Ctx = F.getContext();
+    auto *Mod = F.getParent();
+    auto *Int64Ty = Type::getInt64Ty(Ctx);
+    auto *Int32Ty = Type::getInt32Ty(Ctx);
+    ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
+    auto *Offload =
+        cast<Function>(Mod->getOrInsertFunction("__offload_func_"+Id, OffloadTy));
+    auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
+    SSplit->setName(StartBB->getName() + ".split");
+    auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
+    auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
+    auto *MergeBB = BasicBlock::Create(Ctx, "mergeblock", &F, nullptr);
+    vector<Value *> Params;
+    for (auto &V : LiveIn)
+        Params.push_back(V);
+
+    auto InsertionPt = F.getEntryBlock().getFirstInsertionPt();
+    auto *StructTy = getLiveOutStructType(LiveOut, Mod);
+    auto *LOS = new AllocaInst(StructTy, "", &*InsertionPt);
+    GetElementPtrInst *StPtr = GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", &*InsertionPt);
+    Params.push_back(StPtr);
+
+    StartBB->getTerminator()->eraseFromParent();
+    auto *CI = CallInst::Create(Offload, Params, "", StartBB);
+    BranchInst::Create(Success, Fail, CI, StartBB);
+
+    // Fail Path -- Begin
+    ArrayType *LogArrTy = ArrayType::get(IntegerType::get(Ctx, 8), 0);
+    //FIXME : These need to become internal to each new module
+    auto *ULog = Mod->getOrInsertGlobal("__undo_log", LogArrTy);
+    auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores",
+                                            IntegerType::getInt32Ty(Ctx));
+    Type *ParamTy[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx)};
+    auto *UndoTy = FunctionType::get(Type::getVoidTy(Ctx), ParamTy, false);
+    auto *Undo = Mod->getOrInsertFunction("__undo_mem", UndoTy);
+
+    vector<Value *> Idx = {Zero, Zero};
+    auto *UGEP = GetElementPtrInst::CreateInBounds(ULog, Idx, "", Fail);
+    auto *UNS = GetElementPtrInst::CreateInBounds(NumStore, {Zero}, "", Fail);
+    auto *NSLoad = new LoadInst(UNS, "", Fail);
+    // Fail -- Undo memory
+    vector<Value *> Args = {UGEP, NSLoad};
+
+    CallInst::Create(Undo, Args, "", Fail);
+    // CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
+    BranchInst::Create(SSplit, Fail);
+    // Fail Path -- End
+    
+
+    // Success Path - Begin
+    // 1. Unpack the live out struct 
+    // 2. Merge live out values if required
+    
+    // Success Path - End
+}
+
 static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                            FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
                            SetVector<Value *> &LiveOut, DominatorTree *DT, string& Id) {
@@ -913,7 +976,7 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
             assert(dyn_cast<Instruction>(U) && "User is not an instruction.");
             auto *UseBB = dyn_cast<Instruction>(U)->getParent();
             if (ReachableFromLast.count(UseBB) && UseBB != LastBB) {
-                errs() << "User : " << *U << " " << UseBB->getName() << "\n"; // ferret causes this to crash -- some type thing gets fucked
+                errs() << "User : " << *U << " " << UseBB->getName() << "\n"; 
                 assert(T->getNumSuccessors() == 2 &&
                        "Should only happen for backedge blocks");
                 // Insert a phi in there which has 2 values,
@@ -1044,7 +1107,6 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     }
 
     ArrayType *LogArrTy = ArrayType::get(IntegerType::get(Ctx, 8), 0);
-
     //FIXME : These need to become internal to each new module
     auto *ULog = Mod->getOrInsertGlobal("__undo_log", LogArrTy);
     auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores",
@@ -1060,170 +1122,25 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     // Fail -- Undo memory
     vector<Value *> Args = {UGEP, NSLoad};
 
-    errs() << *UGEP->getType() << "\n";
-    errs() << *NSLoad->getType() << "\n";
-    //errs() << *Undo << "\n";
-
     CallInst::Create(Undo, Args, "", Fail);
     // CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
     BranchInst::Create(SSplit, Fail);
 }
 
-// TODO : Unify the SELF and PATH instrumentation.
-// Logic should not be that different?
-
-static void instrumentSELF(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
-                           FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
-                           SetVector<Value *> &LiveOut, DominatorTree *DT) {
-    assert(false && "There should be no self loops");
-    //BasicBlock *StartBB = Blocks.back(); //, *LastBB = Blocks.front();
-
-    //auto &Ctx = F.getContext();
-    //auto *Mod = F.getParent();
-
-    //auto *Offload = Mod->getOrInsertFunction("__offload_func", OffloadTy);
-
-    //auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
-    //SSplit->setName(StartBB->getName() + ".split");
-
-    //auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
-    //auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
-
-    //StartBB->getTerminator()->eraseFromParent();
-    //// Get all the live-ins
-    //// Allocate a struct to get the live-outs filled in
-    //// Call offload function and check the return
-    //auto *StructTy = getLiveOutStructType(LiveOut, Mod);
-    //auto InsertionPt = F.getEntryBlock().getFirstInsertionPt();
-    //auto *LOS = new AllocaInst(StructTy, "", &*InsertionPt);
-    //auto *Int64Ty = Type::getInt64Ty(Mod->getContext());
-    //auto *Int32Ty = Type::getInt32Ty(Mod->getContext());
-    //ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
-    //auto *StPtr =
-        //GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", &*InsertionPt);
-
-    //vector<Value *> Params;
-    //for (auto &V : LiveIn)
-        //Params.push_back(V);
-    //Params.push_back(StPtr);
-
-    //auto *CI = CallInst::Create(Offload, Params, "", StartBB);
-    //BranchInst::Create(Success, Fail, CI, StartBB);
-
-    //// Success -- Unpack struct
-    //// CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
-
-    //auto *T = SSplit->getTerminator();
-    //uint32_t hasLastLiveOut = 1;
-
-    //BasicBlock *MergeBB = nullptr;
-    //if (T->getSuccessor(0) == StartBB) {
-        //MergeBB = T->getSuccessor(1);
-    //} else {
-        //MergeBB = T->getSuccessor(0);
-    //}
-
-    //auto BackEdges = common::getBackEdges(SSplit);
-    //auto ReachableFromLast = fSliceDFS(SSplit, BackEdges);
-
-    //ValueToValueMapTy PhiMap;
-    //for (uint32_t Idx = 0; Idx < LiveOut.size() - hasLastLiveOut; Idx++) {
-        //auto *Val = LiveOut[Idx];
-        //// GEP Indices always need to i32 types for historical
-        //// reasons.
-        //Value *StIdx = ConstantInt::get(Int32Ty, Idx, false);
-        //Value *GEPIdx[2] = {Zero, StIdx};
-        //auto *ValPtr =
-            //GetElementPtrInst::Create(StPtr->getType(),StPtr, GEPIdx, "st_gep", Success);
-        //auto *Load = new LoadInst(ValPtr, "live_out", Success);
-        //vector<User *> Users(Val->user_begin(), Val->user_end());
-        //for (auto &U : Users) {
-            //auto *UseBB = dyn_cast<Instruction>(U)->getParent();
-            //if (UseBB == StartBB) {
-                //auto *Phi = dyn_cast<PHINode>(U);
-                //assert(Phi && "Only PhiNode users in StartBB");
-                //Phi->addIncoming(Load, Success);
-            //} else if (ReachableFromLast.count(UseBB) && UseBB != SSplit) {
-                //if (PhiMap.count(Val) == 0) {
-                    //auto *Phi = PHINode::Create(Load->getType(), 2, "merge",
-                                                //&*MergeBB->begin());
-                    //Phi->addIncoming(Val, SSplit);
-                    //Phi->addIncoming(Load, Success);
-                    //PhiMap[Val] = Phi;
-                //}
-                //U->replaceUsesOfWith(Val, PhiMap[Val]);
-            //}
-        //}
-    //}
-
-    //for (auto &I : *MergeBB) {
-        //if (auto *Phi = dyn_cast<PHINode>(&I)) {
-            //// Have an edge from LastBB but no edge from
-            //// new created SuccessBB
-            //if (Phi->getBasicBlockIndex(SSplit) != -1 &&
-                //Phi->getBasicBlockIndex(Success) == -1) {
-                //Phi->addIncoming(Phi->getIncomingValueForBlock(SSplit),
-                                 //Success);
-            //}
-        //}
-    //}
-
-    //switch (T->getNumSuccessors()) {
-    //case 2: {
-        //// Last value in the live out array is the branch
-        //// condition, load it and branch accordingly.
-        //Value *StIdx = ConstantInt::get(Int32Ty, LiveOut.size() - 1, false);
-        //Value *GEPIdx[2] = {Zero, StIdx};
-        //auto *ValPtr =
-            //GetElementPtrInst::Create(StPtr->getType(), StPtr, GEPIdx, "st_gep", Success);
-        //auto *Load = new LoadInst(ValPtr, "live_out", Success);
-        //auto *NewBr = dyn_cast<BranchInst>(T->clone());
-        //NewBr->setCondition(Load);
-        //NewBr->insertAfter(Load);
-        
-    //} break;
-    //case 1:
-    //case 0:
-    //default:
-        //assert(false && "Unexpected num successors");
-    //}
-
-    //ArrayType *LogArrTy = ArrayType::get(IntegerType::get(Ctx, 8), 0);
-    //auto *ULog = Mod->getOrInsertGlobal("__undo_log", LogArrTy);
-    //auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores",
-                                            //IntegerType::getInt32Ty(Ctx));
-    //Type *ParamTy[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx)};
-    //auto *UndoTy = FunctionType::get(Type::getVoidTy(Ctx), ParamTy, false);
-    //auto *Undo = Mod->getOrInsertFunction("__undo_mem", UndoTy);
-
-    //vector<Value *> Idx = {Zero, Zero};
-    //auto *UGEP = GetElementPtrInst::CreateInBounds(ULog, Idx, "", Fail);
-    //auto *UNS = GetElementPtrInst::CreateInBounds(NumStore, {Zero}, "", Fail);
-    //auto *NSLoad = new LoadInst(UNS, "", Fail);
-    //// Fail -- Undo memory
-    //vector<Value *> Args = {UGEP, NSLoad};
-    //CallInst::Create(Undo, Args, "", Fail);
-    //// CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
-    //BranchInst::Create(SSplit, Fail);
-}
 
 static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                        FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
                        SetVector<Value *> &LiveOut, DominatorTree *DT,
                        mwe::PathType Type, string& Id ) {
-
     switch (Type) {
     case FIRO:
     case RIFO:
-        assert(false &&
-               "Path Types FIRO and RIFO not supported for extraction");
     case RIRO:
     case FIFO:
-        instrumentPATH(F, Blocks, OffloadTy, LiveIn, LiveOut, DT, Id);
+        instrument(F, Blocks, OffloadTy, LiveIn, LiveOut, DT, Id);
         break;
-    case SELF:
-        instrumentSELF(F, Blocks, OffloadTy, LiveIn, LiveOut, DT);
-        break;
+    default:
+        assert(false && "Unexpected");
     }
 }
 
