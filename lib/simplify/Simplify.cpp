@@ -27,9 +27,6 @@ bool Simplify::runOnModule(Module &M) {
     for(auto &F : M) {
         if(F.getName() == FunctionName) {
 
-            common::lowerSwitch(F);
-            common::breakCritEdges(F);
-
             auto updatePhis = [](BasicBlock* Tgt, BasicBlock *New) {
                 for(auto &I : *Tgt) {
                     if(auto *Phi = dyn_cast<PHINode>(&I)) {
@@ -37,7 +34,6 @@ bool Simplify::runOnModule(Module &M) {
                     }
                 }
             };
-
             auto insertLatch = [&updatePhis](BasicBlock* BB) {
                 auto *Latch = BasicBlock::Create(BB->getContext(), 
                                BB->getName() + ".latch", BB->getParent());
@@ -54,6 +50,9 @@ bool Simplify::runOnModule(Module &M) {
                     }
                 }
             }
+
+            common::lowerSwitch(F);
+            common::breakCritEdges(F);
         }
     }
     return true;

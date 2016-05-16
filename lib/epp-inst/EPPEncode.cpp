@@ -366,7 +366,7 @@ void EPPEncode::encode(Function &F) {
     }
 
     // Dot Printer for AltCFG
-    /****** Debug
+    /**** Debug
     const char *EdgeTypeStr[] = {"EHEAD", "ELATCH", "ELIN", "ELOUT1", "ELOUT2", "EREAL", "EOUT"};
     ofstream DotFile("altcfg.dot", ios::out);
     DotFile << "digraph \"AltCFG\" {\n label=\"AltCFG\";\n";
@@ -384,8 +384,7 @@ void EPPEncode::encode(Function &F) {
         }
     }
     DotFile << "}\n";
-    ******/
-
+    ****/
 
     // Path Counts
 

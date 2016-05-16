@@ -837,6 +837,7 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
 static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                            FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
                            SetVector<Value *> &LiveOut, DominatorTree *DT, string& Id) {
+    assert(Blocks.size() > 1 && "Can't extract unit block paths");
     // Setup Basic Control Flow
     BasicBlock *StartBB = Blocks.back(), *LastBB = Blocks.front();
     auto BackEdges = common::getBackEdges(StartBB);
@@ -851,7 +852,6 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
     auto *Offload =
         cast<Function>(Mod->getOrInsertFunction("__offload_func_"+Id, OffloadTy));
-
     // Split the start basic block so that we can insert a call to the offloaded
     // function while maintaining the rest of the original CFG.
     auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
@@ -1231,8 +1231,6 @@ void MicroWorkloadExtract::process(Function &F) {
 
     for (auto &P : Sequences) {
 
-        //Module *Mod = new Module(P.Id, getGlobalContext());
-        //unique_ptr<Module> Mod = std::make_unique<Module>(P.Id, getGlobalContext());
         ExtractedModules.push_back(llvm::make_unique<Module>(P.Id, getGlobalContext()));
         Module *Mod = ExtractedModules.back().get();
         Mod->setDataLayout(F.getParent()->getDataLayout());
@@ -1257,7 +1255,6 @@ void MicroWorkloadExtract::process(Function &F) {
 
         writeModule(Mod, (P.Id) + string(".ll"));
 
-        //writeModule(Composite, string("app.inst.ll"));
         assert(!verifyModule(*Mod, &errs()) &&
                "Module verification failed!");
     }
