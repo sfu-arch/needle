@@ -845,27 +845,42 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     auto *Mod = F.getParent();
     auto *Int64Ty = Type::getInt64Ty(Ctx);
     auto *Int32Ty = Type::getInt32Ty(Ctx);
+    auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
+    auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
+    auto *Merge = BasicBlock::Create(Ctx, "mergeblock", &F, nullptr);
     ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
     auto *Offload =
         cast<Function>(Mod->getOrInsertFunction("__offload_func_"+Id, OffloadTy));
+
+    // Split the start basic block so that we can insert a call to the offloaded
+    // function while maintaining the rest of the original CFG.
     auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
     SSplit->setName(StartBB->getName() + ".split");
-    auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
-    auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
-    auto *MergeBB = BasicBlock::Create(Ctx, "mergeblock", &F, nullptr);
-    vector<Value *> Params;
-    for (auto &V : LiveIn)
-        Params.push_back(V);
+    BranchInst::Create(Merge, Success);
 
+    // Add a struct to the function entry block in order to 
+    // capture the live outs.
     auto InsertionPt = F.getEntryBlock().getFirstInsertionPt();
     auto *StructTy = getLiveOutStructType(LiveOut, Mod);
     auto *LOS = new AllocaInst(StructTy, "", &*InsertionPt);
     GetElementPtrInst *StPtr = GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", &*InsertionPt);
-    Params.push_back(StPtr);
 
+    // Erase the branch of the split start block (this is always UBR). 
+    // Replace with a call to the offloaded function and then branch to
+    // success / fail based on retval.
     StartBB->getTerminator()->eraseFromParent();
+    vector<Value *> Params;
+    for (auto &V : LiveIn)
+        Params.push_back(V);
+    Params.push_back(StPtr);
     auto *CI = CallInst::Create(Offload, Params, "", StartBB);
     BranchInst::Create(Success, Fail, CI, StartBB);
+
+    // Divert control flow to pass through merge block from
+    // original CFG.
+    Merge->getInstList().push_back(LastBB->getTerminator()->clone());
+    LastBB->getTerminator()->eraseFromParent();
+    BranchInst::Create(Merge, LastBB);
 
     // Fail Path -- Begin
     ArrayType *LogArrTy = ArrayType::get(IntegerType::get(Ctx, 8), 0);
@@ -883,17 +898,69 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     auto *NSLoad = new LoadInst(UNS, "", Fail);
     // Fail -- Undo memory
     vector<Value *> Args = {UGEP, NSLoad};
-
     CallInst::Create(Undo, Args, "", Fail);
     // CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
     BranchInst::Create(SSplit, Fail);
     // Fail Path -- End
     
-
     // Success Path - Begin
     // 1. Unpack the live out struct 
     // 2. Merge live out values if required
+    // 3. Rewrite Phi's in successor of LastBB 
+    //  a. Use merged values
+    //  b. Use incoming block as Merge
     
+    for (uint32_t Idx = 0; Idx < LiveOut.size(); Idx++) {
+        auto *Val = LiveOut[Idx];
+        // GEP Indices always need to i32 types.
+        Value *StIdx = ConstantInt::get(Int32Ty, Idx, false);
+        Value *GEPIdx[2] = {Zero, StIdx};
+        auto *ValTy = cast<PointerType>(StPtr->getType())->getElementType();
+        auto *ValPtr =     GetElementPtrInst::Create(ValTy, 
+                    StPtr, GEPIdx, "st_gep", Success->getTerminator());
+        auto *Load = new LoadInst(ValPtr, "live_out", Success->getTerminator());
+
+        // Merge the values -- Use original LiveOut if you came from
+        // the LastBB. Use new loaded value if you came from the 
+        // offloaded function.
+        auto *Phi = PHINode::Create(Val->getType(), 2, "",  Merge->getTerminator());
+        Phi->addIncoming(Val, LastBB);
+        Phi->addIncoming(Load, Success);
+
+
+        // Rewrite users of the Val
+        vector<User *> Users(Val->user_begin(), Val->user_end());
+        for(auto &U : Users) {
+            auto *UI = dyn_cast<Instruction>(U);
+            assert(UI && "Expect user to be an Instruction");
+            // Don't replace the Phi itself
+            // The use is reachable from the last block in path
+            // or the use is a phi across a backedge
+            if(dyn_cast<PHINode>(U) != Phi &&
+                    (ReachableFromLast.count(UI->getParent()) || 
+                        (BackEdges.count(make_pair(LastBB, UI->getParent())) 
+                         && dyn_cast<PHINode>(U)))) {
+                U->replaceUsesOfWith(Val, Phi);
+            }
+        }
+    }
+
+
+    // Update the Phi's in the targets of the merge block to use the merge
+    // block instead of the LastBB.
+    auto updatePhis = [](BasicBlock* Tgt, BasicBlock* Old, BasicBlock* New) {
+        for(auto &I : *Tgt) {
+            if(auto *Phi = dyn_cast<PHINode>(&I)) {
+                errs() << *Phi << "\n";
+                Phi->setIncomingBlock(Phi->getBasicBlockIndex(Old), New);
+            }
+        }
+    };
+
+    for(auto S = succ_begin(Merge), E = succ_end(Merge);
+            S != E; S++) {
+        updatePhis(*S, LastBB, Merge);
+    }
     // Success Path - End
 }
 
@@ -1186,8 +1253,9 @@ void MicroWorkloadExtract::process(Function &F) {
         instrument(F, Blocks, Offload->getFunctionType(), LiveIn, LiveOut, DT,
                    P.PType, P.Id);
 
+        common::printCFG(F);
+
         writeModule(Mod, (P.Id) + string(".ll"));
-        
 
         //writeModule(Composite, string("app.inst.ll"));
         assert(!verifyModule(*Mod, &errs()) &&
