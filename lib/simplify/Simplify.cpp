@@ -26,6 +26,8 @@ bool Simplify::doFinalization(Module &M) {
 bool Simplify::runOnModule(Module &M) {
     for(auto &F : M) {
         if(F.getName() == FunctionName) {
+            common::lowerSwitch(F);
+            common::breakCritEdges(F);
 
             auto updatePhis = [](BasicBlock* Tgt, BasicBlock *New) {
                 for(auto &I : *Tgt) {
@@ -51,8 +53,6 @@ bool Simplify::runOnModule(Module &M) {
                 }
             }
 
-            common::lowerSwitch(F);
-            common::breakCritEdges(F);
         }
     }
     return true;

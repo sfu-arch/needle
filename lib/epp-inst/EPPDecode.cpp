@@ -171,7 +171,7 @@ bool EPPDecode::runOnModule(Module &M) {
         case FIFO:
             start = 1;
             end = 1;
-            // case SELF : break; // Does not exist yet.
+            break;
         }
         vector<BasicBlock *> blocks(bbSequences[i].second.begin() + start,
                                     bbSequences[i].second.end() - end);
@@ -253,7 +253,7 @@ enum EdgeType { EHEAD,
      switch(SelectedEdges.front()->Type){
         case EHEAD:
         case ELOUT2:
-            SET_BIT(Type, 1);
+             SET_BIT(Type, 0);
         default:
             break;
      }
@@ -261,7 +261,7 @@ enum EdgeType { EHEAD,
          case ELATCH:
          case ELOUT1:
          case ELIN:
-             SET_BIT(Type, 0);
+            SET_BIT(Type, 1);
          default:
              break;
      }
