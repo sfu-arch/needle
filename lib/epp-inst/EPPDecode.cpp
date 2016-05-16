@@ -240,27 +240,35 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
          return make_pair(RIRO, sequence);
      }
 
-     // FIXME : This is not correct -- Classification needs
-     // to change.
+enum EdgeType { EHEAD,
+                ELATCH,
+                ELIN,
+                ELOUT1, // To Exit
+                ELOUT2, // From Entry 
+                EREAL,
+                EOUT };
 
-     if (SelectedEdges.front()->Type == EREAL &&
-         SelectedEdges.back()->Type == EREAL)
-         return make_pair(RIRO, sequence);
+#define SET_BIT(n,x) (n |= 1ULL << x)
+     uint64_t Type = 0;
+     switch(SelectedEdges.front()->Type){
+        case EHEAD:
+        case ELOUT2:
+            SET_BIT(Type, 1);
+        default:
+            break;
+     }
+     switch(SelectedEdges.back()->Type){
+         case ELATCH:
+         case ELOUT1:
+         case ELIN:
+             SET_BIT(Type, 0);
+         default:
+             break;
+     }
+#undef SET_BIT
 
-     if (SelectedEdges.front()->Type != EREAL &&
-         SelectedEdges.back()->Type == EREAL)
-         return make_pair(FIRO, sequence);
+     return make_pair(static_cast<PathType>(Type), sequence);
 
-     if (SelectedEdges.front()->Type == EREAL &&
-         SelectedEdges.back()->Type != EREAL )
-         return make_pair(RIFO, sequence);
-
-     if (SelectedEdges.front()->Type != EREAL &&
-         SelectedEdges.back()->Type != EREAL)
-         return make_pair(FIFO, sequence);
-
-    assert(false && "This should be unreachable");
-    return make_pair(FIFO, sequence);
 }
 
 char EPPDecode::ID = 0;
