@@ -159,20 +159,20 @@ bool EPPDecode::runOnModule(Module &M) {
     for (size_t i = 0, e = bbSequences.size(); i < e; ++i) {
         auto pType = bbSequences[i].first;
         int start = 0, end = 0;
-        //switch (pType) {
-        //case RIRO:
-            //break;
-        //case FIRO:
-            //start = 1;
-            //break;
-        //case RIFO:
-            //end = 1;
-            //break;
-        //case FIFO:
-            //start = 1;
-            //end = 1;
-            //// case SELF : break; // Does not exist yet.
-        //}
+        switch (pType) {
+        case RIRO:
+            break;
+        case FIRO:
+            start = 1;
+            break;
+        case RIFO:
+            end = 1;
+            break;
+        case FIFO:
+            start = 1;
+            end = 1;
+            // case SELF : break; // Does not exist yet.
+        }
         vector<BasicBlock *> blocks(bbSequences[i].second.begin() + start,
                                     bbSequences[i].second.end() - end);
 
