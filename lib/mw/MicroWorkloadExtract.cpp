@@ -934,10 +934,12 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
             auto *UI = dyn_cast<Instruction>(U);
             assert(UI && "Expect user to be an Instruction");
             // Don't replace the Phi itself
-            // The use is reachable from the last block in path
+            // The use is reachable from the last block in path (but not the last block)
             // or the use is a phi across a backedge
+            // TODO : Refactor to change ReachableFromLast meaning 
+            // (should not include last block itself) -- simplify LiveOut detection
             if(dyn_cast<PHINode>(U) != Phi &&
-                    (ReachableFromLast.count(UI->getParent()) || 
+                    ((ReachableFromLast.count(UI->getParent()) && UI->getParent() != LastBB) || 
                         (BackEdges.count(make_pair(LastBB, UI->getParent())) 
                          && dyn_cast<PHINode>(U)))) {
                 U->replaceUsesOfWith(Val, Phi);
@@ -1200,14 +1202,14 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                        SetVector<Value *> &LiveOut, DominatorTree *DT,
                        mwe::PathType Type, string& Id ) {
     switch (Type) {
-    case FIRO:
-    case RIFO:
-    case RIRO:
-    case FIFO:
-        instrument(F, Blocks, OffloadTy, LiveIn, LiveOut, DT, Id);
-        break;
-    default:
-        assert(false && "Unexpected");
+        case FIRO:
+        case RIFO:
+        case RIRO:
+        case FIFO:
+            instrument(F, Blocks, OffloadTy, LiveIn, LiveOut, DT, Id);
+            break;
+        default:
+            assert(false && "Unexpected");
     }
 }
 
