@@ -26,6 +26,8 @@
 #include "llvm/Linker/Linker.h"
 #include "Common.h"
 
+#include <algorithm>
+
 
 using namespace llvm;
 using namespace mwe;
@@ -927,7 +929,6 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         Phi->addIncoming(Val, LastBB);
         Phi->addIncoming(Load, Success);
 
-
         // Rewrite users of the Val
         vector<User *> Users(Val->user_begin(), Val->user_end());
         for(auto &U : Users) {
@@ -938,12 +939,22 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
             // or the use is a phi across a backedge
             // TODO : Refactor to change ReachableFromLast meaning 
             // (should not include last block itself) -- simplify LiveOut detection
-            if(dyn_cast<PHINode>(U) != Phi &&
-                    ((ReachableFromLast.count(UI->getParent()) && UI->getParent() != LastBB) || 
-                        (BackEdges.count(make_pair(LastBB, UI->getParent())) 
-                         && dyn_cast<PHINode>(U)))) {
+            auto *P = UI->getParent();
+            if(P == StartBB) {
+                assert(dyn_cast<PHINode>(U) && "Expect PHI users only" );
+                U->replaceUsesOfWith(Val, Phi);
+                continue;
+            }
+            else if(find(Blocks.begin(), Blocks.end(), P) == Blocks.end() &&
+                    dyn_cast<PHINode>(U) != Phi ) {
                 U->replaceUsesOfWith(Val, Phi);
             }
+            //if(dyn_cast<PHINode>(U) != Phi &&
+                    //((ReachableFromLast.count(UI->getParent()) && UI->getParent() != LastBB) || 
+                        //(BackEdges.count(make_pair(LastBB, UI->getParent())) 
+                         //&& dyn_cast<PHINode>(U)))) {
+                //U->replaceUsesOfWith(Val, Phi);
+            //}
         }
     }
 
