@@ -38,11 +38,6 @@ extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
         const cl::list<std::string> &FunctionList);
 
-//extern cl::opt<char> optLevel;
-//extern cl::list<string> libPaths;
-//extern cl::list<string> libraries;
-//extern cl::opt<string> outFile;
-//extern cl::opt<std::string> UndoLib;
 
 void MicroWorkloadExtract::readSequences() {
     ifstream SeqFile(SeqFilePath.c_str(), ios::in);
@@ -865,7 +860,18 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
 static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
         SetVector<Value *> &LiveOut, DominatorTree *DT, string& Id) {
-    assert(Blocks.size() > 1 && "Can't extract unit block paths");
+    //assert(Blocks.size() > 1 && "Can't extract unit block paths");
+    if(Blocks.size() == 1) {
+        auto *B = Blocks.front();
+        auto *R = B->splitBasicBlock(B->getTerminator(), "unit.split");
+        errs() << "Unit Block Live In : \n";
+        for(auto &V : LiveIn)
+            errs() << *V << "\n";
+        errs() << "Unit Block Live Out : \n";
+        for(auto &V : LiveOut)
+            errs() << *V << "\n";
+        Blocks.insert(Blocks.begin(), R);
+    }
     // Setup Basic Control Flow
     BasicBlock *StartBB = Blocks.back(), *LastBB = Blocks.front();
     auto BackEdges = common::getBackEdges(StartBB);
@@ -1000,235 +1006,7 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     // Success Path - End
 }
 
-static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
-        FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
-        SetVector<Value *> &LiveOut, DominatorTree *DT, string& Id) {
 
-    BasicBlock *StartBB = Blocks.back(), *LastBB = Blocks.front();
-    auto BackEdges = common::getBackEdges(StartBB);
-    auto ReachableFromLast = fSliceDFS(LastBB, BackEdges);
-
-    auto &Ctx = F.getContext();
-    auto *Mod = F.getParent();
-    auto *Int64Ty = Type::getInt64Ty(Ctx);
-    auto *Int32Ty = Type::getInt32Ty(Ctx);
-    ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
-
-    auto *Offload =
-        cast<Function>(Mod->getOrInsertFunction("__offload_func_"+Id, OffloadTy));
-
-    auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
-    SSplit->setName(StartBB->getName() + ".split");
-
-    auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
-    auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
-
-    // Get all the live-ins
-    // Allocate a struct to get the live-outs filled in
-    // Call offload function and check the return
-    vector<Value *> Params;
-    for (auto &V : LiveIn)
-        Params.push_back(V);
-
-    GetElementPtrInst *StPtr = nullptr;
-    // if(LiveOut.size()) {
-    // If there are no live outs then this will add an empty
-    // struct. 
-    auto InsertionPt = F.getEntryBlock().getFirstInsertionPt();
-    auto *StructTy = getLiveOutStructType(LiveOut, Mod);
-    auto *LOS = new AllocaInst(StructTy, "", &*InsertionPt);
-    StPtr = GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", &*InsertionPt);
-    Params.push_back(StPtr);
-    //}
-
-    StartBB->getTerminator()->eraseFromParent();
-    auto *CI = CallInst::Create(Offload, Params, "", StartBB);
-    BranchInst::Create(Success, Fail, CI, StartBB);
-
-    // Success -- Unpack struct
-    // CallInst::Create(Mod->getFunction("__success"), {}, "", Success);
-
-    auto *T = LastBB->getTerminator();
-    uint32_t hasLastLiveOut = 0;
-    if (T->getNumSuccessors() == 2 ||
-            (isa<ReturnInst>(T) && dyn_cast<ReturnInst>(T)->getReturnValue())) {
-        hasLastLiveOut = 1;
-    }
-
-    BasicBlock *MergeBB = nullptr;
-    if (T->getNumSuccessors() == 2) {
-        errs() << *T << "\n";
-        MergeBB = BasicBlock::Create(Ctx, "mergeblock", &F, nullptr);
-    }
-
-    SetVector<BasicBlock *> PatchBlocks;
-
-    ValueToValueMapTy PhiMap;
-    for (uint32_t Idx = 0; Idx < LiveOut.size() - hasLastLiveOut; Idx++) {
-        auto *Val = LiveOut[Idx];
-        // GEP Indices always need to i32 types for historical
-        // reasons.
-        Value *StIdx = ConstantInt::get(Int32Ty, Idx, false);
-        Value *GEPIdx[2] = {Zero, StIdx};
-        auto *ValPtr =
-            GetElementPtrInst::Create(cast<PointerType>(StPtr->getType())->getElementType(), StPtr, GEPIdx, "st_gep", Success);
-        auto *Load = new LoadInst(ValPtr, "live_out", Success);
-        vector<User *> Users(Val->user_begin(), Val->user_end());
-        for (auto &U : Users) {
-            assert(U && "User is nullptr.");
-            assert(dyn_cast<Instruction>(U) && "User is not an instruction.");
-            auto *UseBB = dyn_cast<Instruction>(U)->getParent();
-            if (ReachableFromLast.count(UseBB) && UseBB != LastBB) {
-                errs() << "User : " << *U << " " << UseBB->getName() << "\n"; 
-                assert(T->getNumSuccessors() == 2 &&
-                        "Should only happen for backedge blocks");
-                // Insert a phi in there which has 2 values,
-                // (load,Success) , (original, LastBB)
-                // rewrite uses with this new phi.
-                if (PhiMap.count(Val) == 0) {
-                    auto *MPhi = PHINode::Create(Val->getType(), 2, "merge",
-                            MergeBB);
-                    MPhi->addIncoming(Load, Success);
-                    // If the user is a Phi, copy the corresponding
-                    // values, block pairs else use val,incoming for each
-                    // predecessor
-                    if(auto* UPhi = dyn_cast<PHINode>(U)) {
-                        for(uint32_t N = 0; N < UPhi->getNumIncomingValues(); N++) {
-                            MPhi->addIncoming(UPhi->getIncomingValue(N), 
-                                    UPhi->getIncomingBlock(N));
-                        }  
-                        UPhi->addIncoming(MPhi, MergeBB);
-                    } else {
-                        MPhi->addIncoming(Val, LastBB);
-                        U->replaceUsesOfWith(Val, PhiMap[Val]);
-                    }
-                    PhiMap[Val] = MPhi;
-                }
-                //U->replaceUsesOfWith(Val, PhiMap[Val]);
-            } else if (auto *Phi = dyn_cast<PHINode>(U)) {
-                auto *PB = Phi->getParent();
-                for (uint32_t N = 0; N < T->getNumSuccessors(); N++) {
-                    errs() << "PB : " << PB->getName() << "\n";
-                    errs() << "T(N) : " << T->getSuccessor(N)->getName()
-                        << "\n";
-                    if (PB == T->getSuccessor(N)) {
-                        Phi->addIncoming(Load, Success);
-                        errs() << "Val : " << *Val << "\n";
-                        errs() << "Modify Phi : " << *Phi << "\n";
-                        //PatchBlocks.insert(PB);
-                    }
-                }
-            }
-        }
-    }
-
-    BasicBlock* NotBackedgeTarget = nullptr;
-    if (MergeBB) {
-        auto *A = T->getSuccessor(0);
-        auto *B = T->getSuccessor(1);
-        if(BackEdges.count(make_pair(LastBB, A)))
-            NotBackedgeTarget = B;
-        else
-            NotBackedgeTarget = A;
-        //T->replaceUsesOfWith(NotBackedgeTarget, MergeBB);
-        // For all preds of NotBackedgeTarget, replace
-        // their branches with MergeBB instead 
-        vector<TerminatorInst*> Terminators;
-        for(auto PB = pred_begin(NotBackedgeTarget), 
-                PE = pred_end(NotBackedgeTarget);
-                PB != PE; PB++) {
-            Terminators.push_back((*PB)->getTerminator());
-        } 
-        for_each(Terminators.begin(), Terminators.end(),
-                [&NotBackedgeTarget, &MergeBB](TerminatorInst* T){
-                T->replaceUsesOfWith(NotBackedgeTarget, MergeBB);
-                });
-        BranchInst::Create(NotBackedgeTarget, MergeBB);
-        // So now notbackedgetarget has only 1 pred, so fix the phis
-        for(auto &I : *NotBackedgeTarget) {
-            if(auto *Phi = dyn_cast<PHINode>(&I)) {
-                while(Phi->getNumIncomingValues() != 1) {
-                    for(uint32_t N = 0; N < Phi->getNumIncomingValues(); N++) {
-                        if(Phi->getIncomingBlock(N) != MergeBB) {
-                            Phi->removeIncomingValue(N);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-
-
-    //for (auto &BB : PatchBlocks) {
-    //for (auto &I : *BB) {
-    //if (auto *Phi = dyn_cast<PHINode>(&I)) {
-    //int32_t Idx = Phi->getBasicBlockIndex(LastBB);
-    //if( Idx != -1) {
-    //Phi->setIncomingBlock(Idx, MergeBB);  
-    //} 
-    //}
-    //}
-    //}
-
-    switch (T->getNumSuccessors()) {
-        case 2: {
-                    // Last value in the live out array is the branch
-                    // condition, load it and branch accordingly.
-                    Value *StIdx = ConstantInt::get(Int32Ty, LiveOut.size() - 1, false);
-                    Value *GEPIdx[2] = {Zero, StIdx};
-                    auto *ValPtr =
-                        GetElementPtrInst::Create(StPtr->getType(), StPtr, GEPIdx, "st_gep", Success);
-                    auto *Load = new LoadInst(ValPtr, "live_out", Success);
-                    auto *NewBr = dyn_cast<BranchInst>(T->clone());
-                    NewBr->setCondition(Load);
-                    //NewBr->replaceUsesOfWith(NotBackedgeTarget, MergeBB);    
-                    NewBr->insertAfter(Load);
-                } break;
-        case 1:
-                // This should always be a backedge.
-                assert(BackEdges.count(make_pair(LastBB, T->getSuccessor(0))) &&
-                        "Expected backedge here");
-                BranchInst::Create(T->getSuccessor(0), Success);
-                break;
-        case 0: {
-                    auto *RT = dyn_cast<ReturnInst>(T);
-                    if (RT->getReturnValue()) {
-                        Value *StIdx = ConstantInt::get(Int32Ty, LiveOut.size() - 1, false);
-                        Value *GEPIdx[2] = {Zero, StIdx};
-                        auto *ValPtr =
-                            GetElementPtrInst::Create(StPtr->getType(),StPtr, GEPIdx, "st_gep", Success);
-                        auto *Load = new LoadInst(ValPtr, "live_out", Success);
-                        ReturnInst::Create(Mod->getContext(), Load, Success);
-                    } else {
-                        ReturnInst::Create(Mod->getContext(), nullptr, Success);
-                    }
-                } break;
-        default:
-                assert(false && "Unexpected num successors");
-    }
-
-    ArrayType *LogArrTy = ArrayType::get(IntegerType::get(Ctx, 8), 0);
-    //FIXME : These need to become internal to each new module
-    auto *ULog = Mod->getOrInsertGlobal("__undo_log", LogArrTy);
-    auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores",
-            IntegerType::getInt32Ty(Ctx));
-    Type *ParamTy[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx)};
-    auto *UndoTy = FunctionType::get(Type::getVoidTy(Ctx), ParamTy, false);
-    auto *Undo = Mod->getOrInsertFunction("__undo_mem", UndoTy);
-
-    vector<Value *> Idx = {Zero, Zero};
-    auto *UGEP = GetElementPtrInst::CreateInBounds(ULog, Idx, "", Fail);
-    auto *UNS = GetElementPtrInst::CreateInBounds(NumStore, {Zero}, "", Fail);
-    auto *NSLoad = new LoadInst(UNS, "", Fail);
-    // Fail -- Undo memory
-    vector<Value *> Args = {UGEP, NSLoad};
-
-    CallInst::Create(Undo, Args, "", Fail);
-    // CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
-    BranchInst::Create(SSplit, Fail);
-}
 
 
 static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
