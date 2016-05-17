@@ -700,13 +700,23 @@ Function *MicroWorkloadExtract::extract(
     // b. As input itself (Induction Phis)
     // c. ??
     
+    auto isLabelReachable = [&ReachableFromLast](const PHINode* Phi, 
+            const Instruction* Ins) -> bool {
+        for(uint32_t I = 0; I < Phi->getNumIncomingValues(); I++) {
+            if( Phi->getIncomingValue(I) == Ins && 
+                    ReachableFromLast.count(Phi->getIncomingBlock(I)) )
+                return true;
+        } 
+        return false;
+    };
+    
     auto processLiveOut =
         [&LiveOut, &RevTopoChop, &StartBB, &LastBB, &LiveIn, &notInChop, &DT,
-        &LI, &ReachableFromLast](Instruction *Ins, Instruction *UIns) { 
+        &LI, &ReachableFromLast, &isLabelReachable](Instruction *Ins, Instruction *UIns) { 
             if(notInChop(UIns) && 
-                    //DT->dominates(LastBB, UIns->getParent())) {
-                    ReachableFromLast.count(UIns->getParent())) {
-                LiveOut.insert(Ins);   
+                   ( (!isa<PHINode>(UIns) && ReachableFromLast.count(UIns->getParent())) ||
+                     (isa<PHINode>(UIns) && isLabelReachable(cast<PHINode>(UIns), Ins)))) {
+                        LiveOut.insert(Ins);   
             } else if(LiveIn.count(UIns)) {
                 LiveOut.insert(Ins);
             }
