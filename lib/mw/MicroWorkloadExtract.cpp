@@ -704,6 +704,7 @@ Function *MicroWorkloadExtract::extract(
         [&LiveOut, &RevTopoChop, &StartBB, &LastBB, &LiveIn, &notInChop, &DT,
         &LI, &ReachableFromLast](Instruction *Ins, Instruction *UIns) { 
             if(notInChop(UIns) && 
+                    //DT->dominates(LastBB, UIns->getParent())) {
                     ReachableFromLast.count(UIns->getParent())) {
                 LiveOut.insert(Ins);   
             } else if(LiveIn.count(UIns)) {
@@ -826,12 +827,6 @@ Function *MicroWorkloadExtract::extract(
     return StaticFunc;
 }
 
-static void writeModule(Module *Mod, string Name) {
-    error_code EC;
-    raw_fd_ostream File(Name, EC, sys::fs::OpenFlags::F_RW);
-    Mod->print(File, nullptr);
-    File.close();
-}
 
 static SmallVector<BasicBlock *, 16>
 getChopBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
@@ -1284,7 +1279,7 @@ void MicroWorkloadExtract::process(Function &F) {
 
         common::printCFG(F);
 
-        writeModule(Mod, (P.Id) + string(".ll"));
+        common::writeModule(Mod, (P.Id) + string(".ll"));
 
         assert(!verifyModule(*Mod, &errs()) &&
                 "Module verification failed!");

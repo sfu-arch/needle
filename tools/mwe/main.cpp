@@ -159,9 +159,13 @@ int main(int argc, char **argv, const char **env) {
     L.linkInModule(std::move(UndoMod));
 
     for(auto &M : ExtractedModules) {
-        L.linkInModule(move(M));
+        errs() << "Linking " << M->getName() << "\n";
+        bool ret = L.linkInModule(move(M));
+        assert(ret == false && "Error in linkInModule");
     }
     //StripDebugInfo(*Composite);
+    
+    common::writeModule(module.get(), "full.ll" );
     
     common::generateBinary(*module, 
             outFile, optLevel, libPaths, libraries);

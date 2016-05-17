@@ -317,4 +317,12 @@ getLoops(LoopInfo *LI) {
     return Loops;
 }
 
+
+void writeModule(Module *Mod, string Name) {
+    error_code EC;
+    raw_fd_ostream File(Name, EC, sys::fs::OpenFlags::F_RW);
+    Mod->print(File, nullptr);
+    File.close();
+}
+
 }

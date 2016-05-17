@@ -46,5 +46,6 @@ namespace common {
 
     llvm::SetVector<llvm::Loop *>
     getLoops(llvm::LoopInfo *);
+    void writeModule(llvm::Module *, std::string);
 }
 #endif
