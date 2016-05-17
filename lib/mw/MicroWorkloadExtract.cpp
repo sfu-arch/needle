@@ -663,42 +663,62 @@ Function *MicroWorkloadExtract::extract(
             RevTopoChop.end();
     };
 
+    //auto processLiveOut =
+        //[&LiveOut, &RevTopoChop, &StartBB, &LastBB, &LiveIn, &notInChop, &DT,
+        //&LI, &ReachableFromLast](Instruction *Ins, Instruction *UIns) {
+            //if (isa<PHINode>(UIns) && UIns->getParent() == StartBB) {
+                //errs() << "Live Out : " << *Ins << "\n";
+                //errs() << "Phi User : " << *UIns << " "
+                    //<< UIns->getParent()->getName() << "\n";
+                //LiveOut.insert(Ins);
+            //} else if (isa<PHINode>(UIns) && Ins->getParent() != LastBB) {
+                //errs() << "Skipping LiveOut: " << *Ins << "\n";
+                //errs() << "User is : " << *UIns << "\n";
+                //return;
+            //} else if (notInChop(UIns) &&
+                    //// DT->dominates(LastBB, UIns->getParent() ) &&
+                    //// llvm::isPotentiallyReachable(LastBB,
+                    //// UIns->getParent(), DT, LI) &&
+                    //ReachableFromLast.count(UIns->getParent()) &&
+                    //UIns->getParent() != LastBB) {
+                //errs() << "Live Out : " << *Ins << "\n";
+                //errs() << "Outside User : " << *UIns << " "
+                    //<< UIns->getParent()->getName() << "\n";
+                //LiveOut.insert(Ins);
+            //} else if (LiveIn.count(UIns)) {
+                //// Required for loop induction phi's
+                //errs() << "Live Out : " << *Ins << "\n";
+                //errs() << "Live in User : " << *UIns << " "
+                    //<< UIns->getParent()->getName() << "\n";
+                //LiveOut.insert(Ins);
+            //}
+
+        //};
+
+    // Value is a live out only if it is used by an instruction
+    // a. Reachable from the last block
+    // b. As input itself (Induction Phis)
+    // c. ??
+    
     auto processLiveOut =
         [&LiveOut, &RevTopoChop, &StartBB, &LastBB, &LiveIn, &notInChop, &DT,
-        &LI, &ReachableFromLast](Instruction *Ins, Instruction *UIns) {
-
-
-            if (isa<PHINode>(UIns) && UIns->getParent() == StartBB) {
-                errs() << "Live Out : " << *Ins << "\n";
-                errs() << "Phi User : " << *UIns << " "
-                    << UIns->getParent()->getName() << "\n";
-                LiveOut.insert(Ins);
-            } else if (isa<PHINode>(UIns) && Ins->getParent() != LastBB) {
-                return;
-            } else if (notInChop(UIns) &&
-                    // DT->dominates(LastBB, UIns->getParent() ) &&
-                    // llvm::isPotentiallyReachable(LastBB,
-                    // UIns->getParent(), DT, LI) &&
-                    ReachableFromLast.count(UIns->getParent()) &&
-                    UIns->getParent() != LastBB) {
-                errs() << "Live Out : " << *Ins << "\n";
-                errs() << "Outside User : " << *UIns << " "
-                    << UIns->getParent()->getName() << "\n";
-                LiveOut.insert(Ins);
-            } else if (LiveIn.count(UIns)) {
-                // Required for loop induction phi's
-                errs() << "Live Out : " << *Ins << "\n";
-                errs() << "Live in User : " << *UIns << " "
-                    << UIns->getParent()->getName() << "\n";
+        &LI, &ReachableFromLast](Instruction *Ins, Instruction *UIns) { 
+            if(notInChop(UIns) && 
+                    ReachableFromLast.count(UIns->getParent())) {
+                LiveOut.insert(Ins);   
+            } else if(LiveIn.count(UIns)) {
                 LiveOut.insert(Ins);
             }
-
-        };
+    };
 
     // Live Out Loop
     for (auto &BB : RevTopoChop) {
         for (auto &I : *BB) {
-            if(isa<PHINode>(&I) && BB == StartBB) continue;
+            // Don't consider Phi nodes in the first block
+            // since we are not going to include them in 
+            // the extracted function anyway.
+            if(isa<PHINode>(&I) && 
+                    BB == StartBB) continue;
             if (auto Ins = dyn_cast<Instruction>(&I)) {
                 for (auto UI = Ins->use_begin(), 
                         UE = Ins->use_end(); UI != UE; UI++) {
