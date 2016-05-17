@@ -906,6 +906,25 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     BranchInst::Create(SSplit, Fail);
     // Fail Path -- End
 
+    // Update the Phi's in the targets of the merge block to use the merge
+    // block instead of the LastBB. This needs to run before rewriting
+    // uses since the rewriter has to have correct information 
+    // about the Phi's predecessor blocks in order to update the incorrect
+    // values.
+    auto updatePhis = [](BasicBlock* Tgt, BasicBlock* Old, BasicBlock* New) {
+        for(auto &I : *Tgt) {
+            if(auto *Phi = dyn_cast<PHINode>(&I)) {
+                //errs() << *Phi << "\n";
+                Phi->setIncomingBlock(Phi->getBasicBlockIndex(Old), New);
+            }
+        }
+    };
+
+    for(auto S = succ_begin(Merge), E = succ_end(Merge);
+            S != E; S++) {
+        updatePhis(*S, LastBB, Merge);
+    }
+
     // Success Path - Begin
     // 1. Unpack the live out struct 
     // 2. Merge live out values if required
@@ -947,35 +966,10 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
             if(UserBB != Orig->getParent() && UserBB != Merge) {
                 errs() << "Rewriting : " << *UserInst << "\n";
                 SSAU.RewriteUseAfterInsertions(U);
-            }
-            else {
+            } else {
                 errs() << "Not Rewriting : " << *UserInst << "\n";
             }
-
-            // SSAU does not rewrite the phi use across a backedge
-            if(isa<PHINode>(UserInst) && 
-                    BackEdges.count(make_pair(LastBB, UserBB))) {
-                errs() << "Rewriting : " << *UserInst << "\n";
-                UserInst->replaceUsesOfWith(Val, Phi);
-            }
-
         }
-    }
-
-    // Update the Phi's in the targets of the merge block to use the merge
-    // block instead of the LastBB.
-    auto updatePhis = [](BasicBlock* Tgt, BasicBlock* Old, BasicBlock* New) {
-        for(auto &I : *Tgt) {
-            if(auto *Phi = dyn_cast<PHINode>(&I)) {
-                //errs() << *Phi << "\n";
-                Phi->setIncomingBlock(Phi->getBasicBlockIndex(Old), New);
-            }
-        }
-    };
-
-    for(auto S = succ_begin(Merge), E = succ_end(Merge);
-            S != E; S++) {
-        updatePhis(*S, LastBB, Merge);
     }
     // Success Path - End
 }
