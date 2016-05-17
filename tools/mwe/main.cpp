@@ -153,10 +153,20 @@ int main(int argc, char **argv, const char **env) {
     pm.add(createVerifierPass());
     pm.run(*module);
 
-    Linker L(*module);
+    //common::writeModule(module.get(), "orig.ll" );
+
+    // Use a Composite module instead of linkning into the original
+    // as it doesn't work -- no idea why.
+    auto Composite = llvm::make_unique<Module>("llvm-link", getGlobalContext());
+
+    Linker L(*Composite);
+
+    L.linkInModule(move(module));
+
     unique_ptr<Module> UndoMod(parseIRFile(UndoLib, err, getGlobalContext()));
     assert(UndoMod.get() && "Unable to read undo bitcode module");
     L.linkInModule(std::move(UndoMod));
+
 
     for(auto &M : ExtractedModules) {
         errs() << "Linking " << M->getName() << "\n";
@@ -165,9 +175,9 @@ int main(int argc, char **argv, const char **env) {
     }
     //StripDebugInfo(*Composite);
     
-    common::writeModule(module.get(), "full.ll" );
+    //common::writeModule(Composite.get(), "full.ll" );
     
-    common::generateBinary(*module, 
+    common::generateBinary(*Composite, 
             outFile, optLevel, libPaths, libraries);
 
     return 0;
