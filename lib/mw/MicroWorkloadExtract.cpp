@@ -943,21 +943,12 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
             if(P == StartBB) {
                 assert(dyn_cast<PHINode>(U) && "Expect PHI users only" );
                 U->replaceUsesOfWith(Val, Phi);
-                continue;
-            }
-            else if(find(Blocks.begin(), Blocks.end(), P) == Blocks.end() &&
+            } else if(find(Blocks.begin(), Blocks.end(), P) == Blocks.end() &&
                     dyn_cast<PHINode>(U) != Phi ) {
                 U->replaceUsesOfWith(Val, Phi);
             }
-            //if(dyn_cast<PHINode>(U) != Phi &&
-                    //((ReachableFromLast.count(UI->getParent()) && UI->getParent() != LastBB) || 
-                        //(BackEdges.count(make_pair(LastBB, UI->getParent())) 
-                         //&& dyn_cast<PHINode>(U)))) {
-                //U->replaceUsesOfWith(Val, Phi);
-            //}
         }
     }
-
 
     // Update the Phi's in the targets of the merge block to use the merge
     // block instead of the LastBB.
