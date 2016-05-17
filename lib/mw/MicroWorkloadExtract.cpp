@@ -963,7 +963,8 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
             ++UI;
             Instruction *UserInst = cast<Instruction>(U.getUser());
             BasicBlock *UserBB = UserInst->getParent();
-            if(UserBB != Orig->getParent() && UserBB != Merge) {
+            if(UserBB != Orig->getParent() 
+                    && !(UserBB == Merge && isa<PHINode>(UserInst))) {
                 errs() << "Rewriting : " << *UserInst << "\n";
                 SSAU.RewriteUseAfterInsertions(U);
             } else {
