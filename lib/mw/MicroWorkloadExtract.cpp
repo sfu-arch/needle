@@ -943,12 +943,22 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
             Use &U = *UI;
             ++UI;
             Instruction *UserInst = cast<Instruction>(U.getUser());
-            if (!isa<PHINode>(UserInst)) {
-                BasicBlock *UserBB = UserInst->getParent();
-                if(UserBB != Orig->getParent())
-                    SSAU.RewriteUse(U);
-
+            BasicBlock *UserBB = UserInst->getParent();
+            if(UserBB != Orig->getParent() && UserBB != Merge) {
+                errs() << "Rewriting : " << *UserInst << "\n";
+                SSAU.RewriteUseAfterInsertions(U);
             }
+            else {
+                errs() << "Not Rewriting : " << *UserInst << "\n";
+            }
+
+            // SSAU does not rewrite the phi use across a backedge
+            if(isa<PHINode>(UserInst) && 
+                    BackEdges.count(make_pair(LastBB, UserBB))) {
+                errs() << "Rewriting : " << *UserInst << "\n";
+                UserInst->replaceUsesOfWith(Val, Phi);
+            }
+
         }
     }
 
@@ -957,7 +967,7 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     auto updatePhis = [](BasicBlock* Tgt, BasicBlock* Old, BasicBlock* New) {
         for(auto &I : *Tgt) {
             if(auto *Phi = dyn_cast<PHINode>(&I)) {
-                errs() << *Phi << "\n";
+                //errs() << *Phi << "\n";
                 Phi->setIncomingBlock(Phi->getBasicBlockIndex(Old), New);
             }
         }
