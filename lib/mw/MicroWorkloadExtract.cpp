@@ -25,6 +25,7 @@
 #include <cxxabi.h>
 #include "llvm/Linker/Linker.h"
 #include "Common.h"
+#include "llvm/Transforms/Utils/SSAUpdater.h"
 
 #include <algorithm>
 
@@ -35,7 +36,7 @@ using namespace std;
 
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
-                             const cl::list<std::string> &FunctionList);
+        const cl::list<std::string> &FunctionList);
 
 //extern cl::opt<char> optLevel;
 //extern cl::list<string> libPaths;
@@ -50,7 +51,7 @@ void MicroWorkloadExtract::readSequences() {
     // TODO: We can do more than one in case they are not overlapping
     // I will add the checks later.
     assert(NumSeq == 1 && "Can't do more than 1 since original"
-                          "bitcode is modified");
+            "bitcode is modified");
     for (int64_t Count = 0; getline(SeqFile, Line);) {
         Path P;
         std::vector<std::string> Tokens;
@@ -87,8 +88,8 @@ static bool isBlockInPath(const string &S, const Path &P) {
 }
 
 static inline void bSliceDFSHelper(
-    BasicBlock *BB, DenseSet<BasicBlock *> &BSlice,
-    DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
+        BasicBlock *BB, DenseSet<BasicBlock *> &BSlice,
+        DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
     BSlice.insert(BB);
     for (auto PB = pred_begin(BB), PE = pred_end(BB); PB != PE; PB++) {
         if (!BSlice.count(*PB) && BackEdges.count(make_pair(*PB, BB)) == 0)
@@ -98,15 +99,15 @@ static inline void bSliceDFSHelper(
 
 static DenseSet<BasicBlock *>
 bSliceDFS(BasicBlock *Begin,
-          DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
+        DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
     DenseSet<BasicBlock *> BSlice;
     bSliceDFSHelper(Begin, BSlice, BackEdges);
     return BSlice;
 }
 
 static inline void fSliceDFSHelper(
-    BasicBlock *BB, DenseSet<BasicBlock *> &FSlice,
-    DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
+        BasicBlock *BB, DenseSet<BasicBlock *> &FSlice,
+        DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
     FSlice.insert(BB);
     for (auto SB = succ_begin(BB), SE = succ_end(BB); SB != SE; SB++) {
         if (!FSlice.count(*SB) && BackEdges.count(make_pair(BB, *SB)) == 0)
@@ -116,7 +117,7 @@ static inline void fSliceDFSHelper(
 
 static DenseSet<BasicBlock *>
 fSliceDFS(BasicBlock *Begin,
-          DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
+        DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
     DenseSet<BasicBlock *> FSlice;
     fSliceDFSHelper(Begin, FSlice, BackEdges);
     return FSlice;
@@ -129,7 +130,7 @@ getChop(BasicBlock *StartBB, BasicBlock *LastBB,
     DEBUG(errs() << "BackEdges : \n");
     for (auto &BE : BackEdges) {
         DEBUG(errs() << BE.first->getName() << "->" << BE.second->getName()
-                     << "\n");
+                << "\n");
     }
     DEBUG(errs() << "------------------------------\n");
 
@@ -168,13 +169,13 @@ getChop(BasicBlock *StartBB, BasicBlock *LastBB,
 }
 
 static void liveInHelper(SmallVector<BasicBlock *, 16> &RevTopoChop,
-                         SetVector<Value *> &LiveIn,
-                         SetVector<Value *> &Globals, Value *Val) {
+        SetVector<Value *> &LiveIn,
+        SetVector<Value *> &Globals, Value *Val) {
     if (auto Ins = dyn_cast<Instruction>(Val)) {
         for (auto OI = Ins->op_begin(), EI = Ins->op_end(); OI != EI; OI++) {
             if (auto OIns = dyn_cast<Instruction>(OI)) {
                 if (find(RevTopoChop.begin(), RevTopoChop.end(),
-                         OIns->getParent()) == RevTopoChop.end()) {
+                            OIns->getParent()) == RevTopoChop.end()) {
                     LiveIn.insert(OIns);
                 }
             } else
@@ -183,7 +184,7 @@ static void liveInHelper(SmallVector<BasicBlock *, 16> &RevTopoChop,
     } else if (auto CE = dyn_cast<ConstantExpr>(Val)) {
         for (auto OI = CE->op_begin(), EI = CE->op_end(); OI != EI; OI++) {
             assert(!isa<Instruction>(OI) &&
-                   "Don't expect operand of ConstExpr to be an Instruction");
+                    "Don't expect operand of ConstExpr to be an Instruction");
             liveInHelper(RevTopoChop, LiveIn, Globals, *OI);
         }
     } else if (auto Arg = dyn_cast<Argument>(Val))
@@ -196,9 +197,9 @@ static void liveInHelper(SmallVector<BasicBlock *, 16> &RevTopoChop,
 }
 
 void MicroWorkloadExtract::extractHelper(
-    Function *StaticFunc, Function *GuardFunc, SetVector<Value *> &LiveIn,
-    SetVector<Value *> &LiveOut, SetVector<Value *> &Globals,
-    SmallVector<BasicBlock *, 16> &RevTopoChop, LLVMContext &Context) {
+        Function *StaticFunc, Function *GuardFunc, SetVector<Value *> &LiveIn,
+        SetVector<Value *> &LiveOut, SetVector<Value *> &Globals,
+        SmallVector<BasicBlock *, 16> &RevTopoChop, LLVMContext &Context) {
 
     ValueToValueMapTy VMap;
     auto BackEdges = common::getBackEdges(RevTopoChop.back());
@@ -206,14 +207,14 @@ void MicroWorkloadExtract::extractHelper(
     auto handleCallSites =
         [&VMap, &StaticFunc](CallSite &OrigCS, CallSite &StaticCS) {
             assert(OrigCS.getCalledFunction() &&
-                   "We do not support indirect function calls in traces.");
+                    "We do not support indirect function calls in traces.");
             auto *FTy = OrigCS.getCalledFunction()->getFunctionType();
             auto *Val = OrigCS.getCalledValue();
             auto Name = OrigCS.getCalledFunction()->getName();
             if (VMap.count(Val) == 0) {
                 Function *ExtFunc =
                     Function::Create(FTy, GlobalValue::ExternalLinkage, Name,
-                                     StaticFunc->getParent());
+                            StaticFunc->getParent());
                 assert(VMap.count(Val) == 0 && "Need new values");
                 VMap[Val] = static_cast<Value *>(ExtFunc);
             }
@@ -225,10 +226,10 @@ void MicroWorkloadExtract::extractHelper(
         auto OldGV = dyn_cast<GlobalVariable>(Val);
         assert(OldGV && "Could not reconvert to Global Variable");
         GlobalVariable *GV = new GlobalVariable(
-            *StaticFunc->getParent(), OldGV->getType()->getElementType(),
-            OldGV->isConstant(), GlobalValue::ExternalLinkage,
-            (Constant *)nullptr, OldGV->getName(), (GlobalVariable *)nullptr,
-            OldGV->getThreadLocalMode(), OldGV->getType()->getAddressSpace());
+                *StaticFunc->getParent(), OldGV->getType()->getElementType(),
+                OldGV->isConstant(), GlobalValue::ExternalLinkage,
+                (Constant *)nullptr, OldGV->getName(), (GlobalVariable *)nullptr,
+                OldGV->getThreadLocalMode(), OldGV->getType()->getAddressSpace());
         GV->copyAttributesFrom(OldGV);
         assert(VMap.count(OldGV) == 0 && "Need new values");
         VMap[OldGV] = GV;
@@ -238,10 +239,10 @@ void MicroWorkloadExtract::extractHelper(
     }
 
     for (auto IT = RevTopoChop.rbegin(), IE = RevTopoChop.rend(); IT != IE;
-         IT++) {
+            IT++) {
         auto C = *IT;
         auto *NewBB = BasicBlock::Create(
-            Context, StringRef("my_") + C->getName(), StaticFunc, nullptr);
+                Context, StringRef("my_") + C->getName(), StaticFunc, nullptr);
         assert(VMap.count(C) == 0 && "Need new values");
         VMap[C] = NewBB;
         for (auto &I : *C) {
@@ -281,8 +282,8 @@ void MicroWorkloadExtract::extractHelper(
         [&VMap, &RevTopoChop, &StaticFunc](Value *Val, Value *RewriteVal) {
             std::vector<User *> Users(Val->user_begin(), Val->user_end());
             for (std::vector<User *>::iterator use = Users.begin(),
-                                               useE = Users.end();
-                 use != useE; ++use) {
+                    useE = Users.end();
+                    use != useE; ++use) {
                 if (Instruction *inst = dyn_cast<Instruction>(*use)) {
                     if (inst->getParent()->getParent() == StaticFunc) {
                         inst->replaceUsesOfWith(Val, RewriteVal);
@@ -299,7 +300,7 @@ void MicroWorkloadExtract::extractHelper(
     }
 
     for (auto IT = RevTopoChop.rbegin(), IE = RevTopoChop.rend(); IT != IE;
-         IT++) {
+            IT++) {
         auto *BB = *IT;
         for (auto &I : *BB) {
             // If the original instruction has not been promoted to
@@ -309,8 +310,8 @@ void MicroWorkloadExtract::extractHelper(
                 continue;
             std::vector<User *> Users(I.user_begin(), I.user_end());
             for (std::vector<User *>::iterator use = Users.begin(),
-                                               useE = Users.end();
-                 use != useE; ++use) {
+                    useE = Users.end();
+                    use != useE; ++use) {
                 if (Instruction *inst = dyn_cast<Instruction>(*use)) {
                     if (inst->getParent()->getParent() == StaticFunc) {
                         assert(VMap[&I] && "Value not found in ValMap");
@@ -339,10 +340,10 @@ void MicroWorkloadExtract::extractHelper(
                     while (I.getOperand(++OpIdx) != GV)
                         ;
                     auto NCE = CE->getWithOperandReplaced(
-                        OpIdx, cast<Constant>(VMap[GV]));
+                            OpIdx, cast<Constant>(VMap[GV]));
                     vector<User *> Users(CE->user_begin(), CE->user_end());
                     for (auto U = Users.begin(), UE = Users.end(); U != UE;
-                         ++U) {
+                            ++U) {
                         // All users of ConstExpr should be instructions
                         auto Ins = dyn_cast<Instruction>(*U);
                         if (Ins->getParent()->getParent() == StaticFunc) {
@@ -374,7 +375,7 @@ void MicroWorkloadExtract::extractHelper(
             auto *Blk = CBR->getParent();
             Value *Arg = CBR->getCondition();
             Value *Dom = FreqCondition ? ConstantInt::getTrue(Context)
-                                       : ConstantInt::getFalse(Context);
+                : ConstantInt::getFalse(Context);
             vector<Value *> Params = {Arg, Dom};
             auto CI = CallInst::Create(GuardFunc, Params, "", Blk);
             // Add a ReadNone+NoInline attribute to the CallSite, which
@@ -384,7 +385,7 @@ void MicroWorkloadExtract::extractHelper(
         };
 
     for (auto IT = next(RevTopoChop.begin()), IE = RevTopoChop.end(); IT != IE;
-         IT++) {
+            IT++) {
         auto *NewBB = cast<BasicBlock>(VMap[*IT]);
         auto T = NewBB->getTerminator();
 
@@ -396,8 +397,8 @@ void MicroWorkloadExtract::extractHelper(
 
         if (auto *SI = dyn_cast<SwitchInst>(T)) {
             assert(false &&
-                   "Switch instruction not handled, "
-                   "use LowerSwitchPass to convert switch to if-else.");
+                    "Switch instruction not handled, "
+                    "use LowerSwitchPass to convert switch to if-else.");
         } else if (auto *BrInst = dyn_cast<BranchInst>(T)) {
             if (extractAsChop) {
                 auto NS = T->getNumSuccessors();
@@ -413,14 +414,14 @@ void MicroWorkloadExtract::extractHelper(
                     for (unsigned I = 0; I < NS; I++) {
                         auto BL = T->getSuccessor(I);
                         if (inChop(BL) &&
-                            BackEdges.count(make_pair(*IT, BL)) == 0) {
+                                BackEdges.count(make_pair(*IT, BL)) == 0) {
                             assert(VMap[BL] && "Value not found in map");
                             Targets.push_back(cast<BasicBlock>(VMap[BL]));
                         }
                     }
 
                     assert(Targets.size() &&
-                           "At least one target should be in the chop");
+                            "At least one target should be in the chop");
 
                     // auto *BrInst = dyn_cast<BranchInst>(T);
                     if (Targets.size() == 2) {
@@ -444,8 +445,8 @@ void MicroWorkloadExtract::extractHelper(
                     auto *SuccBB = *prev(IT);
                     vector<BasicBlock *> Succs(succ_begin(*IT), succ_end(*IT));
                     assert(find(Succs.begin(), Succs.end(), SuccBB) !=
-                               Succs.end() &&
-                           "Could not find successor!");
+                            Succs.end() &&
+                            "Could not find successor!");
                     assert(VMap[SuccBB] && "Successor not found in VMap");
                     if (T->getNumSuccessors() == 2) {
                         if (T->getSuccessor(0) == SuccBB)
@@ -471,8 +472,8 @@ void MicroWorkloadExtract::extractHelper(
                 auto *Val = Phi->getIncomingValue(I);
 
                 if (!extractAsChop &&
-                    *next(find(RevTopoChop.begin(), RevTopoChop.end(),
-                               Phi->getParent())) != Blk) {
+                        *next(find(RevTopoChop.begin(), RevTopoChop.end(),
+                                Phi->getParent())) != Blk) {
                     ToRemove.push_back(Blk);
                     continue;
                 }
@@ -480,16 +481,16 @@ void MicroWorkloadExtract::extractHelper(
                 // Is this a backedge? Remove the incoming value
                 // Is this predicated on a block outside the chop? Remove
                 assert(BackEdges.count(make_pair(Blk, Phi->getParent())) == 0 &&
-                       "Backedge Phi's should not exists -- should be promoted "
-                       "to LiveIn");
+                        "Backedge Phi's should not exists -- should be promoted "
+                        "to LiveIn");
 
                 if (find(RevTopoChop.begin(), RevTopoChop.end(), Blk) ==
-                    RevTopoChop.end()) {
+                        RevTopoChop.end()) {
                     ToRemove.push_back(Blk);
                     continue;
                 }
                 assert(VMap[Phi] &&
-                       "New Phis should have been added by Instruction clone");
+                        "New Phis should have been added by Instruction clone");
 
                 auto *NewPhi = cast<PHINode>(VMap[Phi]);
                 assert(VMap[Blk] && "Value not found in ValMap");
@@ -504,7 +505,7 @@ void MicroWorkloadExtract::extractHelper(
             }
             for (auto R : ToRemove) {
                 assert(VMap[Phi] &&
-                       "New Phis should have been added by Instruction clone");
+                        "New Phis should have been added by Instruction clone");
                 auto *NewPhi = cast<PHINode>(VMap[Phi]);
                 NewPhi->removeIncomingValue(R, false);
             }
@@ -513,7 +514,7 @@ void MicroWorkloadExtract::extractHelper(
     // Patch the Phis of all the blocks in Topo order
     // apart from the first block (those become inputs)
     for (auto BB = next(RevTopoChop.rbegin()), BE = RevTopoChop.rend();
-         BB != BE; BB++) {
+            BB != BE; BB++) {
         for (auto &Ins : **BB) {
             if (auto *Phi = dyn_cast<PHINode>(&Ins)) {
                 handlePhis(Phi, extractAsChop);
@@ -546,9 +547,9 @@ void MicroWorkloadExtract::extractHelper(
 }
 
 static void getTopoChopHelper(
-    BasicBlock *BB, DenseSet<BasicBlock *> &Chop, DenseSet<BasicBlock *> &Seen,
-    SmallVector<BasicBlock *, 16> &Order,
-    DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
+        BasicBlock *BB, DenseSet<BasicBlock *> &Chop, DenseSet<BasicBlock *> &Seen,
+        SmallVector<BasicBlock *, 16> &Order,
+        DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
     Seen.insert(BB);
     for (auto SB = succ_begin(BB), SE = succ_end(BB); SB != SE; SB++) {
         if (!Seen.count(*SB) && Chop.count(*SB)) {
@@ -560,7 +561,7 @@ static void getTopoChopHelper(
 
 SmallVector<BasicBlock *, 16>
 getTopoChop(DenseSet<BasicBlock *> &Chop, BasicBlock *StartBB,
-            DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
+        DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
     SmallVector<BasicBlock *, 16> Order;
     DenseSet<BasicBlock *> Seen;
     getTopoChopHelper(StartBB, Chop, Seen, Order, BackEdges);
@@ -577,10 +578,10 @@ static bool verifyChop(const SmallVector<BasicBlock *, 16> Chop) {
                     return false;
                 } else {
                     if (CS.getCalledFunction()->isDeclaration() &&
-                        common::checkIntrinsic(CS)) {
+                            common::checkIntrinsic(CS)) {
                         DEBUG(errs() << "External Call : "
-                                     << CS.getCalledFunction()->getName()
-                                     << "\n");
+                                << CS.getCalledFunction()->getName()
+                                << "\n");
                         return true;
                     }
                 }
@@ -591,18 +592,18 @@ static bool verifyChop(const SmallVector<BasicBlock *, 16> Chop) {
 }
 
 static StructType *getLiveOutStructType(SetVector<Value *> &LiveOut,
-                                        Module *Mod) {
+        Module *Mod) {
     SmallVector<Type *, 16> LiveOutTypes(LiveOut.size());
     transform(LiveOut.begin(), LiveOut.end(), LiveOutTypes.begin(),
-              [](const Value *V) -> Type *{ return V->getType(); });
+            [](const Value *V) -> Type *{ return V->getType(); });
     // Create a packed struct return type
     return StructType::get(Mod->getContext(), LiveOutTypes, true);
 }
 
 Function *MicroWorkloadExtract::extract(
-    PostDominatorTree *PDT, Module *Mod,
-    SmallVector<BasicBlock *, 16> &RevTopoChop, SetVector<Value *> &LiveIn,
-    SetVector<Value *> &LiveOut, DominatorTree *DT, LoopInfo *LI) {
+        PostDominatorTree *PDT, Module *Mod,
+        SmallVector<BasicBlock *, 16> &RevTopoChop, SetVector<Value *> &LiveIn,
+        SetVector<Value *> &LiveOut, DominatorTree *DT, LoopInfo *LI) {
 
     auto *StartBB = RevTopoChop.back();
     auto *LastBB = RevTopoChop.front();
@@ -624,10 +625,10 @@ Function *MicroWorkloadExtract::extract(
                     auto *Blk = Phi->getIncomingBlock(I);
                     auto *Val = Phi->getIncomingValue(I);
                     if (find(RevTopoChop.begin(), RevTopoChop.end(), Blk) !=
-                        RevTopoChop.end()) {
+                            RevTopoChop.end()) {
                         if (auto *VI = dyn_cast<Instruction>(Val)) {
                             if (find(RevTopoChop.begin(), RevTopoChop.end(),
-                                     VI->getParent()) == RevTopoChop.end()) {
+                                        VI->getParent()) == RevTopoChop.end()) {
                                 LiveIn.insert(Val);
                             }
                         } else if (auto *AI = dyn_cast<Argument>(Val)) {
@@ -659,36 +660,36 @@ Function *MicroWorkloadExtract::extract(
 
     auto notInChop = [&RevTopoChop](const Instruction *I) -> bool {
         return find(RevTopoChop.begin(), RevTopoChop.end(), I->getParent()) ==
-               RevTopoChop.end();
+            RevTopoChop.end();
     };
 
     auto processLiveOut =
         [&LiveOut, &RevTopoChop, &StartBB, &LastBB, &LiveIn, &notInChop, &DT,
-         &LI, &ReachableFromLast](Instruction *Ins, Instruction *UIns) {
+        &LI, &ReachableFromLast](Instruction *Ins, Instruction *UIns) {
 
 
             if (isa<PHINode>(UIns) && UIns->getParent() == StartBB) {
                 errs() << "Live Out : " << *Ins << "\n";
                 errs() << "Phi User : " << *UIns << " "
-                       << UIns->getParent()->getName() << "\n";
+                    << UIns->getParent()->getName() << "\n";
                 LiveOut.insert(Ins);
             } else if (isa<PHINode>(UIns) && Ins->getParent() != LastBB) {
                 return;
             } else if (notInChop(UIns) &&
-                       // DT->dominates(LastBB, UIns->getParent() ) &&
-                       // llvm::isPotentiallyReachable(LastBB,
-                       // UIns->getParent(), DT, LI) &&
-                       ReachableFromLast.count(UIns->getParent()) &&
-                       UIns->getParent() != LastBB) {
+                    // DT->dominates(LastBB, UIns->getParent() ) &&
+                    // llvm::isPotentiallyReachable(LastBB,
+                    // UIns->getParent(), DT, LI) &&
+                    ReachableFromLast.count(UIns->getParent()) &&
+                    UIns->getParent() != LastBB) {
                 errs() << "Live Out : " << *Ins << "\n";
                 errs() << "Outside User : " << *UIns << " "
-                       << UIns->getParent()->getName() << "\n";
+                    << UIns->getParent()->getName() << "\n";
                 LiveOut.insert(Ins);
             } else if (LiveIn.count(UIns)) {
                 // Required for loop induction phi's
                 errs() << "Live Out : " << *Ins << "\n";
                 errs() << "Live in User : " << *UIns << " "
-                       << UIns->getParent()->getName() << "\n";
+                    << UIns->getParent()->getName() << "\n";
                 LiveOut.insert(Ins);
             }
 
@@ -722,21 +723,21 @@ Function *MicroWorkloadExtract::extract(
     // value to patch.
 
     switch (LastT->getNumSuccessors()) {
-    case 2: {
-        auto *CBR = dyn_cast<BranchInst>(LastT);
-        LiveOut.insert(CBR->getCondition());
-    } break;
-    case 1:
-        break;
-    case 0: {
-        auto *RT = dyn_cast<ReturnInst>(LastT);
-        assert(RT && "Path with 0 successor should have returninst");
-        if (auto *Val = RT->getReturnValue()) {
-            LiveOut.insert(Val);
-        }
-    } break;
-    default:
-        assert(false && "Unexpected num successors -- lowerswitch?");
+        case 2: {
+                    auto *CBR = dyn_cast<BranchInst>(LastT);
+                    LiveOut.insert(CBR->getCondition());
+                } break;
+        case 1:
+                break;
+        case 0: {
+                    auto *RT = dyn_cast<ReturnInst>(LastT);
+                    assert(RT && "Path with 0 successor should have returninst");
+                    if (auto *Val = RT->getReturnValue()) {
+                        LiveOut.insert(Val);
+                    }
+                } break;
+        default:
+                assert(false && "Unexpected num successors -- lowerswitch?");
     }
 
     errs() << "LiveIns :\n";
@@ -777,7 +778,7 @@ Function *MicroWorkloadExtract::extract(
 
     // Create the trace function
     Function *StaticFunc = Function::Create(
-        StFuncType, GlobalValue::ExternalLinkage, "__offload_func_" + Mod->getName(), Mod);
+            StFuncType, GlobalValue::ExternalLinkage, "__offload_func_" + Mod->getName(), Mod);
 
     // Create an external function which is used to
     // model all guard checks. First arg is the condition, second is whether
@@ -791,10 +792,10 @@ Function *MicroWorkloadExtract::extract(
 
     // Create the guard function
     Function *GuardFunc = Function::Create(
-        GuFuncType, GlobalValue::ExternalLinkage, "__guard_func", Mod);
+            GuFuncType, GlobalValue::ExternalLinkage, "__guard_func", Mod);
 
     extractHelper(StaticFunc, GuardFunc, LiveIn, LiveOut, Globals, RevTopoChop,
-                  Mod->getContext());
+            Mod->getContext());
 
     StripDebugInfo(*Mod);
 
@@ -820,7 +821,7 @@ getChopBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
     auto Chop = getChop(StartBB, LastBB, BackEdges);
     auto RevTopoChop = getTopoChop(Chop, StartBB, BackEdges);
     assert(StartBB == RevTopoChop.back() && LastBB == RevTopoChop.front() &&
-           "Sanity Check");
+            "Sanity Check");
     return RevTopoChop;
 }
 
@@ -837,8 +838,8 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
 }
 
 static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
-                           FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
-                           SetVector<Value *> &LiveOut, DominatorTree *DT, string& Id) {
+        FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
+        SetVector<Value *> &LiveOut, DominatorTree *DT, string& Id) {
     assert(Blocks.size() > 1 && "Can't extract unit block paths");
     // Setup Basic Control Flow
     BasicBlock *StartBB = Blocks.back(), *LastBB = Blocks.front();
@@ -889,7 +890,7 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     //FIXME : These need to become internal to each new module
     auto *ULog = Mod->getOrInsertGlobal("__undo_log", LogArrTy);
     auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores",
-                                            IntegerType::getInt32Ty(Ctx));
+            IntegerType::getInt32Ty(Ctx));
     Type *ParamTy[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx)};
     auto *UndoTy = FunctionType::get(Type::getVoidTy(Ctx), ParamTy, false);
     auto *Undo = Mod->getOrInsertFunction("__undo_mem", UndoTy);
@@ -904,48 +905,49 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     // CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
     BranchInst::Create(SSplit, Fail);
     // Fail Path -- End
-    
+
     // Success Path - Begin
     // 1. Unpack the live out struct 
     // 2. Merge live out values if required
     // 3. Rewrite Phi's in successor of LastBB 
     //  a. Use merged values
     //  b. Use incoming block as Merge
-    
     for (uint32_t Idx = 0; Idx < LiveOut.size(); Idx++) {
         auto *Val = LiveOut[Idx];
         // GEP Indices always need to i32 types.
         Value *StIdx = ConstantInt::get(Int32Ty, Idx, false);
         Value *GEPIdx[2] = {Zero, StIdx};
-        auto *ValTy = cast<PointerType>(StPtr->getType())->getElementType();
-        auto *ValPtr =     GetElementPtrInst::Create(ValTy, 
-                    StPtr, GEPIdx, "st_gep", Success->getTerminator());
+        auto *EValTy = cast<PointerType>(StPtr->getType())->getElementType();
+        auto *ValPtr =     GetElementPtrInst::Create(EValTy, 
+                StPtr, GEPIdx, "st_gep", Success->getTerminator());
         auto *Load = new LoadInst(ValPtr, "live_out", Success->getTerminator());
 
         // Merge the values -- Use original LiveOut if you came from
         // the LastBB. Use new loaded value if you came from the 
         // offloaded function.
-        auto *Phi = PHINode::Create(Val->getType(), 2, "",  Merge->getTerminator());
+        auto *ValTy = Val->getType();
+        auto *Phi = PHINode::Create(ValTy, 2, "",  Merge->getTerminator());
         Phi->addIncoming(Val, LastBB);
         Phi->addIncoming(Load, Success);
 
-        // Rewrite users of the Val
-        vector<User *> Users(Val->user_begin(), Val->user_end());
-        for(auto &U : Users) {
-            auto *UI = dyn_cast<Instruction>(U);
-            assert(UI && "Expect user to be an Instruction");
-            // Don't replace the Phi itself
-            // The use is reachable from the last block in path (but not the last block)
-            // or the use is a phi across a backedge
-            // TODO : Refactor to change ReachableFromLast meaning 
-            // (should not include last block itself) -- simplify LiveOut detection
-            auto *P = UI->getParent();
-            if(P == StartBB) {
-                assert(dyn_cast<PHINode>(U) && "Expect PHI users only" );
-                U->replaceUsesOfWith(Val, Phi);
-            } else if(find(Blocks.begin(), Blocks.end(), P) == Blocks.end() &&
-                    dyn_cast<PHINode>(U) != Phi ) {
-                U->replaceUsesOfWith(Val, Phi);
+        auto *Orig = dyn_cast<Instruction>(Val);
+        assert(Orig && "Expect live outs to be instructions");
+
+        SSAUpdater SSAU; 
+        SSAU.Initialize(Orig->getType(), Orig->getName());
+        SSAU.AddAvailableValue(Orig->getParent(), Val);
+        SSAU.AddAvailableValue(Merge, Phi);
+
+        for (Value::use_iterator UI = Val->use_begin(),
+                UE = Val->use_end(); UI != UE; ) {
+            Use &U = *UI;
+            ++UI;
+            Instruction *UserInst = cast<Instruction>(U.getUser());
+            if (!isa<PHINode>(UserInst)) {
+                BasicBlock *UserBB = UserInst->getParent();
+                if(UserBB != Orig->getParent())
+                    SSAU.RewriteUse(U);
+
             }
         }
     }
@@ -969,8 +971,8 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
 }
 
 static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
-                           FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
-                           SetVector<Value *> &LiveOut, DominatorTree *DT, string& Id) {
+        FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
+        SetVector<Value *> &LiveOut, DominatorTree *DT, string& Id) {
 
     BasicBlock *StartBB = Blocks.back(), *LastBB = Blocks.front();
     auto BackEdges = common::getBackEdges(StartBB);
@@ -1019,7 +1021,7 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     auto *T = LastBB->getTerminator();
     uint32_t hasLastLiveOut = 0;
     if (T->getNumSuccessors() == 2 ||
-        (isa<ReturnInst>(T) && dyn_cast<ReturnInst>(T)->getReturnValue())) {
+            (isa<ReturnInst>(T) && dyn_cast<ReturnInst>(T)->getReturnValue())) {
         hasLastLiveOut = 1;
     }
 
@@ -1049,13 +1051,13 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
             if (ReachableFromLast.count(UseBB) && UseBB != LastBB) {
                 errs() << "User : " << *U << " " << UseBB->getName() << "\n"; 
                 assert(T->getNumSuccessors() == 2 &&
-                       "Should only happen for backedge blocks");
+                        "Should only happen for backedge blocks");
                 // Insert a phi in there which has 2 values,
                 // (load,Success) , (original, LastBB)
                 // rewrite uses with this new phi.
                 if (PhiMap.count(Val) == 0) {
                     auto *MPhi = PHINode::Create(Val->getType(), 2, "merge",
-                                                 MergeBB);
+                            MergeBB);
                     MPhi->addIncoming(Load, Success);
                     // If the user is a Phi, copy the corresponding
                     // values, block pairs else use val,incoming for each
@@ -1078,7 +1080,7 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                 for (uint32_t N = 0; N < T->getNumSuccessors(); N++) {
                     errs() << "PB : " << PB->getName() << "\n";
                     errs() << "T(N) : " << T->getSuccessor(N)->getName()
-                           << "\n";
+                        << "\n";
                     if (PB == T->getSuccessor(N)) {
                         Phi->addIncoming(Load, Success);
                         errs() << "Val : " << *Val << "\n";
@@ -1109,8 +1111,8 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         } 
         for_each(Terminators.begin(), Terminators.end(),
                 [&NotBackedgeTarget, &MergeBB](TerminatorInst* T){
-                    T->replaceUsesOfWith(NotBackedgeTarget, MergeBB);
-            });
+                T->replaceUsesOfWith(NotBackedgeTarget, MergeBB);
+                });
         BranchInst::Create(NotBackedgeTarget, MergeBB);
         // So now notbackedgetarget has only 1 pred, so fix the phis
         for(auto &I : *NotBackedgeTarget) {
@@ -1130,58 +1132,58 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
 
 
     //for (auto &BB : PatchBlocks) {
-        //for (auto &I : *BB) {
-            //if (auto *Phi = dyn_cast<PHINode>(&I)) {
-                //int32_t Idx = Phi->getBasicBlockIndex(LastBB);
-                //if( Idx != -1) {
-                    //Phi->setIncomingBlock(Idx, MergeBB);  
-                //} 
-            //}
-        //}
+    //for (auto &I : *BB) {
+    //if (auto *Phi = dyn_cast<PHINode>(&I)) {
+    //int32_t Idx = Phi->getBasicBlockIndex(LastBB);
+    //if( Idx != -1) {
+    //Phi->setIncomingBlock(Idx, MergeBB);  
+    //} 
+    //}
+    //}
     //}
 
     switch (T->getNumSuccessors()) {
-    case 2: {
-        // Last value in the live out array is the branch
-        // condition, load it and branch accordingly.
-        Value *StIdx = ConstantInt::get(Int32Ty, LiveOut.size() - 1, false);
-        Value *GEPIdx[2] = {Zero, StIdx};
-        auto *ValPtr =
-            GetElementPtrInst::Create(StPtr->getType(), StPtr, GEPIdx, "st_gep", Success);
-        auto *Load = new LoadInst(ValPtr, "live_out", Success);
-        auto *NewBr = dyn_cast<BranchInst>(T->clone());
-        NewBr->setCondition(Load);
-        //NewBr->replaceUsesOfWith(NotBackedgeTarget, MergeBB);    
-        NewBr->insertAfter(Load);
-    } break;
-    case 1:
-        // This should always be a backedge.
-        assert(BackEdges.count(make_pair(LastBB, T->getSuccessor(0))) &&
-               "Expected backedge here");
-        BranchInst::Create(T->getSuccessor(0), Success);
-        break;
-    case 0: {
-        auto *RT = dyn_cast<ReturnInst>(T);
-        if (RT->getReturnValue()) {
-            Value *StIdx = ConstantInt::get(Int32Ty, LiveOut.size() - 1, false);
-            Value *GEPIdx[2] = {Zero, StIdx};
-            auto *ValPtr =
-                GetElementPtrInst::Create(StPtr->getType(),StPtr, GEPIdx, "st_gep", Success);
-            auto *Load = new LoadInst(ValPtr, "live_out", Success);
-            ReturnInst::Create(Mod->getContext(), Load, Success);
-        } else {
-            ReturnInst::Create(Mod->getContext(), nullptr, Success);
-        }
-    } break;
-    default:
-        assert(false && "Unexpected num successors");
+        case 2: {
+                    // Last value in the live out array is the branch
+                    // condition, load it and branch accordingly.
+                    Value *StIdx = ConstantInt::get(Int32Ty, LiveOut.size() - 1, false);
+                    Value *GEPIdx[2] = {Zero, StIdx};
+                    auto *ValPtr =
+                        GetElementPtrInst::Create(StPtr->getType(), StPtr, GEPIdx, "st_gep", Success);
+                    auto *Load = new LoadInst(ValPtr, "live_out", Success);
+                    auto *NewBr = dyn_cast<BranchInst>(T->clone());
+                    NewBr->setCondition(Load);
+                    //NewBr->replaceUsesOfWith(NotBackedgeTarget, MergeBB);    
+                    NewBr->insertAfter(Load);
+                } break;
+        case 1:
+                // This should always be a backedge.
+                assert(BackEdges.count(make_pair(LastBB, T->getSuccessor(0))) &&
+                        "Expected backedge here");
+                BranchInst::Create(T->getSuccessor(0), Success);
+                break;
+        case 0: {
+                    auto *RT = dyn_cast<ReturnInst>(T);
+                    if (RT->getReturnValue()) {
+                        Value *StIdx = ConstantInt::get(Int32Ty, LiveOut.size() - 1, false);
+                        Value *GEPIdx[2] = {Zero, StIdx};
+                        auto *ValPtr =
+                            GetElementPtrInst::Create(StPtr->getType(),StPtr, GEPIdx, "st_gep", Success);
+                        auto *Load = new LoadInst(ValPtr, "live_out", Success);
+                        ReturnInst::Create(Mod->getContext(), Load, Success);
+                    } else {
+                        ReturnInst::Create(Mod->getContext(), nullptr, Success);
+                    }
+                } break;
+        default:
+                assert(false && "Unexpected num successors");
     }
 
     ArrayType *LogArrTy = ArrayType::get(IntegerType::get(Ctx, 8), 0);
     //FIXME : These need to become internal to each new module
     auto *ULog = Mod->getOrInsertGlobal("__undo_log", LogArrTy);
     auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores",
-                                            IntegerType::getInt32Ty(Ctx));
+            IntegerType::getInt32Ty(Ctx));
     Type *ParamTy[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx)};
     auto *UndoTy = FunctionType::get(Type::getVoidTy(Ctx), ParamTy, false);
     auto *Undo = Mod->getOrInsertFunction("__undo_mem", UndoTy);
@@ -1200,9 +1202,9 @@ static void instrumentPATH(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
 
 
 static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
-                       FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
-                       SetVector<Value *> &LiveOut, DominatorTree *DT,
-                       mwe::PathType Type, string& Id ) {
+        FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
+        SetVector<Value *> &LiveOut, DominatorTree *DT,
+        mwe::PathType Type, string& Id ) {
     switch (Type) {
         case FIRO:
         case RIFO:
@@ -1216,7 +1218,7 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
 }
 
 static void runHelperPasses(Function *Offload, Function *Undo,
-                            Module *Generated) {
+        Module *Generated) {
     legacy::PassManager PM;
     PM.add(createBasicAAWrapperPass());
     PM.add(llvm::createTypeBasedAAWrapperPass());
@@ -1240,7 +1242,7 @@ void MicroWorkloadExtract::process(Function &F) {
         Mod->setDataLayout(F.getParent()->getDataLayout());
         SmallVector<BasicBlock *, 16> Blocks =
             extractAsChop ? getChopBlocks(P, BlockMap)
-                          : getTraceBlocks(P, BlockMap);
+            : getTraceBlocks(P, BlockMap);
 
         // Extract the blocks and create a new function
         SetVector<Value *> LiveOut, LiveIn;
@@ -1253,14 +1255,14 @@ void MicroWorkloadExtract::process(Function &F) {
         runHelperPasses(Offload, nullptr, Mod);
 
         instrument(F, Blocks, Offload->getFunctionType(), LiveIn, LiveOut, DT,
-                   P.PType, P.Id);
+                P.PType, P.Id);
 
         common::printCFG(F);
 
         writeModule(Mod, (P.Id) + string(".ll"));
 
         assert(!verifyModule(*Mod, &errs()) &&
-               "Module verification failed!");
+                "Module verification failed!");
     }
 }
 
