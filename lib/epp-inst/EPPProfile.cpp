@@ -52,7 +52,7 @@ bool hasRecursiveCall(Function &F) {
 
 bool EPPProfile::runOnModule(Module &module) {
     DEBUG(errs() << "Running Profile\n");
-    auto &context = module.getContext();
+    auto &Ctx = module.getContext();
 
     for (auto &func : module) {
         if (isTargetFunction(func, FunctionList)) {
@@ -64,7 +64,7 @@ bool EPPProfile::runOnModule(Module &module) {
         }
     }
 
-    auto *voidTy = Type::getVoidTy(context);
+    auto *voidTy = Type::getVoidTy(Ctx);
     auto *printer =
         module.getOrInsertFunction("PaThPrOfIlInG_save", voidTy, nullptr);
     appendToGlobalDtors(module, llvm::cast<Function>(printer), 0);
@@ -80,14 +80,24 @@ static bool isFunctionExiting(BasicBlock *BB) {
 
 void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     Module *M = F.getParent();
-    auto &context = M->getContext();
-    auto *int64Ty = Type::getInt64Ty(context);
-    auto *voidTy = Type::getVoidTy(context);
+    auto &Ctx = M->getContext();
+    auto *int64Ty = Type::getInt64Ty(Ctx);
+    auto *voidTy = Type::getVoidTy(Ctx);
     auto *incFun = M->getOrInsertFunction("PaThPrOfIlInG_incCount", voidTy, int64Ty,
                                int64Ty, nullptr);
     auto *logFun = M->getOrInsertFunction("PaThPrOfIlInG_logPath", voidTy, nullptr);
 
-    auto InsertInc = [&incFun, &int64Ty](Instruction *addPos, APInt Increment) {
+    auto *CtrTy = Type::getInt128Ty(Ctx);
+    auto *logFun2 = M->getOrInsertFunction("PaThPrOfIlInG_logPath2", voidTy, CtrTy, nullptr);
+
+    auto *Ctr = new AllocaInst(CtrTy, nullptr, "epp.ctr", 
+            &*F.getEntryBlock().getFirstInsertionPt()) ;
+
+    auto *SI = new StoreInst(ConstantInt::getIntegerValue(CtrTy, 
+                APInt(128, 0, true)), Ctr);
+    SI->insertAfter(Ctr);
+
+    auto InsertInc = [&incFun, &int64Ty, &Ctr, &CtrTy](Instruction *addPos, APInt Increment) {
         if(Increment.ne(APInt(128, 0, true))) {
             DEBUG(errs() << "Inserting Increment " << Increment << " "
                          << addPos->getParent()->getName() << "\n");
@@ -96,12 +106,23 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
             for(uint32_t C = 0; C < 2; C++)
                 Args.push_back(ConstantInt::get(int64Ty, I[C], false));
             CallInst::Create(incFun, Args, "", addPos);
+            // Context Counter
+            auto *LI = new LoadInst(Ctr, "ld.epp.ctr", addPos);  
+            auto *BI = BinaryOperator::CreateAdd(LI, ConstantInt::getIntegerValue(CtrTy, Increment));
+            BI->insertAfter(LI);
+            (new StoreInst(BI, Ctr))->insertAfter(BI);
         }
     };
 
-    auto InsertLogPath = [&logFun](BasicBlock *BB) {
+    auto InsertLogPath = [&logFun, &logFun2, &Ctr, &CtrTy](BasicBlock *BB) {
         auto logPos = BB->getTerminator();
         CallInst::Create(logFun, "", logPos);
+
+        auto *LI = new LoadInst(Ctr, "ld.epp.ctr", logPos);  
+        auto *CI = CallInst::Create(logFun2, {LI}, "");
+        CI->insertAfter(LI);
+        (new StoreInst(ConstantInt::getIntegerValue(CtrTy, 
+                        APInt(128,0,true)), Ctr))->insertAfter(CI);
     };
 
     auto blockIndex = [](const PHINode* Phi, const BasicBlock * BB) -> uint32_t {
@@ -120,7 +141,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         }
     };
 
-    auto interpose = [&context, &patchPhis]
+    auto interpose = [&Ctx, &patchPhis]
         (BasicBlock* Src, BasicBlock* Tgt) -> BasicBlock* {
         DEBUG(errs() << "Split : " << Src->getName()
                      << " " << Tgt->getName() << "\n");
@@ -132,7 +153,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         assert(found && "Could not find the edge to split");
 
         auto *F = Tgt->getParent();
-        auto *BB = BasicBlock::Create(context, Src->getName()+".intp", F);
+        auto *BB = BasicBlock::Create(Ctx, Src->getName()+".intp", F);
         patchPhis(Src, Tgt, BB);
         auto *T = Src->getTerminator();
         T->replaceUsesOfWith(Tgt, BB);
