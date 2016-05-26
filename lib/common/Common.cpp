@@ -1,48 +1,47 @@
 #define DEBUG_TYPE "pasha_common"
+#include "Common.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Analysis/CFG.h"
-#include "llvm/ADT/SmallString.h"
+#include "llvm/Analysis/CFGPrinter.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/CodeGen/CommandFlags.h"
 #include "llvm/CodeGen/LinkAllAsmWriterComponents.h"
-#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/CodeGen/LinkAllCodegenComponents.h"
+#include "llvm/IR/Constant.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IRPrintingPasses.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/PassManager.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Linker/Linker.h"
+#include "llvm/Linker/Linker.h"
 #include "llvm/MC/SubtargetFeature.h"
-#include "llvm/IR/PassManager.h"
-#include "llvm/IR/Constant.h"
-#include "llvm/IR/Constants.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/ManagedStatic.h"
-#include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Program.h"
-#include "llvm/Support/Debug.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/Linker/Linker.h"
-#include "llvm/Analysis/CFGPrinter.h"
-#include "Common.h"
-
 
 using namespace llvm;
 using namespace std;
@@ -106,7 +105,7 @@ void compile(Module &m, string outputPath, char optLevel) {
 
     // Add target specific info and transforms
     pm.add(new TargetLibraryInfoWrapperPass(triple));
-    //machine->addAnalysisPasses(pm);
+    // machine->addAnalysisPasses(pm);
 
     // if (const DataLayout *dl = machine->createDataLayout()) {
     //      m.setDataLayout(dl);
@@ -114,7 +113,7 @@ void compile(Module &m, string outputPath, char optLevel) {
     m.setDataLayout(machine->createDataLayout());
 
     { // Bound this scope
-        //formatted_raw_ostream fos(out->os());
+        // formatted_raw_ostream fos(out->os());
         raw_pwrite_stream *OS = &Out->os();
         FileType = TargetMachine::CGFT_ObjectFile;
         // Ask the target to add backend passes as necessary.
@@ -192,7 +191,6 @@ void saveModule(Module &m, StringRef filename) {
     WriteBitcodeToFile(&m, out);
 }
 
-
 DenseSet<pair<const BasicBlock *, const BasicBlock *>>
 getBackEdges(BasicBlock *StartBB) {
     SmallVector<std::pair<const BasicBlock *, const BasicBlock *>, 8>
@@ -207,7 +205,7 @@ getBackEdges(BasicBlock *StartBB) {
 }
 
 DenseSet<pair<const BasicBlock *, const BasicBlock *>>
-getBackEdges(Function& F) {
+getBackEdges(Function &F) {
     return getBackEdges(&F.getEntryBlock());
 }
 
@@ -289,34 +287,29 @@ bool checkIntrinsic(CallSite &CS) {
     return true;
 }
 
-bool isSelfLoop(const BasicBlock* BB) {
-    for(auto S = succ_begin(BB), E = succ_end(BB); S != E; S++) {
-        if(*S == BB) {
+bool isSelfLoop(const BasicBlock *BB) {
+    for (auto S = succ_begin(BB), E = succ_end(BB); S != E; S++) {
+        if (*S == BB) {
             return true;
         }
     }
     return false;
 }
 
-
-static
-void getLoopsHelper(SetVector<Loop*>& Loops, Loop* L) {
+static void getLoopsHelper(SetVector<Loop *> &Loops, Loop *L) {
     Loops.insert(L);
-    for(auto &SL : L->getSubLoops()) {
+    for (auto &SL : L->getSubLoops()) {
         getLoopsHelper(Loops, SL);
     }
 }
 
-
-SetVector<Loop *>
-getLoops(LoopInfo *LI) {
-    SetVector<Loop*> Loops;
-    for(auto &L : *LI) {
+SetVector<Loop *> getLoops(LoopInfo *LI) {
+    SetVector<Loop *> Loops;
+    for (auto &L : *LI) {
         getLoopsHelper(Loops, L);
     }
     return Loops;
 }
-
 
 void writeModule(Module *Mod, string Name) {
     error_code EC;
@@ -324,5 +317,4 @@ void writeModule(Module *Mod, string Name) {
     Mod->print(File, nullptr);
     File.close();
 }
-
 }

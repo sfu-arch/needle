@@ -1,36 +1,36 @@
 #define DEBUG_TYPE "epp_encode"
+#include "Common.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/SCCIterator.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/Transforms/Scalar.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/ADT/SCCIterator.h"
-#include "llvm/ADT/SetVector.h"
 #include "llvm/Pass.h"
-#include "Common.h"
-#include "llvm/ADT/MapVector.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/Scalar.h"
 
 #include "EPPEncode.h"
 
 #include <algorithm>
-#include <vector>
-#include <set>
-#include <unordered_set>
-#include <stack>
 #include <cassert>
 #include <fstream>
+#include <set>
+#include <stack>
+#include <unordered_set>
+#include <vector>
 
 using namespace llvm;
 using namespace epp;
 using namespace std;
 
-
-typedef pair<BasicBlock*, EdgeType> AltTgtTy;
-typedef SetVector<AltTgtTy, vector<AltTgtTy>, 
-        DenseSet<AltTgtTy, BlockEdgeTyKeyInfo>> SuccListTy;                        
+typedef pair<BasicBlock *, EdgeType> AltTgtTy;
+typedef SetVector<AltTgtTy, vector<AltTgtTy>,
+                  DenseSet<AltTgtTy, BlockEdgeTyKeyInfo>>
+    SuccListTy;
 typedef MapVector<BasicBlock *, SuccListTy> AltCFGTy;
 
 bool EPPEncode::doInitialization(Module &m) { return false; }
@@ -75,7 +75,6 @@ static const Loop *getOutermostLoop(const LoopInfo *LI, const BasicBlock *BB) {
     }
     return L;
 }
-
 
 static const vector<BasicBlock *> functionPostorderTraversal(Function &F,
                                                              LoopInfo *LI) {
@@ -143,12 +142,11 @@ findEdgeInVal(const BasicBlock *Src, const BasicBlock *Tgt, const EdgeType Ty,
 
 static void
 spanningHelper(BasicBlock *toVisit, set<shared_ptr<Edge>> &ST,
-                      DenseSet<BasicBlock *> &Seen,
-                      AltCFGTy &AltCFG,
-                      const unordered_map<shared_ptr<Edge>, llvm::APInt> &Val) {
+               DenseSet<BasicBlock *> &Seen, AltCFGTy &AltCFG,
+               const unordered_map<shared_ptr<Edge>, llvm::APInt> &Val) {
     Seen.insert(toVisit);
     auto &SV = AltCFG[toVisit];
-    for(auto &KV : SV){
+    for (auto &KV : SV) {
         auto *S = KV.first;
         auto ET = KV.second;
         if (!Seen.count(S)) {
@@ -163,12 +161,12 @@ getSpanningTree(AltCFGTy &AltCFG,
                 const unordered_map<shared_ptr<Edge>, llvm::APInt> &Val) {
     set<shared_ptr<Edge>> SpanningTree;
     DenseSet<BasicBlock *> Seen;
-   
+
     auto *Entry = AltCFG.back().first;
     spanningHelper(Entry, SpanningTree, Seen, AltCFG, Val);
 
-    assert(Seen.size() == AltCFG.size() 
-            && "Some nodes unreachable -- check AltCFG");
+    assert(Seen.size() == AltCFG.size() &&
+           "Some nodes unreachable -- check AltCFG");
 
     return SpanningTree;
 }
@@ -177,15 +175,16 @@ static set<shared_ptr<Edge>>
 getChords(const unordered_map<shared_ptr<Edge>, APInt> &Val,
           const set<shared_ptr<Edge>> &ST) {
     set<shared_ptr<Edge>> Chords;
-    
-    for(auto &V : Val) {
+
+    for (auto &V : Val) {
         bool found = false;
-        for(auto &SE : ST) {
-            if(*V.first == *SE) {
+        for (auto &SE : ST) {
+            if (*V.first == *SE) {
                 found = true;
             }
         }
-        if(!found) Chords.insert(V.first);
+        if (!found)
+            Chords.insert(V.first);
     }
 
     return Chords;
@@ -250,8 +249,7 @@ static void computeIncrement(BasicBlock *Entry, BasicBlock *Exit,
     for (auto &C : Chords)
         Inc[C] = APInt(128, 0, true);
 
-    incDFSHelper(APInt(128, 0, true), Entry, nullptr, ST, Chords,
-                 Val, Inc);
+    incDFSHelper(APInt(128, 0, true), Entry, nullptr, ST, Chords, Val, Inc);
 
     // The EXIT->ENTRY edge does not exist in Val,
     // however using Val[C] where C = EXIT->ENTRY
@@ -270,14 +268,13 @@ void EPPEncode::releaseMemory() {
     numPaths.clear();
     Val.clear();
     Inc.clear();
-    //selfLoopCounter = 0;
+    // selfLoopCounter = 0;
 }
-
 
 void EPPEncode::encode(Function &F) {
     DEBUG(errs() << "Called Encode on " << F.getName() << "\n");
 
-    //common::printCFG(F);
+    // common::printCFG(F);
 
     auto POB = functionPostorderTraversal(F, LI);
     auto Entry = POB.back(), Exit = POB.front();
@@ -291,75 +288,73 @@ void EPPEncode::encode(Function &F) {
     //    exit target block.
     // There can be only one edge for each Src->Tgt so we use a SetVector
     // instead of a SmallVector.
-    AltCFGTy AltCFG;                        
+    AltCFGTy AltCFG;
 
     // Add real edges
-    for(auto &BB : POB) {
+    for (auto &BB : POB) {
         AltCFG.insert(make_pair(BB, SuccListTy()));
-        for(auto S = succ_begin(BB), E = succ_end(BB); S != E; S++) {
-            if(BackEdges.count(make_pair(BB, *S)) || 
-                    LI->getLoopFor(BB) != LI->getLoopFor(*S)) {
+        for (auto S = succ_begin(BB), E = succ_end(BB); S != E; S++) {
+            if (BackEdges.count(make_pair(BB, *S)) ||
+                LI->getLoopFor(BB) != LI->getLoopFor(*S)) {
                 continue;
-            } 
-            AltCFG[BB].insert(make_pair(*S, EREAL));      
-        }   
-    }   
-
+            }
+            AltCFG[BB].insert(make_pair(*S, EREAL));
+        }
+    }
 
     auto Loops = common::getLoops(LI);
-      
+
     // Add all fake edges for loops
 
     typedef pair<BasicBlock *, BasicBlock *> Key;
-    SetVector<Key> ExitEdges; 
+    SetVector<Key> ExitEdges;
 
-    for(auto &L : Loops) {
+    for (auto &L : Loops) {
         // 1. Add edge from entry to header
         // 2. Add edge from latch to exit
-        // 3. Add edge(s) from header to exit block(s) 
-        auto Header = L->getHeader(), 
-             PreHeader = L->getLoopPreheader(),
+        // 3. Add edge(s) from header to exit block(s)
+        auto Header = L->getHeader(), PreHeader = L->getLoopPreheader(),
              Latch = L->getLoopLatch();
-        
+
         DEBUG(errs() << "Header : " << Header->getName() << "\n");
         DEBUG(errs() << "PreHeader : " << PreHeader->getName() << "\n");
         DEBUG(errs() << "Latch : " << Latch->getName() << "\n");
 
         assert(Latch && PreHeader && "Run LoopSimplify");
-        assert(Header !=  Latch && "Run LoopConverter");
-        
+        assert(Header != Latch && "Run LoopConverter");
+
         AltCFG[Entry].insert(make_pair(Header, EHEAD));
         AltCFG[Latch].insert(make_pair(Exit, ELATCH));
         AltCFG[PreHeader].insert(make_pair(Exit, ELIN));
 
-        SmallVector<pair<const BasicBlock*, 
-            const BasicBlock*>, 4> LoopExitEdges;
+        SmallVector<pair<const BasicBlock *, const BasicBlock *>, 4>
+            LoopExitEdges;
         L->getExitEdges(LoopExitEdges); // Should be deterministic
-        for(auto &E : LoopExitEdges) {
-            auto *Src = const_cast<BasicBlock*>(E.first);
-            auto *Tgt = const_cast<BasicBlock*>(E.second);
-            // Exit edges can be the same for two or more 
+        for (auto &E : LoopExitEdges) {
+            auto *Src = const_cast<BasicBlock *>(E.first);
+            auto *Tgt = const_cast<BasicBlock *>(E.second);
+            // Exit edges can be the same for two or more
             // (nested) loops.
             ExitEdges.insert(make_pair(Src, Tgt));
         }
     }
 
-    for(auto &S : ExitEdges) {
+    for (auto &S : ExitEdges) {
         auto *Src = S.first, *Tgt = S.second;
         // Cant have single source multiple exit blocks
         AltCFG[Src].insert(make_pair(Exit, ELOUT1));
-        // But we can have multiple source and single 
-        // exit block so check before inserting. 
+        // But we can have multiple source and single
+        // exit block so check before inserting.
         // Use SetVector inside AltCFG representation
         AltCFG[Entry].insert(make_pair(Tgt, ELOUT2));
     }
 
     // Debugging the AltCFG
-    
+
     DEBUG(errs() << "AltCFG\n");
-    for(auto &KV : AltCFG) {
+    for (auto &KV : AltCFG) {
         DEBUG(errs() << KV.first->getName() << " -> ");
-        for(auto &S : KV.second) {
+        for (auto &S : KV.second) {
             DEBUG(errs() << S.first->getName() << " ");
         }
         DEBUG(errs() << "\n");
@@ -367,14 +362,16 @@ void EPPEncode::encode(Function &F) {
 
     // Dot Printer for AltCFG
     /**** Debug
-    const char *EdgeTypeStr[] = {"EHEAD", "ELATCH", "ELIN", "ELOUT1", "ELOUT2", "EREAL", "EOUT"};
+    const char *EdgeTypeStr[] = {"EHEAD", "ELATCH", "ELIN", "ELOUT1", "ELOUT2",
+    "EREAL", "EOUT"};
     ofstream DotFile("altcfg.dot", ios::out);
     DotFile << "digraph \"AltCFG\" {\n label=\"AltCFG\";\n";
     for(auto &KV : AltCFG) {
-        DotFile << "\tNode" << KV.first << " [shape=record, label=\"" 
+        DotFile << "\tNode" << KV.first << " [shape=record, label=\""
             << KV.first->getName().str() << "\"];\n";
         for(auto &S : KV.second) {
-            DotFile << "\tNode" << KV.first << " -> Node" << S.first << "[style=";
+            DotFile << "\tNode" << KV.first << " -> Node" << S.first <<
+    "[style=";
             if(S.second == EREAL)
                 DotFile << "solid,";
             else
@@ -388,7 +385,7 @@ void EPPEncode::encode(Function &F) {
 
     // Path Counts
 
-    for(auto &KV : AltCFG) {
+    for (auto &KV : AltCFG) {
 
         auto *BB = KV.first;
         auto &Succs = KV.second;
@@ -421,7 +418,6 @@ void EPPEncode::encode(Function &F) {
     for (auto &P : numPaths)
         DEBUG(errs() << P.first->getName() << " -> " << P.second << "\n");
 
-
     auto T = getSpanningTree(AltCFG, Val);
 
     DEBUG(errs() << "\nSpanning Tree :\n");
@@ -449,7 +445,6 @@ void EPPEncode::encode(Function &F) {
                      << I.first->tgt()->getName() << " " << I.second << "\n");
 
     errs() << "NumPaths : " << numPaths[Entry] << "\n";
-
 }
 
 char EPPEncode::ID = 0;

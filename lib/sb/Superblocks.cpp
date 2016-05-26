@@ -1,24 +1,23 @@
 #define DEBUG_TYPE "pasha_superblock"
 #include "Superblocks.h"
-#include <boost/algorithm/string.hpp>
-#include "llvm/IR/Verifier.h"
-#include "llvm/IR/PassManager.h"
-#include "llvm/Transforms/Utils/BasicBlockUtils.h"
-#include "llvm/IR/BasicBlock.h"
-#include "llvm/Transforms/Utils/Cloning.h"
+#include "Common.h"
+#include "llvm/ADT/APInt.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/CFG.h"
+#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
-#include "llvm/IR/Dominators.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/ADT/APInt.h"
 #include "llvm/IR/DebugInfo.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Dominators.h"
+#include "llvm/IR/PassManager.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/Transforms/Utils/Cloning.h"
+#include <boost/algorithm/string.hpp>
 #include <fstream>
-#include "Common.h"
-
 
 using namespace llvm;
 using namespace sb;
@@ -132,7 +131,8 @@ void printPathSrc(SmallVector<llvm::BasicBlock *, 8> &blocks) {
             if (Loc->getLine() != line || Loc->getFilename() != file) {
                 line = Loc->getLine();
                 file = Loc->getFilename();
-                DEBUG(errs() << "File " << file.str() << " line " << line << "\n");
+                DEBUG(errs() << "File " << file.str() << " line " << line
+                             << "\n");
                 // break; // FIXME : This makes it only print once for each BB,
                 // remove to print all
                 // source lines per instruction.

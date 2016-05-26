@@ -1,28 +1,28 @@
 #define DEBUG_TYPE "grok"
 #include "GraphGrok.h"
-#include <boost/algorithm/string.hpp>
-#include "llvm/Transforms/IPO/PassManagerBuilder.h"
-#include "llvm/Transforms/Utils/CodeExtractor.h"
-#include "llvm/IR/Verifier.h"
-#include "llvm/IR/PassManager.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include <boost/graph/breadth_first_search.hpp>
-#include "llvm/IR/BasicBlock.h"
-#include "llvm/Transforms/Utils/Cloning.h"
+#include "Common.h"
+#include "DilworthDecomposition.h"
+#include "llvm/ADT/APInt.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/CFG.h"
+#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
-#include "llvm/IR/Dominators.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/IR/GetElementPtrTypeIterator.h"
-#include "llvm/ADT/APInt.h"
 #include "llvm/IR/DebugInfo.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/DenseSet.h"
-#include "DilworthDecomposition.h"
+#include "llvm/IR/Dominators.h"
+#include "llvm/IR/GetElementPtrTypeIterator.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/PassManager.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/Transforms/Utils/Cloning.h"
+#include "llvm/Transforms/Utils/CodeExtractor.h"
+#include <boost/algorithm/string.hpp>
 #include <boost/graph/bipartite.hpp>
+#include <boost/graph/breadth_first_search.hpp>
 #include <boost/graph/strong_components.hpp>
-#include "Common.h"
 #include <boost/property_map/property_map.hpp>
 #include <cxxabi.h>
 #include <llvm/Linker/Linker.h>
@@ -492,18 +492,18 @@ static void removeCBRChain(Vertex V, BoostGraph &BG) {
     remove_edge(CurrV, PrevV, BG);
 }
 
-
 static void removeDbgIntrin(const Path &P, BoostGraph &BG,
-                             const map<string, BasicBlock *> &BlockMap,
-                             ofstream &Out) {
-    
+                            const map<string, BasicBlock *> &BlockMap,
+                            ofstream &Out) {
+
     auto TypeMap = boost::get(&VertexProp::Type, BG);
     for (auto &V : dfsTraverse(BG)) {
-        // This is an anchor intrinsic, remove it since it's 
-        // return value is not used. 
-        if (TypeMap[V] == INTRIN && out_degree(V,BG) == 0) {
-            if(auto *CI = dyn_cast<CallInst>(BG[V].Inst)) {
-                if(CI->getCalledFunction()->getName().startswith("llvm.lifetime")) {
+        // This is an anchor intrinsic, remove it since it's
+        // return value is not used.
+        if (TypeMap[V] == INTRIN && out_degree(V, BG) == 0) {
+            if (auto *CI = dyn_cast<CallInst>(BG[V].Inst)) {
+                if (CI->getCalledFunction()->getName().startswith(
+                        "llvm.lifetime")) {
                     // Same logic as removing cbr chain
                     removeCBRChain(V, BG);
                 }
@@ -615,17 +615,17 @@ static void liveInLiveOut(PostDominatorTree *PostDomTree, AAResults *AA,
                     }
                 } else {
                     if (auto Phi = dyn_cast<PHINode>(Ins)) {
-                        auto distance =
-                            [](vector<string> &Seq, string S) -> uint32_t {
-                                uint32_t I = 0;
-                                for (auto RI = Seq.rbegin(), RE = Seq.rend();
-                                     RI != RE; RI++) {
-                                    if (*RI == S)
-                                        return I;
-                                    I++;
-                                }
-                                assert(false && "Unreachable");
-                            };
+                        auto distance = [](vector<string> &Seq,
+                                           string S) -> uint32_t {
+                            uint32_t I = 0;
+                            for (auto RI = Seq.rbegin(), RE = Seq.rend();
+                                 RI != RE; RI++) {
+                                if (*RI == S)
+                                    return I;
+                                I++;
+                            }
+                            assert(false && "Unreachable");
+                        };
                         // Find the topo position of Tgt
                         // If it is topologically before the phi def, then it is
                         // a use
@@ -674,22 +674,21 @@ static void liveInLiveOut(PostDominatorTree *PostDomTree, AAResults *AA,
     transform(P.MemOut.begin(), P.MemOut.end(), LiveOutLocations.begin(),
               ToLocation);
 
-    auto uniqueLocationCount =
-        [&AA](vector<MemoryLocation> &Locs) -> uint32_t {
-            vector<MemoryLocation> UniqueLocations;
-            for (auto &L : Locs) {
-                bool Found = false;
-                for (auto &M : UniqueLocations) {
-                    if (AA->isMustAlias(L, M)) {
-                        Found = true;
-                        break;
-                    }
+    auto uniqueLocationCount = [&AA](vector<MemoryLocation> &Locs) -> uint32_t {
+        vector<MemoryLocation> UniqueLocations;
+        for (auto &L : Locs) {
+            bool Found = false;
+            for (auto &M : UniqueLocations) {
+                if (AA->isMustAlias(L, M)) {
+                    Found = true;
+                    break;
                 }
-                if (!Found)
-                    UniqueLocations.push_back(L);
             }
-            return UniqueLocations.size();
-        };
+            if (!Found)
+                UniqueLocations.push_back(L);
+        }
+        return UniqueLocations.size();
+    };
 
     Out << "\"u_mem_live_in\" : " << uniqueLocationCount(LiveInLocations)
         << ",\n";
@@ -1120,54 +1119,54 @@ void traceHelper(Function *TraceFunc, Function *GuardFunc,
     map<Value *, Value *> OrigToTraceMap;
     map<Value *, Value *> FunctionMap;
 
-    auto handleCallSites =
-        [&FunctionMap, &TraceFunc](CallSite &OrigCS, CallSite &TraceCS) {
-            assert(OrigCS.getCalledFunction() &&
-                   "We do not support indirect function calls in traces.");
-            auto *FTy = OrigCS.getCalledFunction()->getFunctionType();
-            auto *Val = OrigCS.getCalledValue();
-            auto Name = OrigCS.getCalledFunction()->getName();
-            if (FunctionMap.count(Val) == 0) {
-                Function *ExtFunc =
-                    Function::Create(FTy, GlobalValue::ExternalLinkage, Name,
-                                     TraceFunc->getParent());
-                FunctionMap[Val] = static_cast<Value *>(ExtFunc);
-            }
-            TraceCS.setCalledFunction(FunctionMap[Val]);
-        };
+    auto handleCallSites = [&FunctionMap, &TraceFunc](CallSite &OrigCS,
+                                                      CallSite &TraceCS) {
+        assert(OrigCS.getCalledFunction() &&
+               "We do not support indirect function calls in traces.");
+        auto *FTy = OrigCS.getCalledFunction()->getFunctionType();
+        auto *Val = OrigCS.getCalledValue();
+        auto Name = OrigCS.getCalledFunction()->getName();
+        if (FunctionMap.count(Val) == 0) {
+            Function *ExtFunc =
+                Function::Create(FTy, GlobalValue::ExternalLinkage, Name,
+                                 TraceFunc->getParent());
+            FunctionMap[Val] = static_cast<Value *>(ExtFunc);
+        }
+        TraceCS.setCalledFunction(FunctionMap[Val]);
+    };
 
-    auto insertGuardCall =
-        [&TraceBlock, &GuardFunc, &OrigToTraceMap](Value *Arg) {
-            // Value * Arg = CBR->getCondition();
-            // There may be a case where a conditional branch inside
-            // a path is dependent on a value outside the path; in this
-            // case we don't serialize the guard since it can be hoisted
-            // above the trace. Ideally, the else of this condition should
-            // collect these instances and implement pre-trace guard check.
-            // Eg. path 14580 in swaptions.
-            if (OrigToTraceMap.count(Arg)) {
-                auto CI = CallInst::Create(GuardFunc, {Arg}, "", TraceBlock);
-                // Add a ReadNone+NoInline attribute to the CallSite, which
-                // will hopefully help the optimizer.
-                CI->setDoesNotAccessMemory();
-                CI->setIsNoInline();
-            }
-        };
+    auto insertGuardCall = [&TraceBlock, &GuardFunc,
+                            &OrigToTraceMap](Value *Arg) {
+        // Value * Arg = CBR->getCondition();
+        // There may be a case where a conditional branch inside
+        // a path is dependent on a value outside the path; in this
+        // case we don't serialize the guard since it can be hoisted
+        // above the trace. Ideally, the else of this condition should
+        // collect these instances and implement pre-trace guard check.
+        // Eg. path 14580 in swaptions.
+        if (OrigToTraceMap.count(Arg)) {
+            auto CI = CallInst::Create(GuardFunc, {Arg}, "", TraceBlock);
+            // Add a ReadNone+NoInline attribute to the CallSite, which
+            // will hopefully help the optimizer.
+            CI->setDoesNotAccessMemory();
+            CI->setIsNoInline();
+        }
+    };
 
-    auto insertSWGuardCall =
-        [&insertGuardCall, &TraceBlock](SwitchInst *SWI, BasicBlock *NB) {
-            // Get the value corresponding to the next block
-            if (auto *CI = SWI->findCaseDest(NB)) {
-                auto *V = SWI->getCondition();
-                auto *Cmp = new ICmpInst(
-                    *TraceBlock, CmpInst::Predicate::ICMP_EQ, V, CI, "");
-                insertGuardCall(Cmp);
-            } else {
-                // FIXME : Lowering of switch statement to guard calls for
-                // default case and for cases with non-unique targets
-                // sjeng : gen : 130982547345851
-            }
-        };
+    auto insertSWGuardCall = [&insertGuardCall, &TraceBlock](SwitchInst *SWI,
+                                                             BasicBlock *NB) {
+        // Get the value corresponding to the next block
+        if (auto *CI = SWI->findCaseDest(NB)) {
+            auto *V = SWI->getCondition();
+            auto *Cmp = new ICmpInst(*TraceBlock, CmpInst::Predicate::ICMP_EQ,
+                                     V, CI, "");
+            insertGuardCall(Cmp);
+        } else {
+            // FIXME : Lowering of switch statement to guard calls for
+            // default case and for cases with non-unique targets
+            // sjeng : gen : 130982547345851
+        }
+    };
 
     // Main processing loop; clones instructions from graph
     // into the new trace basic block.
@@ -1244,8 +1243,9 @@ void traceHelper(Function *TraceFunc, Function *GuardFunc,
         }
         ConstantInt *Index = ConstantInt::get(Int32Ty, OutIndex);
         Value *GEPIndices[] = {Zero, Index};
-        auto *GEP = GetElementPtrInst::Create(LiveOutArray->getType(), 
-                LiveOutArray, GEPIndices, "idx", TraceBlock);
+        auto *GEP =
+            GetElementPtrInst::Create(LiveOutArray->getType(), LiveOutArray,
+                                      GEPIndices, "idx", TraceBlock);
         BitCastInst *BC = new BitCastInst(
             GEP, PointerType::get(LO->getType(), 0), "cast", TraceBlock);
         new StoreInst(LO, BC, false, TraceBlock);
@@ -1798,22 +1798,22 @@ void staticHelper(
 
     ValueToValueMapTy VMap;
 
-    auto handleCallSites =
-        [&VMap, &StaticFunc](CallSite &OrigCS, CallSite &StaticCS) {
-            assert(OrigCS.getCalledFunction() &&
-                   "We do not support indirect function calls in traces.");
-            auto *FTy = OrigCS.getCalledFunction()->getFunctionType();
-            auto *Val = OrigCS.getCalledValue();
-            auto Name = OrigCS.getCalledFunction()->getName();
-            if (VMap.count(Val) == 0) {
-                Function *ExtFunc =
-                    Function::Create(FTy, GlobalValue::ExternalLinkage, Name,
-                                     StaticFunc->getParent());
-                assert(VMap.count(Val) == 0 && "Need new values");
-                VMap[Val] = static_cast<Value *>(ExtFunc);
-            }
-            StaticCS.setCalledFunction(VMap[Val]);
-        };
+    auto handleCallSites = [&VMap, &StaticFunc](CallSite &OrigCS,
+                                                CallSite &StaticCS) {
+        assert(OrigCS.getCalledFunction() &&
+               "We do not support indirect function calls in traces.");
+        auto *FTy = OrigCS.getCalledFunction()->getFunctionType();
+        auto *Val = OrigCS.getCalledValue();
+        auto Name = OrigCS.getCalledFunction()->getName();
+        if (VMap.count(Val) == 0) {
+            Function *ExtFunc =
+                Function::Create(FTy, GlobalValue::ExternalLinkage, Name,
+                                 StaticFunc->getParent());
+            assert(VMap.count(Val) == 0 && "Need new values");
+            VMap[Val] = static_cast<Value *>(ExtFunc);
+        }
+        StaticCS.setCalledFunction(VMap[Val]);
+    };
 
     // Add Globals
     for (auto Val : Globals) {
@@ -1869,19 +1869,19 @@ void staticHelper(
                 RevTopoChop.end());
     };
 
-    auto rewriteUses =
-        [&VMap, &RevTopoChop, &StaticFunc](Value *Val, Value *RewriteVal) {
-            std::vector<User *> Users(Val->user_begin(), Val->user_end());
-            for (std::vector<User *>::iterator use = Users.begin(),
-                                               useE = Users.end();
-                 use != useE; ++use) {
-                if (Instruction *inst = dyn_cast<Instruction>(*use)) {
-                    if (inst->getParent()->getParent() == StaticFunc) {
-                        inst->replaceUsesOfWith(Val, RewriteVal);
-                    }
+    auto rewriteUses = [&VMap, &RevTopoChop, &StaticFunc](Value *Val,
+                                                          Value *RewriteVal) {
+        std::vector<User *> Users(Val->user_begin(), Val->user_end());
+        for (std::vector<User *>::iterator use = Users.begin(),
+                                           useE = Users.end();
+             use != useE; ++use) {
+            if (Instruction *inst = dyn_cast<Instruction>(*use)) {
+                if (inst->getParent()->getParent() == StaticFunc) {
+                    inst->replaceUsesOfWith(Val, RewriteVal);
                 }
             }
-        };
+        }
+    };
 
     AI = StaticFunc->arg_begin();
     // Patch instructions to arguments,
@@ -1941,7 +1941,7 @@ void staticHelper(
                     for (auto U = Users.begin(), UE = Users.end(); U != UE;
                          ++U) {
                         auto Ins = dyn_cast<Instruction>(*U);
-                        if(!Ins) {
+                        if (!Ins) {
                             // Remove this check to watch it break on sjeng
                             errs() << *CE << "\n";
                             errs() << **U << "\n";
@@ -1972,15 +1972,15 @@ void staticHelper(
     BB->getTerminator()->eraseFromParent();
     ReturnInst::Create(Context, BB);
 
-    auto insertGuardCall =
-        [&GuardFunc, &VMap](const BranchInst *CBR, BasicBlock *Blk) {
-            Value *Arg = CBR->getCondition();
-            auto CI = CallInst::Create(GuardFunc, {Arg}, "", Blk);
-            // Add a ReadNone+NoInline attribute to the CallSite, which
-            // will hopefully help the optimizer.
-            CI->setDoesNotAccessMemory();
-            CI->setIsNoInline();
-        };
+    auto insertGuardCall = [&GuardFunc, &VMap](const BranchInst *CBR,
+                                               BasicBlock *Blk) {
+        Value *Arg = CBR->getCondition();
+        auto CI = CallInst::Create(GuardFunc, {Arg}, "", Blk);
+        // Add a ReadNone+NoInline attribute to the CallSite, which
+        // will hopefully help the optimizer.
+        CI->setDoesNotAccessMemory();
+        CI->setIsNoInline();
+    };
 
     BasicBlock *SwitchTgt = nullptr;
 
@@ -2120,7 +2120,7 @@ void staticHelper(
         for (auto &Ins : **BB) {
             if (auto *Phi = dyn_cast<PHINode>(&Ins)) {
                 handlePhis(Phi);
-                if(Phi->getNumIncomingValues() == 1) {
+                if (Phi->getNumIncomingValues() == 1) {
                     removePhis++;
                 }
                 totalPhis++;
@@ -2147,8 +2147,8 @@ void staticHelper(
             auto *Block = cast<Instruction>(LO)->getParent();
             ConstantInt *Index = ConstantInt::get(Int32Ty, OutIndex);
             Value *GEPIndices[] = {Zero, Index};
-            auto *GEP = GetElementPtrInst::Create(LOA->getType(), LOA, GEPIndices, "idx",
-                                                  Block->getTerminator());
+            auto *GEP = GetElementPtrInst::Create(
+                LOA->getType(), LOA, GEPIndices, "idx", Block->getTerminator());
             BitCastInst *BC =
                 new BitCastInst(GEP, PointerType::get(LO->getType(), 0), "cast",
                                 Block->getTerminator());
@@ -2274,14 +2274,14 @@ static void generateStaticGraphFromPath(const Path &P,
                     auto distance =
                         [&RevTopoChop](SmallVector<BasicBlock *, 16> &SV,
                                        BasicBlock *ToBB) -> uint32_t {
-                            uint32_t I = 0;
-                            for (auto &BB : RevTopoChop) {
-                                if (BB == ToBB)
-                                    return I;
-                                I++;
-                            }
-                            assert(false && "Unreachable");
-                        };
+                        uint32_t I = 0;
+                        for (auto &BB : RevTopoChop) {
+                            if (BB == ToBB)
+                                return I;
+                            I++;
+                        }
+                        assert(false && "Unreachable");
+                    };
                     // Find the topo position of Tgt
                     // If it is topologically before the phi def, then it is a
                     // use

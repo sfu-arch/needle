@@ -1,6 +1,6 @@
 #include "Namer.h"
-#include <string>
 #include <cassert>
+#include <string>
 
 #define DEBUG_TYPE "namer"
 

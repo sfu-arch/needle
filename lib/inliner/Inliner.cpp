@@ -38,4 +38,4 @@ void PeruseInliner::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 char PeruseInliner::ID = 0;
-static RegisterPass<PeruseInliner> X("","PASHA -- Inliner");
+static RegisterPass<PeruseInliner> X("", "PASHA -- Inliner");

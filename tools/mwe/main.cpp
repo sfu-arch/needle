@@ -1,40 +1,40 @@
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
+#include "llvm/Analysis/BasicAliasAnalysis.h"
+#include "llvm/Analysis/Passes.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/IR/Dominators.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
+#include "llvm/Linker/Linker.h"
+#include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/SourceMgr.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/Pass.h"
-#include "llvm/Analysis/Passes.h"
-#include "llvm/IR/Verifier.h"
-#include "llvm/Linker/Linker.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/Analysis/BasicAliasAnalysis.h"
-#include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 
+#include <fstream>
 #include <string>
 #include <thread>
-#include <fstream>
 
 #include "AllInliner.h"
+#include "AllInliner.h"
+#include "Common.h"
+#include "MicroWorkloadExtract.h"
+#include "Namer.h"
 #include "Namer.h"
 #include "Simplify.h"
-#include "MicroWorkloadExtract.h"
-#include "AllInliner.h"
-#include "Namer.h"
-#include "Common.h"
 //#include "LoopConverter.h"
 
 using namespace std;
@@ -127,11 +127,11 @@ int main(int argc, char **argv, const char **env) {
     vector<unique_ptr<Module>> ExtractedModules;
 
     common::optimizeModule(module.get());
-    //common::lowerSwitch(*module, FunctionList[0]);
-    //common::breakCritEdges(*module, FunctionList[0]);
+    // common::lowerSwitch(*module, FunctionList[0]);
+    // common::breakCritEdges(*module, FunctionList[0]);
 
     legacy::PassManager pm;
-    //pm.add(new DataLayoutPass());
+    // pm.add(new DataLayoutPass());
     pm.add(new llvm::AssumptionCacheTracker());
     pm.add(createLoopSimplifyPass());
     pm.add(createBasicAAWrapperPass());
@@ -140,12 +140,12 @@ int main(int argc, char **argv, const char **env) {
     pm.add(new epp::PeruseInliner());
     pm.add(new pasha::Simplify(FunctionList[0]));
     pm.add(new epp::Namer());
-    //pm.add(new pasha::LoopConverter());
+    // pm.add(new pasha::LoopConverter());
     pm.add(new LoopInfoWrapperPass());
     pm.add(llvm::createPostDomTree());
     pm.add(new DominatorTreeWrapperPass());
-    pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, 
-                NumSeq, ExtractAs, ExtractedModules));
+    pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq, ExtractAs,
+                                         ExtractedModules));
     // The verifier pass does not work for some apps (gcc, h264)
     // after linking the original module with the generated one
     // and the undo module. Instead we write out the generated
@@ -153,7 +153,7 @@ int main(int argc, char **argv, const char **env) {
     pm.add(createVerifierPass());
     pm.run(*module);
 
-    //common::writeModule(module.get(), "orig.ll" );
+    // common::writeModule(module.get(), "orig.ll" );
 
     // Use a Composite module instead of linkning into the original
     // as it doesn't work -- no idea why.
@@ -167,18 +167,16 @@ int main(int argc, char **argv, const char **env) {
     assert(UndoMod.get() && "Unable to read undo bitcode module");
     L.linkInModule(std::move(UndoMod));
 
-
-    for(auto &M : ExtractedModules) {
+    for (auto &M : ExtractedModules) {
         errs() << "Linking " << M->getName() << "\n";
         bool ret = L.linkInModule(move(M));
         assert(ret == false && "Error in linkInModule");
     }
-    //StripDebugInfo(*Composite);
-    
-    //common::writeModule(Composite.get(), "full.ll" );
-    
-    common::generateBinary(*Composite, 
-            outFile, optLevel, libPaths, libraries);
+    // StripDebugInfo(*Composite);
+
+    // common::writeModule(Composite.get(), "full.ll" );
+
+    common::generateBinary(*Composite, outFile, optLevel, libPaths, libraries);
 
     return 0;
 }

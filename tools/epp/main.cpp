@@ -1,6 +1,9 @@
 #define DEBUG_TYPE "pasha_epp_tool"
-#include "llvm/ADT/Triple.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/Triple.h"
+#include "llvm/Analysis/BasicAliasAnalysis.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/CodeGen/LinkAllAsmWriterComponents.h"
@@ -8,51 +11,47 @@
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IRPrintingPasses.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Linker/Linker.h"
+#include "llvm/Linker/Linker.h"
 #include "llvm/MC/SubtargetFeature.h"
-#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/ManagedStatic.h"
-#include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Program.h"
-#include "llvm/Support/Debug.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/Linker/Linker.h"
-#include "llvm/Analysis/BasicAliasAnalysis.h"
-#include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 
-#include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/Passes.h"
 
 #include <memory>
 #include <string>
 
-#include "EPPProfile.h"
-#include "EPPDecode.h"
 #include "AllInliner.h"
-#include "Namer.h"
 #include "Common.h"
+#include "EPPDecode.h"
+#include "EPPProfile.h"
+#include "Namer.h"
 //#include "LoopConverter.h"
 #include "Simplify.h"
 
 #include "config.h"
-
 
 using namespace std;
 using namespace llvm;
@@ -67,7 +66,6 @@ cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
 
 cl::opt<string> profile("p", cl::desc("Path to path profiling results"),
                         cl::value_desc("filename"));
-
 
 cl::opt<unsigned>
     numberOfPaths("n", cl::desc("Number of most frequent paths to compute"),
@@ -87,14 +85,15 @@ cl::list<string> libraries("l", cl::Prefix,
                            cl::desc("Specify libraries to link to"),
                            cl::value_desc("library prefix"));
 
-//cl::list<string>
-    //linkM("b", cl::desc("Bitcode modules to merge (comma separated list)"));
+// cl::list<string>
+// linkM("b", cl::desc("Bitcode modules to merge (comma separated list)"));
 
 cl::list<std::string> FunctionList("epp-fn", cl::value_desc("String"),
                                    cl::desc("List of functions to instrument"),
                                    cl::OneOrMore, cl::CommaSeparated);
 
-cl::opt<bool> printSrcLines("src", cl::desc("Print Source Line Numbers"), cl::init(false));
+cl::opt<bool> printSrcLines("src", cl::desc("Print Source Line Numbers"),
+                            cl::init(false));
 
 bool isTargetFunction(const Function &f,
                       const cl::list<std::string> &FunctionList) {
@@ -106,10 +105,11 @@ bool isTargetFunction(const Function &f,
     return false;
 }
 
-static void instrumentModule(Module &module, std::string outFile, const char *argv0) {
+static void instrumentModule(Module &module, std::string outFile,
+                             const char *argv0) {
     // Build up all of the passes that we want to run on the module.
     legacy::PassManager pm;
-    //pm.add(new DataLayoutWrapperPass());
+    // pm.add(new DataLayoutWrapperPass());
     pm.add(new llvm::AssumptionCacheTracker());
     pm.add(createLoopSimplifyPass());
     pm.add(llvm::createBasicAAWrapperPass());
@@ -118,7 +118,7 @@ static void instrumentModule(Module &module, std::string outFile, const char *ar
     pm.add(new epp::PeruseInliner());
     pm.add(new pasha::Simplify(FunctionList[0]));
     pm.add(new epp::Namer());
-    //pm.add(new pasha::LoopConverter());
+    // pm.add(new pasha::LoopConverter());
     pm.add(new LoopInfoWrapperPass());
     pm.add(new epp::EPPProfile());
     pm.add(createVerifierPass());
@@ -154,7 +154,7 @@ static void interpretResults(Module &module, std::string filename) {
     // only run it for my function of interest.
 
     legacy::PassManager pm;
-    //pm.add(new DataLayoutPass());
+    // pm.add(new DataLayoutPass());
     pm.add(new llvm::AssumptionCacheTracker());
     pm.add(createLoopSimplifyPass());
     pm.add(createBasicAAWrapperPass());
@@ -163,7 +163,7 @@ static void interpretResults(Module &module, std::string filename) {
     pm.add(new epp::PeruseInliner());
     pm.add(new pasha::Simplify(FunctionList[0]));
     pm.add(new epp::Namer());
-    //pm.add(new pasha::LoopConverter());
+    // pm.add(new pasha::LoopConverter());
     pm.add(new LoopInfoWrapperPass());
     pm.add(new epp::EPPDecode());
     pm.add(createVerifierPass());
@@ -187,7 +187,6 @@ int main(int argc, char **argv, const char **env) {
         TargetRegistry::printRegisteredTargetsForVersion);
     cl::ParseCommandLineOptions(argc, argv);
 
-
     // Construct an IR file from the filename passed on the command line.
     SMDiagnostic err;
     unique_ptr<Module> module = parseIRFile(inPath.getValue(), err, context);
@@ -199,8 +198,8 @@ int main(int argc, char **argv, const char **env) {
     }
 
     common::optimizeModule(module.get());
-    //common::lowerSwitch(*module, FunctionList[0]);
-    //common::breakCritEdges(*module, FunctionList[0]);
+    // common::lowerSwitch(*module, FunctionList[0]);
+    // common::breakCritEdges(*module, FunctionList[0]);
 
     if (!profile.empty()) {
         interpretResults(*module, profile);

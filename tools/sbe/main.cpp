@@ -1,40 +1,40 @@
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
+#include "llvm/Analysis/BasicAliasAnalysis.h"
+#include "llvm/Analysis/Passes.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/IR/Dominators.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
+#include "llvm/Linker/Linker.h"
+#include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/SourceMgr.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/Pass.h"
-#include "llvm/Analysis/Passes.h"
-#include "llvm/IR/Verifier.h"
-#include "llvm/Linker/Linker.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/Analysis/BasicAliasAnalysis.h"
-#include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 
+#include <fstream>
 #include <string>
 #include <thread>
-#include <fstream>
 
 #include "AllInliner.h"
+#include "AllInliner.h"
+#include "Common.h"
+#include "Namer.h"
 #include "Namer.h"
 #include "Simplify.h"
 #include "Superblocks.h"
-#include "AllInliner.h"
-#include "Namer.h"
-#include "Common.h"
 //#include "LoopConverter.h"
 
 using namespace std;
@@ -89,11 +89,11 @@ int main(int argc, char **argv, const char **env) {
     }
 
     common::optimizeModule(module.get());
-    //common::lowerSwitch(*module, FunctionList[0]);
-    //common::breakCritEdges(*module, FunctionList[0]);
+    // common::lowerSwitch(*module, FunctionList[0]);
+    // common::breakCritEdges(*module, FunctionList[0]);
 
     legacy::PassManager pm;
-    //pm.add(new DataLayoutPass());
+    // pm.add(new DataLayoutPass());
     pm.add(new llvm::AssumptionCacheTracker());
     pm.add(createLoopSimplifyPass());
     pm.add(createBasicAAWrapperPass());
@@ -103,7 +103,7 @@ int main(int argc, char **argv, const char **env) {
     pm.add(new epp::PeruseInliner());
     pm.add(new pasha::Simplify(FunctionList[0]));
     pm.add(new epp::Namer());
-    //pm.add(new pasha::LoopConverter());
+    // pm.add(new pasha::LoopConverter());
     pm.add(new LoopInfoWrapperPass());
     pm.add(new sb::Superblocks(SeqFilePath));
     pm.add(createVerifierPass());

@@ -1,23 +1,22 @@
 #define DEBUG_TYPE "epp_decode"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/BasicBlock.h"
-#include "llvm/Support/Debug.h"
+#include "llvm/IR/CallSite.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/IR/CallSite.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/Analysis/LoopInfo.h"
 #include <fstream>
 
 #include <unordered_map>
 
-#include "EPPDecode.h"
 #include "Common.h"
+#include "EPPDecode.h"
 
 using namespace llvm;
 using namespace epp;
 using namespace std;
-
 
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &, const cl::list<std::string> &);
@@ -134,22 +133,21 @@ bool EPPDecode::runOnModule(Module &M) {
         // assert(V.first->src() != V.first->tgt() && "Noooo!");
     }
 
-
     // Sort the paths in descending order of their frequency
     // If the frequency is same, descending order of id (id cannot be same)
     std::sort(paths.begin(), paths.end(), [](const Path &P1, const Path &P2) {
-        return (P1.count > P2.count) || 
-            (P1.count == P2.count && P1.id.uge(P2.id));
+        return (P1.count > P2.count) ||
+               (P1.count == P2.count && P1.id.uge(P2.id));
     });
 
-    std::vector<std::pair<PathType, 
-        std::vector<llvm::BasicBlock *>>> bbSequences;
+    std::vector<std::pair<PathType, std::vector<llvm::BasicBlock *>>>
+        bbSequences;
     bbSequences.reserve(totalPathCount);
     for (auto &path : paths) {
         bbSequences.push_back(decode(*path.Func, path.id, *Enc));
     }
 
-    ofstream Outfile("epp-sequences2.txt", ios::out);
+    ofstream Outfile("epp-sequences.txt", ios::out);
 
     uint64_t pathFail = 0;
     // Dump paths
@@ -186,8 +184,8 @@ bool EPPDecode::runOnModule(Module &M) {
             DEBUG(errs() << "Path Fail\n");
         }
         DEBUG(errs() << "Path ID: " << paths[i].id.toString(10, false)
-               << " Freq: " << paths[i].count << "\n");
-        if(printSrcLines)
+                     << " Freq: " << paths[i].count << "\n");
+        if (printSrcLines)
             printPathSrc(blocks);
         DEBUG(errs() << "\n");
     }
@@ -197,9 +195,7 @@ bool EPPDecode::runOnModule(Module &M) {
     return false;
 }
 
-void EPPDecode::releaseMemory() {
-    ValBySrc.clear();
-}
+void EPPDecode::releaseMemory() { ValBySrc.clear(); }
 
 std::pair<PathType, std::vector<llvm::BasicBlock *>>
 EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
@@ -232,42 +228,43 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
         DEBUG(errs() << pathID << "\n");
     }
 
-     //return make_pair(RIRO, sequence);
-     //Only one path so it must be REAL
-     if (SelectedEdges.empty()) {
-         return make_pair(RIRO, sequence);
-     }
+    // return make_pair(RIRO, sequence);
+    // Only one path so it must be REAL
+    if (SelectedEdges.empty()) {
+        return make_pair(RIRO, sequence);
+    }
 
-enum EdgeType { EHEAD,
-                ELATCH,
-                ELIN,
-                ELOUT1, // To Exit
-                ELOUT2, // From Entry 
-                EREAL,
-                EOUT };
+    enum EdgeType {
+        EHEAD,
+        ELATCH,
+        ELIN,
+        ELOUT1, // To Exit
+        ELOUT2, // From Entry
+        EREAL,
+        EOUT
+    };
 
-#define SET_BIT(n,x) (n |= 1ULL << x)
-     uint64_t Type = 0;
-     switch(SelectedEdges.front()->Type){
-        case EHEAD:
-        case ELOUT2:
-             SET_BIT(Type, 0);
-        default:
-            break;
-     }
-     switch(SelectedEdges.back()->Type){
-         case ELATCH:
-         case ELOUT1:
-         case ELIN:
-            SET_BIT(Type, 1);
-         default:
-             break;
-     }
+#define SET_BIT(n, x) (n |= 1ULL << x)
+    uint64_t Type = 0;
+    switch (SelectedEdges.front()->Type) {
+    case EHEAD:
+    case ELOUT2:
+        SET_BIT(Type, 0);
+    default:
+        break;
+    }
+    switch (SelectedEdges.back()->Type) {
+    case ELATCH:
+    case ELOUT1:
+    case ELIN:
+        SET_BIT(Type, 1);
+    default:
+        break;
+    }
 #undef SET_BIT
 
-     return make_pair(static_cast<PathType>(Type), sequence);
-
+    return make_pair(static_cast<PathType>(Type), sequence);
 }
 
 char EPPDecode::ID = 0;
-static RegisterPass<EPPDecode> X("","PASHA - EPPDecode");
+static RegisterPass<EPPDecode> X("", "PASHA - EPPDecode");
