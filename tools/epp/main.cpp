@@ -68,9 +68,6 @@ cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
 cl::opt<string> profile("p", cl::desc("Path to path profiling results"),
                         cl::value_desc("filename"));
 
-//cl::opt<string> selfloop("s",
-                         //cl::desc("Path to self loop path profiling results"),
-                         //cl::value_desc("filename"));
 
 cl::opt<unsigned>
     numberOfPaths("n", cl::desc("Number of most frequent paths to compute"),
@@ -90,12 +87,14 @@ cl::list<string> libraries("l", cl::Prefix,
                            cl::desc("Specify libraries to link to"),
                            cl::value_desc("library prefix"));
 
-cl::list<string>
-    linkM("b", cl::desc("Bitcode modules to merge (comma separated list)"));
+//cl::list<string>
+    //linkM("b", cl::desc("Bitcode modules to merge (comma separated list)"));
 
 cl::list<std::string> FunctionList("epp-fn", cl::value_desc("String"),
                                    cl::desc("List of functions to instrument"),
                                    cl::OneOrMore, cl::CommaSeparated);
+
+cl::opt<bool> printSrcLines("src", cl::desc("Print Source Line Numbers"), cl::init(false));
 
 bool isTargetFunction(const Function &f,
                       const cl::list<std::string> &FunctionList) {

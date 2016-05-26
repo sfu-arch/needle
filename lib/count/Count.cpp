@@ -31,12 +31,17 @@ struct Count : public ModulePass {
     bool doInitialization(Module &M) { 
         //assert(FunctionList.size() == 1 &&
                 //"Can only patch one function at a time");
+        CountMap[Instruction::Add] = 0;
+        CountMap[Instruction::FAdd] = 0;
+        CountMap[Instruction::GetElementPtr] = 0;
+        CountMap[Instruction::Load] = 0;
         return false;
     }
 
         bool doFinalization(Module &M) {
-            errs() << "Total Ops : " << Counter << "\n";
-            errs() << "Total Blocks : " << BBCounter << "\n";
+            errs() << "TotalOps:" << Counter << "\n";
+            errs() << "TotalBlocks:" << BBCounter << "\n";
+            errs() << "TotalUniqueTypes:" << CountMap.size() << "\n";
             for(auto KV : CountMap) {
                 errs() << opcodeToStr(KV.first) << "\t" << KV.second << "\n";
             }
@@ -52,7 +57,7 @@ struct Count : public ModulePass {
                     BBCounter ++;
                     //errs() << BB.getName() << "\n";
                     for(auto &I : BB) {
-                        CountMap[I.getOpcode()] += 1;
+                        CountMap[opcodeBucket(I.getOpcode())] += 1;
                         Counter++;
                         if(auto *SI = dyn_cast<StoreInst>(&I)) {
                             if(auto *BI = dyn_cast<BitCastInst>(SI->getPointerOperand())) {
@@ -86,6 +91,90 @@ struct Count : public ModulePass {
 
     void getAnalysisUsage(AnalysisUsage &AU) const {
     }
+
+    unsigned 
+    opcodeBucket(unsigned opCode) {
+        switch(opCode) {
+                // Terminators
+                case Instruction::Ret:
+                case Instruction::Br:
+                case Instruction::Switch:
+                case Instruction::IndirectBr:
+                case Instruction::Select:
+ 				 return Instruction::Ret;         
+
+                    // Standard binary operators...
+                case Instruction::Add:
+                case Instruction::Sub:
+                case Instruction::Mul:
+                case Instruction::UDiv:
+                case Instruction::SDiv:
+                case Instruction::URem:
+                case Instruction::SRem:
+                case Instruction::ICmp:
+                case Instruction::FCmp:
+                case Instruction::Shl:
+                case Instruction::LShr:
+                case Instruction::AShr:
+                case Instruction::And:
+                case Instruction::Or :
+                case Instruction::Xor:
+ 				 return Instruction::Add; 
+
+                case Instruction::FAdd:
+                case Instruction::FRem:
+                case Instruction::FDiv:
+                case Instruction::FMul:
+                case Instruction::FSub:
+ 				 return Instruction::FAdd; 
+
+                    // Memory instructions...
+                case Instruction::Load:
+                case Instruction::Store:
+                case Instruction::AtomicCmpXchg:
+                case Instruction::AtomicRMW:
+                case Instruction::Fence:
+                 return Instruction::Load;
+
+                case Instruction::GetElementPtr:
+                return Instruction::GetElementPtr;
+
+                case Instruction::PHI:
+                case Instruction::Call:
+                case Instruction::Invoke:
+
+                    // Convert instructions...
+                case Instruction::Alloca:
+                case Instruction::Trunc:
+                case Instruction::FPTrunc:
+                case Instruction::SExt:
+
+                case Instruction::ZExt:
+                case Instruction::FPExt:
+                case Instruction::FPToUI:
+                case Instruction::FPToSI:
+                case Instruction::UIToFP:
+                case Instruction::SIToFP:
+                case Instruction::IntToPtr:
+                case Instruction::PtrToInt:
+                case Instruction::BitCast:
+                case Instruction::AddrSpaceCast:
+
+                    // Other instructions...
+                case Instruction::ExtractElement:
+                case Instruction::InsertElement:
+                case Instruction::ShuffleVector:
+                case Instruction::ExtractValue:
+                case Instruction::InsertValue:
+                case Instruction::VAArg:
+                case Instruction::LandingPad:
+                case Instruction::Resume:
+                case Instruction::Unreachable:
+                default:
+                 return Instruction::Ret;
+
+            }
+        }
 
     string 
     opcodeToStr(unsigned opCode) {

@@ -22,7 +22,7 @@ using namespace std;
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &, const cl::list<std::string> &);
 extern cl::opt<std::string> profile;
-//extern cl::opt<std::string> selfloop;
+extern cl::opt<bool> printSrcLines;
 
 void printPath(std::vector<llvm::BasicBlock *> &Blocks,
                std::ofstream &Outfile) {
@@ -36,11 +36,6 @@ struct Path {
     Function *Func;
     APInt id;
     uint64_t count;
-
-    bool operator<(const Path &other) const { 
-        return (count < other.count) || 
-            (count == other.count && id.ule(other.id));
-    }
 };
 
 static bool isFunctionExiting(BasicBlock *BB) {
@@ -95,7 +90,7 @@ void printPathSrc(std::vector<llvm::BasicBlock *> &blocks) {
             if (Loc->getLine() != line || Loc->getFilename() != file) {
                 line = Loc->getLine();
                 file = Loc->getFilename();
-                DEBUG(errs() << "File " << file.str() << " line " << line << "\n");
+                errs() << "File " << file.str() << " line " << line << "\n";
                 // break; // FIXME : This makes it only print once for each BB,
                 // remove to print all
                 // source lines per instruction.
@@ -122,7 +117,7 @@ bool EPPDecode::runOnModule(Module &M) {
             string PathIdStr;
             uint64_t PathCount;
             while (inFile >> PathIdStr >> PathCount) {
-                APInt PathId(128, StringRef(PathIdStr), 10);
+                APInt PathId(128, StringRef(PathIdStr), 16);
                 paths.push_back({&F, PathId, PathCount});
             }
         }
@@ -141,8 +136,10 @@ bool EPPDecode::runOnModule(Module &M) {
 
 
     // Sort the paths in descending order of their frequency
+    // If the frequency is same, descending order of id (id cannot be same)
     std::sort(paths.begin(), paths.end(), [](const Path &P1, const Path &P2) {
-        return P1.count > P2.count;
+        return (P1.count > P2.count) || 
+            (P1.count == P2.count && P1.id.uge(P2.id));
     });
 
     std::vector<std::pair<PathType, 
@@ -152,7 +149,7 @@ bool EPPDecode::runOnModule(Module &M) {
         bbSequences.push_back(decode(*path.Func, path.id, *Enc));
     }
 
-    ofstream Outfile("epp-sequences.txt", ios::out);
+    ofstream Outfile("epp-sequences2.txt", ios::out);
 
     uint64_t pathFail = 0;
     // Dump paths
@@ -178,7 +175,7 @@ bool EPPDecode::runOnModule(Module &M) {
 
         if (auto Count = pathCheck(blocks)) {
             DEBUG(errs() << i << " " << paths[i].count << " ");
-            Outfile << paths[i].id.toString(10, true) << " " << paths[i].count
+            Outfile << paths[i].id.toString(10, false) << " " << paths[i].count
                     << " ";
             Outfile << static_cast<int>(pType) << " ";
             Outfile << Count << " ";
@@ -188,9 +185,10 @@ bool EPPDecode::runOnModule(Module &M) {
             pathFail++;
             DEBUG(errs() << "Path Fail\n");
         }
-        DEBUG(errs() << "Path ID: " << paths[i].id.toString(10, true)
+        DEBUG(errs() << "Path ID: " << paths[i].id.toString(10, false)
                << " Freq: " << paths[i].count << "\n");
-        //printPathSrc(blocks);
+        if(printSrcLines)
+            printPathSrc(blocks);
         DEBUG(errs() << "\n");
     }
 

@@ -61,7 +61,9 @@ void EPP(save)() {
     for (auto &KV : EPP(path)) {
         uint64_t low = (uint64_t) KV.first;
         uint64_t high = (KV.first >> 64);
-        fprintf(fp, "0x%lx%lx %lu\n", high, low, KV.second);
+        // Print the hex values with a 0x prefix messes up
+        // the APInt constructor.
+        fprintf(fp, "%lx%lx %lu\n", high, low, KV.second);
     }
     fclose(fp);
  
