@@ -2,40 +2,40 @@
 #define GRAPHGROK_H
 
 #include "llvm/ADT/Statistic.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/IntrinsicInst.h"
-#include "llvm/Pass.h"
-#include "llvm/IR/Module.h"
-#include "llvm/Analysis/PostDominators.h"
-#include "llvm/IR/Dominators.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/Transforms/Utils/CodeExtractor.h"
-#include "llvm/Transforms/Utils/BasicBlockUtils.h"
-#include "llvm/Transforms/Utils/ModuleUtils.h"
-#include "llvm/Transforms/Utils/Local.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/IR/Instructions.h"
+#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopIterator.h"
+#include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/ScalarEvolution.h"
-#include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/Transforms/Utils/LoopUtils.h"
-#include "llvm/Transforms/Scalar.h"
 #include "llvm/IR/DebugInfo.h"
-#include "llvm/IR/Metadata.h"
+#include "llvm/IR/Dominators.h"
+#include "llvm/IR/Function.h"
 #include "llvm/IR/GetElementPtrTypeIterator.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/Metadata.h"
+#include "llvm/IR/Module.h"
+#include "llvm/Pass.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/Transforms/Utils/CodeExtractor.h"
+#include "llvm/Transforms/Utils/Local.h"
+#include "llvm/Transforms/Utils/LoopUtils.h"
+#include "llvm/Transforms/Utils/ModuleUtils.h"
 
-#include <sstream>
-#include <string>
 #include <algorithm>
-#include <fstream>
-#include <set>
-#include <map>
+#include <boost/bimap.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/breadth_first_search.hpp>
 #include <boost/graph/graphviz.hpp>
-#include <boost/bimap.hpp>
+#include <fstream>
+#include <map>
+#include <set>
+#include <sstream>
+#include <string>
 
 namespace grok {
 
@@ -76,7 +76,8 @@ struct EdgeProp {
     EdgeType Type;
 };
 typedef boost::adjacency_list<boost::listS, boost::vecS, boost::bidirectionalS,
-                              VertexProp, EdgeProp> BoostGraph;
+                              VertexProp, EdgeProp>
+    BoostGraph;
 typedef boost::graph_traits<BoostGraph>::vertex_descriptor Vertex;
 typedef boost::graph_traits<BoostGraph>::edge_descriptor Edge;
 typedef boost::bimap<Vertex, llvm::Instruction *> bm_type;

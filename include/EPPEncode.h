@@ -1,32 +1,31 @@
 #ifndef EPPENCODE_H
 #define EPPENCODE_H
 
-#include "llvm/Analysis/LoopInfo.h"
-#include "llvm/Transforms/Utils/UnifyFunctionExitNodes.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/MapVector.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Module.h"
-#include "llvm/ADT/APInt.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/ADT/MapVector.h"
+#include "llvm/Transforms/Utils/UnifyFunctionExitNodes.h"
 
 #include <map>
-#include <unordered_map>
 #include <queue>
-
+#include <unordered_map>
 
 namespace epp {
 
-
-enum EdgeType { EHEAD,
-                ELATCH,
-                ELIN,
-                ELOUT1, // To Exit
-                ELOUT2, // From Entry 
-                EREAL,
-                EOUT };
-
+enum EdgeType {
+    EHEAD,
+    ELATCH,
+    ELIN,
+    ELOUT1, // To Exit
+    ELOUT2, // From Entry
+    EREAL,
+    EOUT
+};
 
 struct Edge {
     llvm::BasicBlock *Src, *Tgt;
@@ -40,10 +39,8 @@ struct Edge {
                                           llvm::BasicBlock *T, EdgeType ET) {
         return std::make_shared<Edge>(S, T, ET);
     }
-    bool operator==(const Edge& E) {
-        if(E.Src == Src &&
-           E.Tgt == Tgt &&
-           E.Type == Type)
+    bool operator==(const Edge &E) {
+        if (E.Src == Src && E.Tgt == Tgt && E.Type == Type)
             return true;
         return false;
     }
@@ -72,25 +69,22 @@ struct EPPEncode : public llvm::FunctionPass {
     bool doInitialization(llvm::Module &m) override;
     bool doFinalization(llvm::Module &m) override;
     virtual void releaseMemory() override;
-    const char* getPassName() const override {
-        return "PASHA - EPPEncode";
-    }
+    const char *getPassName() const override { return "PASHA - EPPEncode"; }
 };
 
-typedef std::pair<llvm::BasicBlock*, EdgeType> BlockEdgeTy;
+typedef std::pair<llvm::BasicBlock *, EdgeType> BlockEdgeTy;
 
 struct BlockEdgeTyKeyInfo {
     static inline BlockEdgeTy getEmptyKey() {
-        return std::make_pair(nullptr,EHEAD);
+        return std::make_pair(nullptr, EHEAD);
     }
     static inline BlockEdgeTy getTombstoneKey() {
-        return std::make_pair(nullptr,EOUT);
+        return std::make_pair(nullptr, EOUT);
     }
     static unsigned getHashValue(const BlockEdgeTy &Key) {
         return static_cast<unsigned>(hash_value(Key));
     }
-    static bool isEqual(const BlockEdgeTy &LHS, 
-            const BlockEdgeTy &RHS) {
+    static bool isEqual(const BlockEdgeTy &LHS, const BlockEdgeTy &RHS) {
         return LHS.first == RHS.first && LHS.second == RHS.second;
     }
 };

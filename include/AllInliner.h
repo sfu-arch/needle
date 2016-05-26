@@ -1,20 +1,20 @@
 #ifndef ALL_INLINER_H
 #define ALL_INLINER_H
-#include "llvm/Transforms/IPO.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/Analysis/InlineCost.h"
 #include "llvm/IR/CallSite.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/InlinerPass.h"
 #include <fstream>
 
@@ -25,11 +25,9 @@ struct PeruseInliner : public Inliner {
     static char ID;
 
   public:
-    PeruseInliner() : Inliner(ID, -2000000000, true) {
-    }
+    PeruseInliner() : Inliner(ID, -2000000000, true) {}
 
-    ~PeruseInliner() {
-    }
+    ~PeruseInliner() {}
 
     std::ofstream InlineStats;
 

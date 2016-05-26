@@ -5,9 +5,9 @@
 // actual instrumentation is done since the prototupes are injected
 // into the bitcode automatically.
 
-#include <cstdint>
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/Hashing.h"
+#include <cstdint>
 
 extern "C" {
 

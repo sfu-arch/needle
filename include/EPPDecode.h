@@ -1,9 +1,9 @@
 #ifndef EPPDECODE_H
 #define EPPDECODE_H
 
-#include "llvm/Analysis/LoopInfo.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
 
@@ -17,7 +17,7 @@ struct EPPDecode : public llvm::ModulePass {
     static char ID;
     llvm::StringRef filename;
     size_t numberToReturn;
-    //llvm::DenseMap<std::uint64_t, std::uint64_t> SelfProfileMap;
+    // llvm::DenseMap<std::uint64_t, std::uint64_t> SelfProfileMap;
 
     std::map<llvm::BasicBlock *, std::vector<std::shared_ptr<Edge>>> ValBySrc;
 

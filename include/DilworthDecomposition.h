@@ -1,13 +1,13 @@
 #ifndef DILWORTH_DECOMPOSE_H
 #define DILWORTH_DECOMPOSE_H
 
-#include <vector>
-#include <set>
+#include <boost/graph/max_cardinality_matching.hpp>
+#include <boost/graph/transitive_closure.hpp>
+#include <boost/property_map/property_map.hpp>
 #include <cstdint>
 #include <iostream>
-#include <boost/graph/transitive_closure.hpp>
-#include <boost/graph/max_cardinality_matching.hpp>
-#include <boost/property_map/property_map.hpp>
+#include <set>
+#include <vector>
 
 namespace dilworth {
 template <typename TGraph> class DilworthDecompose {

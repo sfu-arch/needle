@@ -1,8 +1,8 @@
 #ifndef EPPPROFILE_H
 #define EPPPROFILE_H
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
-#include "llvm/Analysis/LoopInfo.h"
 
 #include "EPPEncode.h"
 
