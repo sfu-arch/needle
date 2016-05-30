@@ -317,4 +317,13 @@ void writeModule(Module *Mod, string Name) {
     Mod->print(File, nullptr);
     File.close();
 }
+
+void writeFunctionDFG(Function& F) {
+    legacy::FunctionPassManager FPM(F.getParent());
+    FPM.add(new helpers::DFGPrinter());
+    FPM.doInitialization();
+    FPM.run(F);
+    FPM.doFinalization();
+}
+
 }

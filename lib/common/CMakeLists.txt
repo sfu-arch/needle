@@ -1,3 +1,4 @@
 add_library(common
-    Common.cpp)
+    Common.cpp
+    Helpers.cpp)
 
