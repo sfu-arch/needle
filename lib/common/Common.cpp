@@ -318,12 +318,17 @@ void writeModule(Module *Mod, string Name) {
     File.close();
 }
 
-void writeFunctionDFG(Function& F) {
+void printDFG(Function& F) {
     legacy::FunctionPassManager FPM(F.getParent());
     FPM.add(new helpers::DFGPrinter());
     FPM.doInitialization();
     FPM.run(F);
     FPM.doFinalization();
+}
+
+void printDFG(Module& M) {
+    for(auto &F : M)
+        printDFG(F);
 }
 
 }

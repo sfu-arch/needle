@@ -11,6 +11,8 @@
 #include "llvm/IR/InstVisitor.h"
 
 #include <string>
+#include <sstream>
+#include <map>
 
 using namespace llvm;
 using namespace std;
@@ -40,7 +42,8 @@ bool checkIntrinsic(llvm::CallSite &);
 bool isSelfLoop(const llvm::BasicBlock *);
 llvm::SetVector<llvm::Loop *> getLoops(llvm::LoopInfo *);
 void writeModule(llvm::Module *, std::string);
-void writeFunctionDFG(llvm::Function&); 
+void printDFG(llvm::Function&); 
+void printDFG(llvm::Module&); 
 
 }
 
@@ -52,9 +55,13 @@ class DFGPrinter : public FunctionPass, public InstVisitor<DFGPrinter> {
         void visitFunction(Function& F);
         void visitBasicBlock(BasicBlock& BB);
         void visitInstruction(Instruction& I);
+        stringstream dot;
+        map<Value*, uint64_t> nodes;
+        uint64_t counter;
+        uint64_t BBCounter;
     public:
         static char ID;
-        DFGPrinter() : FunctionPass(ID) {}
+        DFGPrinter() : FunctionPass(ID), counter(0), BBCounter(0) {}
         bool doInitialization(Module& ) override;
         bool doFinalization(Module& ) override;
         bool runOnFunction(Function& ) override;
