@@ -206,9 +206,13 @@ void MicroWorkloadHelper::replaceGuards() {
     if (!changed)
         RetFalseBlock->eraseFromParent();
 
+    // It's possible that the guard function gets removed from 
+    // the Offload Function via optimizations. This happens
+    // particularly when the extracted sequence is only a single
+    // block.
     auto *GuardFunc = Offload->getParent()->getFunction("__guard_func");
-    assert(GuardFunc && "Guard Function definition not found");
-    GuardFunc->eraseFromParent();
+    if(GuardFunc)
+        GuardFunc->eraseFromParent();
 }
 
 bool MicroWorkloadHelper::runOnModule(Module &M) {
