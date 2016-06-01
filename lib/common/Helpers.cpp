@@ -48,54 +48,70 @@ DFGPrinter::visitBasicBlock(BasicBlock& BB) {
         return false;
     };
 
+    auto nodeFormat = [](uint64_t id, string label, 
+            string color, string ir) -> string {
+        stringstream sstr;
+        sstr << id << " [label=\""
+             << label << "(" << id << ")\", color="
+             << color << ",ir=\"" 
+             << ir << "\"];\n";
+        return sstr.str();
+             
+    };
+
     if(nodes.count(&BB) == 0) {
         nodes.insert(make_pair(&BB, counter));
-        dot << counter++ << " [label=\"BB\", color=red];\n";
+        counter++;
+        dot << nodeFormat(nodes[&BB], "BB", "red", BB.getName().str());
     }
     auto BBId = nodes[&BB];
     
     for(auto &I : BB) {
         if(checkCall(I,"llvm.dbg")) continue;
+
+        std::string ir;
+        llvm::raw_string_ostream rso(ir);
+        I.print(rso); 
+
         // If this does not exist in the node map
         // then create a new entry for it and save 
         // the value of the counter (identifier).
         if(nodes.count(&I) == 0) {
             nodes.insert(make_pair(&I, counter));
-            dot << counter++;
-            dot << " [";
+            counter++;
             if(checkCall(I, "__guard_func")) {
-                dot << "label=\"G\"";
+                dot << nodeFormat(nodes[&I], "G", "red", rso.str());
             } else {
-                dot << "label=\"" << getOpcodeStr(I.getOpcode()) << "\"";
+                dot << nodeFormat(nodes[&I], getOpcodeStr(I.getOpcode()), "black", rso.str());
             } 
-            dot << "];\n";
         }
 
         for(auto OI : I.operand_values()) {
+            OI->print(rso);
             if(nodes.count(OI) == 0) {
-                // Assume not a phi node -- Constants / Arguments
+                nodes.insert(make_pair(OI, counter));
+                counter++;
                 if(isa<Argument>(OI)) {
-                    nodes.insert(make_pair(OI, counter));
-                    dot << counter++ << " [label=\"Arg\" , color=blue]\n";
+                    dot << nodeFormat(nodes[OI], "Arg", "blue", rso.str());
                     dot << nodes[OI] << "->" << nodes[&I] << " [color=blue];\n";  
                 } else if(isa<Constant>(OI)) {
-                    nodes.insert(make_pair(OI, counter));
-                    dot << counter++ << " [label=\"Const\", color=green]\n";
+                    dot << nodeFormat(nodes[OI], "Const", "green", rso.str());
                     dot << nodes[OI] << "->" << nodes[&I] << " [color=green];\n";  
                 } else if(isa<BasicBlock>(OI)){
-                    nodes.insert(make_pair(OI, counter));
-                    dot << counter++ << " [label=\"BB\", color=red]";
+                    dot << nodeFormat(nodes[OI], "BB", "green", BB.getName().str());
                     dot << nodes[&I] << "->" << nodes[OI] << " [color=red];\n";  
                 } else {
+                    // TODO : This will break later when there are PHINodes
+                    // for chops.
                     llvm_unreachable("unexpected");
                 }
-            } 
+            } else {
+                dot << nodes[OI] << "->" << nodes[&I] << ";\n";  
+            }
         }
-
         // Every Instruction is control depedent on its BB_START
-        dot << BBId << "->" << nodes[&I] << " [style=dotted];";
+        dot << BBId << "->" << nodes[&I] << " [style=dotted];\n";
     }
-
 }
 
 void 

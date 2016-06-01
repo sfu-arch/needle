@@ -1066,9 +1066,8 @@ void MicroWorkloadExtract::process(Function &F) {
                    P.PType, P.Id);
 
         common::printCFG(F);
-        common::printDFG(*Offload);
-        common::writeModule(Mod, (P.Id) + string(".ll"));
 
+        common::writeModule(Mod, (P.Id) + string(".ll"));
         assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
     }
 }

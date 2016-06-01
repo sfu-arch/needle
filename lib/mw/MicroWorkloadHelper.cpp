@@ -1,3 +1,4 @@
+#define DEBUG_TYPE "pasha_mwe"
 #include "MicroWorkloadExtract.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseSet.h"
@@ -18,7 +19,8 @@
 #include <boost/algorithm/string.hpp>
 #include <cxxabi.h>
 
-#define DEBUG_TYPE "mw"
+#include "Common.h"
+
 
 using namespace llvm;
 using namespace mwe;
@@ -210,8 +212,9 @@ void MicroWorkloadHelper::replaceGuards() {
 }
 
 bool MicroWorkloadHelper::runOnModule(Module &M) {
-    // optimizeModule(&M);
+    common::optimizeModule(&M);
     replaceGuards();
+    common::printDFG(*Offload);
     addUndoLog();
     return false;
 }
