@@ -124,7 +124,7 @@ DFGPrinter::doFinalization(Module& M ) {
 }
 
 bool 
-DFGPrinter::runOnFunction(Function& F ) {
+DFGPrinter::runOnFunction(Function& F) {
     ofstream dotfile(("dfg."+F.getName()+".dot").str().c_str(), ios::out);
     dot << "digraph G {\n";
     visit(F);
@@ -133,3 +133,45 @@ DFGPrinter::runOnFunction(Function& F ) {
     dotfile.close();
     return false;
 }
+
+
+// LabelUID Helper Class
+
+template <typename T>
+void 
+LabelUID::visitGeneric(T &IT) {
+    if(values.count(&IT) == 0) {
+        values.insert(make_pair(&IT, counter));
+        counter++;
+    }
+    auto &Context = IT.getContext();
+    MDNode *N = MDNode::get(Context, MDString::get(Context, to_string(values[&IT])));
+    IT.setMetadata("UID", N);
+}
+
+void 
+LabelUID::visitFunction(Function& F) {
+    visitGeneric<Function>(F);
+}
+
+void 
+LabelUID::visitInstruction(Instruction& I) {
+    visitGeneric<Instruction>(I);
+}
+
+void 
+LabelUID::visitBasicBlock(BasicBlock& BB) {
+    if(values.count(&BB) == 0) {
+        values.insert(make_pair(&BB, counter));
+        counter++;
+    }
+}
+
+
+bool
+LabelUID::runOnFunction(Function &F) {
+    visit(F);
+    return false;    
+}
+
+

@@ -69,6 +69,25 @@ class DFGPrinter : public FunctionPass, public InstVisitor<DFGPrinter> {
             AU.setPreservesAll();
         }
 };
+
+class LabelUID : public FunctionPass, public InstVisitor<LabelUID> {
+        friend class InstVisitor<LabelUID>;
+        uint64_t counter;
+        void visitFunction(Function& F);
+        void visitBasicBlock(BasicBlock& BB);
+        void visitInstruction(Instruction& I);
+        template <typename T> void visitGeneric(T&); 
+        map<Value*, uint64_t> values;
+    public:
+        static char ID;
+        LabelUID() : FunctionPass(ID), counter(0) {}
+        bool doInitialization(Module& ) override { counter = 0; values.clear(); return false; };
+        bool doFinalization(Module& ) override { return true; };
+        bool runOnFunction(Function& ) override;
+        void getAnalysisUsage(AnalysisUsage& AU) const override {
+            AU.setPreservesAll();
+        }
+};
     
 }
 #endif
