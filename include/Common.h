@@ -44,7 +44,8 @@ llvm::SetVector<llvm::Loop *> getLoops(llvm::LoopInfo *);
 void writeModule(llvm::Module *, std::string);
 void printDFG(llvm::Function&); 
 void printDFG(llvm::Module&); 
-
+void labelUID(llvm::Module&);
+void labelUID(llvm::Function&);
 }
 
 namespace helpers {

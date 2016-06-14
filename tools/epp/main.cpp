@@ -48,7 +48,6 @@
 #include "EPPDecode.h"
 #include "EPPProfile.h"
 #include "Namer.h"
-//#include "LoopConverter.h"
 #include "Simplify.h"
 
 #include "config.h"
@@ -118,7 +117,6 @@ static void instrumentModule(Module &module, std::string outFile,
     pm.add(new epp::PeruseInliner());
     pm.add(new pasha::Simplify(FunctionList[0]));
     pm.add(new epp::Namer());
-    // pm.add(new pasha::LoopConverter());
     pm.add(new LoopInfoWrapperPass());
     pm.add(new epp::EPPProfile());
     pm.add(createVerifierPass());
@@ -163,7 +161,6 @@ static void interpretResults(Module &module, std::string filename) {
     pm.add(new epp::PeruseInliner());
     pm.add(new pasha::Simplify(FunctionList[0]));
     pm.add(new epp::Namer());
-    // pm.add(new pasha::LoopConverter());
     pm.add(new LoopInfoWrapperPass());
     pm.add(new epp::EPPDecode());
     pm.add(createVerifierPass());
