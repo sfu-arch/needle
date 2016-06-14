@@ -137,6 +137,8 @@ DFGPrinter::runOnFunction(Function& F) {
 
 // LabelUID Helper Class
 
+char LabelUID::ID = 0;
+
 template <typename T>
 void 
 LabelUID::visitGeneric(T &IT) {

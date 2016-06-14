@@ -331,4 +331,17 @@ void printDFG(Module& M) {
         printDFG(F);
 }
 
+void labelUID(Function& F) {
+    legacy::FunctionPassManager FPM(F.getParent());
+    FPM.add(new helpers::LabelUID());
+    FPM.doInitialization();
+    FPM.run(F);
+    FPM.doFinalization();
+}
+
+void labelUID(Module& M) {
+    for(auto &F : M)
+        labelUID(F);
+}
+
 }
