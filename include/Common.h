@@ -58,10 +58,9 @@ class DFGPrinter : public FunctionPass, public InstVisitor<DFGPrinter> {
         stringstream dot;
         map<Value*, uint64_t> nodes;
         uint64_t counter;
-        uint64_t BBCounter;
     public:
         static char ID;
-        DFGPrinter() : FunctionPass(ID), counter(0), BBCounter(0) {}
+        DFGPrinter() : FunctionPass(ID), counter(999999){}
         bool doInitialization(Module& ) override;
         bool doFinalization(Module& ) override;
         bool runOnFunction(Function& ) override;
