@@ -76,12 +76,13 @@ class LabelUID : public FunctionPass, public InstVisitor<LabelUID> {
         void visitFunction(Function& F);
         void visitBasicBlock(BasicBlock& BB);
         void visitInstruction(Instruction& I);
-        template <typename T> void visitGeneric(T&); 
+        template <typename T> void visitGeneric(string, T&); 
         map<Value*, uint64_t> values;
     public:
         static char ID;
         LabelUID() : FunctionPass(ID), counter(0) {}
-        bool doInitialization(Module& ) override { counter = 0; values.clear(); return false; };
+        bool doInitialization(Module& ) override 
+            { counter = 0; values.clear(); return false; };
         bool doFinalization(Module& ) override { return true; };
         bool runOnFunction(Function& ) override;
         void getAnalysisUsage(AnalysisUsage& AU) const override {

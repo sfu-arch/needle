@@ -48,19 +48,38 @@ DFGPrinter::visitBasicBlock(BasicBlock& BB) {
         return false;
     };
 
+    auto &nodes = this->nodes;
+
+    auto insertNode = [&nodes](Value *V, uint64_t counter) {
+        nodes[V] = counter;
+        if(isa<BasicBlock>(V)) {
+            if(auto *N = dyn_cast<BasicBlock>(V)->getTerminator()->getMetadata("BB_UID")) {
+                auto *S = dyn_cast<MDString>(N->getOperand(0));
+                auto id = stoi(S->getString().str());
+                nodes[V] = id;
+            }
+        } else if(isa<Instruction>(V)) {
+            if(auto *N = dyn_cast<Instruction>(V)->getMetadata("UID")) {
+                auto *S = dyn_cast<MDString>(N->getOperand(0));
+                auto id = stoi(S->getString().str());
+                nodes[V] = id;
+            }
+        }
+    };
+
     auto nodeFormat = [](uint64_t id, string label, 
-            string color, string ir) -> string {
+                  string color, string ir) -> string {
         stringstream sstr;
         sstr << id << " [label=\""
              << label << "(" << id << ")\", color="
              << color << ",ir=\"" 
              << ir << "\"];\n";
         return sstr.str();
-             
     };
 
     if(nodes.count(&BB) == 0) {
-        nodes.insert(make_pair(&BB, counter));
+        insertNode(&BB, counter);
+        //nodes.insert(make_pair(&BB, counter));
         counter++;
         dot << nodeFormat(nodes[&BB], "BB", "red", BB.getName().str());
     }
@@ -77,7 +96,8 @@ DFGPrinter::visitBasicBlock(BasicBlock& BB) {
         // then create a new entry for it and save 
         // the value of the counter (identifier).
         if(nodes.count(&I) == 0) {
-            nodes.insert(make_pair(&I, counter));
+            insertNode(&I, counter);
+            //nodes.insert(make_pair(&I, counter));
             counter++;
             if(checkCall(I, "__guard_func")) {
                 dot << nodeFormat(nodes[&I], "G", "red", rso.str());
@@ -89,7 +109,8 @@ DFGPrinter::visitBasicBlock(BasicBlock& BB) {
         for(auto OI : I.operand_values()) {
             OI->print(rso);
             if(nodes.count(OI) == 0) {
-                nodes.insert(make_pair(OI, counter));
+                insertNode(OI, counter);
+                //nodes.insert(make_pair(OI, counter));
                 counter++;
                 if(isa<Argument>(OI)) {
                     dot << nodeFormat(nodes[OI], "Arg", "blue", rso.str());
@@ -141,32 +162,29 @@ char LabelUID::ID = 0;
 
 template <typename T>
 void 
-LabelUID::visitGeneric(T &IT) {
+LabelUID::visitGeneric(string S, T &IT) {
     if(values.count(&IT) == 0) {
         values.insert(make_pair(&IT, counter));
         counter++;
     }
     auto &Context = IT.getContext();
     MDNode *N = MDNode::get(Context, MDString::get(Context, to_string(values[&IT])));
-    IT.setMetadata("UID", N);
+    IT.setMetadata(S, N);
 }
 
 void 
 LabelUID::visitFunction(Function& F) {
-    visitGeneric<Function>(F);
+    visitGeneric<Function>("UID", F);
 }
 
 void 
 LabelUID::visitInstruction(Instruction& I) {
-    visitGeneric<Instruction>(I);
+    visitGeneric<Instruction>("UID", I);
 }
 
 void 
 LabelUID::visitBasicBlock(BasicBlock& BB) {
-    if(values.count(&BB) == 0) {
-        values.insert(make_pair(&BB, counter));
-        counter++;
-    }
+    visitGeneric<Instruction>("BB_UID", *BB.getTerminator());
 }
 
 
