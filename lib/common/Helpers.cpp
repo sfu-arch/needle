@@ -168,7 +168,8 @@ LabelUID::visitGeneric(string S, T &IT) {
         counter++;
     }
     auto &Context = IT.getContext();
-    MDNode *N = MDNode::get(Context, MDString::get(Context, to_string(values[&IT])));
+    MDNode *N = MDNode::get(Context, 
+            MDString::get(Context, to_string(values[&IT])));
     IT.setMetadata(S, N);
 }
 
@@ -184,7 +185,14 @@ LabelUID::visitInstruction(Instruction& I) {
 
 void 
 LabelUID::visitBasicBlock(BasicBlock& BB) {
-    visitGeneric<Instruction>("BB_UID", *BB.getTerminator());
+    if(values.count(&BB) == 0) {
+        values.insert(make_pair(&BB, counter));
+        counter++;
+    }
+    auto &Context = BB.getContext();
+    MDNode *N = MDNode::get(Context, 
+            MDString::get(Context, to_string(values[&BB])));
+    BB.getTerminator()->setMetadata("BB_UID", N);
 }
 
 
