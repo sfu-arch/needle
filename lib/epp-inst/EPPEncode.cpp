@@ -298,6 +298,7 @@ void EPPEncode::encode(Function &F) {
         for (auto S = succ_begin(BB), E = succ_end(BB); S != E; S++) {
             if (BackEdges.count(make_pair(BB, *S)) ||
                 LI->getLoopFor(BB) != LI->getLoopFor(*S)) {
+                test.add(BB, *S, Entry, Exit);
                 continue;
             }
             AltCFG[BB].insert(make_pair(*S, EREAL));
