@@ -4,6 +4,7 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Module.h"
@@ -12,7 +13,6 @@
 #include "llvm/Transforms/Utils/UnifyFunctionExitNodes.h"
 
 #include <map>
-#include <queue>
 #include <unordered_map>
 
 namespace epp {
@@ -29,8 +29,9 @@ enum EdgeType {
 
 struct Edge {
     llvm::BasicBlock *Src, *Tgt;
+    std::shared_ptr<Edge> Fakes[2]; 
     EdgeType Type;
-    uint64_t Id;
+    //uint64_t Id;
     Edge(llvm::BasicBlock *S, llvm::BasicBlock *T, EdgeType ET)
         : Src(S), Tgt(T), Type(ET) {}
     llvm::BasicBlock *src() { return Src; }
@@ -88,5 +89,7 @@ struct BlockEdgeTyKeyInfo {
         return LHS.first == RHS.first && LHS.second == RHS.second;
     }
 };
+
+
 }
 #endif

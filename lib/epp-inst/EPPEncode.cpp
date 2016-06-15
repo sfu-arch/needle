@@ -14,6 +14,7 @@
 #include "llvm/Transforms/Scalar.h"
 
 #include "EPPEncode.h"
+#include "AltCFG.h"
 
 #include <algorithm>
 #include <cassert>
@@ -27,10 +28,11 @@ using namespace llvm;
 using namespace epp;
 using namespace std;
 
+altepp::altcfg<uint64_t> test;
+
 typedef pair<BasicBlock *, EdgeType> AltTgtTy;
 typedef SetVector<AltTgtTy, vector<AltTgtTy>,
-                  DenseSet<AltTgtTy, BlockEdgeTyKeyInfo>>
-    SuccListTy;
+                  DenseSet<AltTgtTy, BlockEdgeTyKeyInfo>> SuccListTy;
 typedef MapVector<BasicBlock *, SuccListTy> AltCFGTy;
 
 bool EPPEncode::doInitialization(Module &m) { return false; }
@@ -299,8 +301,12 @@ void EPPEncode::encode(Function &F) {
                 continue;
             }
             AltCFG[BB].insert(make_pair(*S, EREAL));
+            test.add(BB, *S);
         }
     }
+
+    test.print();
+    test.clear();
 
     auto Loops = common::getLoops(LI);
 
