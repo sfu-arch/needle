@@ -264,6 +264,7 @@ static void computeIncrement(BasicBlock *Entry, BasicBlock *Exit,
     for (auto &C : Chords) {
         Inc[C] = Inc[C] + Val[C];
     }
+
 }
 
 void EPPEncode::releaseMemory() {
@@ -307,11 +308,6 @@ void EPPEncode::encode(Function &F) {
         }
     }
 
-    test.print();
-    error_code EC;
-    raw_fd_ostream dotf("test.dot", EC, sys::fs::OpenFlags::F_None);
-    test.dot(dotf);
-    test.clear();
 
     auto Loops = common::getLoops(LI);
 
@@ -419,6 +415,34 @@ void EPPEncode::encode(Function &F) {
         }
         numPaths.insert(make_pair(BB, pathCount));
     }
+
+    // Debug
+    numPaths.clear();
+
+    for(auto &B : POB) {
+        APInt pathCount(128, 0, true);
+
+        if (isFunctionExiting(B)) 
+            pathCount = 1;
+
+        for(auto &S : test.succs(B)) {
+            test[{B,S}] = pathCount;
+            if (numPaths.count(S) == 0)
+                numPaths.insert(make_pair(S, APInt(128, 0, true)));
+             
+            // This is the only place we need to check for overflow.
+            bool Ov = false;
+            pathCount = pathCount.sadd_ov(numPaths[S], Ov);
+            assert(!Ov && "Integer Overflow");
+        }
+        numPaths.insert({B, pathCount});
+    }
+
+    test.print();
+    error_code EC;
+    raw_fd_ostream dotf("test.dot", EC, sys::fs::OpenFlags::F_None);
+    test.dot(dotf);
+    test.clear();
 
     DEBUG(errs() << "\nEdge Weights :\n");
     for (auto &V : Val)

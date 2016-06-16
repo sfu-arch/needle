@@ -29,7 +29,7 @@ typedef pair<BasicBlock*, BasicBlock*> Edge;
 typedef SmallVector<Edge, 32> EdgeListTy; 
 typedef SetVector<BasicBlock*, vector<BasicBlock*>,
                   DenseSet<BasicBlock*>> SuccListTy;
-typedef MapVector<BasicBlock *, SuccListTy> CFGTy;
+typedef MapVector<const BasicBlock *, SuccListTy> CFGTy;
 typedef MapVector<Edge, pair<Edge, Edge>> FakeTableTy;
 
 class altcfg {
@@ -40,16 +40,21 @@ class altcfg {
     public:
     bool add(BasicBlock* Src, BasicBlock* Tgt, 
                 BasicBlock* Entry = nullptr, BasicBlock* Exit = nullptr);
-    uint64_t& operator[](Edge);
+    APInt& operator[](const Edge&);
     EdgeListTy get() const;
-    void setWt(Edge, APInt);
+    void setWt(const Edge, const APInt);
     void print(raw_ostream & os = errs()) const;
     void dot(raw_ostream& os = errs()) const;
+    SmallVector<BasicBlock*, 4> succs(const BasicBlock*) const;
     void clear() { Edges.clear(),  Weights.clear(), CFG.clear(); }
 };
 
+inline APInt&
+altcfg::operator[](const Edge& E ) {
+    return Weights[E];
+}
 
-void
+inline void
 altcfg::setWt(Edge E, APInt Val = APInt(128, 0, true)) {
     Weights[E] = Val; 
 }
@@ -85,8 +90,6 @@ altcfg::add(BasicBlock* Src, BasicBlock* Tgt,
         return false; 
     }
 
-    // This is required as in C++11 lambda does not capture this
-    // pointer. 
     auto insertCFG = [this](BasicBlock* Src, BasicBlock* Tgt) {
         if(CFG.count(Src) == 0) {
             CFG.insert({Src, SuccListTy()});
@@ -104,6 +107,17 @@ altcfg::add(BasicBlock* Src, BasicBlock* Tgt,
         insertCFG(Src, Exit);
         insertCFG(Entry, Tgt);
     }
+}
+
+SmallVector<BasicBlock*, 4>
+altcfg::succs(const BasicBlock* B) const {  
+    assert(CFG.count(B) && "Block does not exist in CFG");
+    SmallVector<BasicBlock*, 4> R;
+    for(auto &E : get()) {
+        if(SRC(E) == B)
+            R.push_back(TGT(E));
+    }
+    return R;
 }
 
 void 
