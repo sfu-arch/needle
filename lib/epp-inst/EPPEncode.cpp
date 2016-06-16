@@ -12,6 +12,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Support/FileSystem.h"
 
 #include "EPPEncode.h"
 #include "AltCFG.h"
@@ -307,7 +308,9 @@ void EPPEncode::encode(Function &F) {
     }
 
     test.print();
-    test.dot();
+    error_code EC;
+    raw_fd_ostream dotf("test.dot", EC, sys::fs::OpenFlags::F_None);
+    test.dot(dotf);
     test.clear();
 
     auto Loops = common::getLoops(LI);
@@ -369,7 +372,7 @@ void EPPEncode::encode(Function &F) {
     }
 
     // Dot Printer for AltCFG
-    /**** Debug
+    /**** Debug **/
     const char *EdgeTypeStr[] = {"EHEAD", "ELATCH", "ELIN", "ELOUT1", "ELOUT2",
     "EREAL", "EOUT"};
     ofstream DotFile("altcfg.dot", ios::out);
@@ -389,7 +392,7 @@ void EPPEncode::encode(Function &F) {
         }
     }
     DotFile << "}\n";
-    ****/
+    /****/
 
     // Path Counts
 

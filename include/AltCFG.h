@@ -119,14 +119,17 @@ altcfg::print(raw_ostream& os) const {
 
 void
 altcfg::dot(raw_ostream& os) const {
-     os << "digraph \"AltCFG\" {\n label=\"AltCFG\";\n";
-    for(auto &KV : CFG) {
-        os << "\tNode" << KV.first << " [shape=record, label=\""
-            << KV.first->getName().str() << "\"];\n";
-        for(auto &S : KV.second) {
-            os << "\tNode" << KV.first << " -> Node" << S << "[style=solid,"
-                << " label=\"" << Weights.find({KV.first, S})->second << "\"];\n";
-        }
+    os << "digraph \"AltCFG\" {\n label=\"AltCFG\";\n";
+    DenseSet<BasicBlock*> Nodes;
+    for(auto &E : get()) {
+        os << "\tNode" << SRC(E) << " -> Node" << TGT(E) << " [style=solid,"
+            << " label=\"" << Weights.find({SRC(E), TGT(E)})->second << "\"];\n";
+        Nodes.insert(SRC(E));
+        Nodes.insert(TGT(E));
+    }
+    for(auto &N : Nodes) {
+        os << "\tNode" << N << " [shape=record, label=\""
+            << N->getName().str() << "\"];\n";
     }
     os << "}\n";
 }
