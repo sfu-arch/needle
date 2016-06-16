@@ -28,7 +28,7 @@ using namespace llvm;
 using namespace epp;
 using namespace std;
 
-altepp::altcfg<uint64_t> test;
+altepp::altcfg test;
 
 typedef pair<BasicBlock *, EdgeType> AltTgtTy;
 typedef SetVector<AltTgtTy, vector<AltTgtTy>,
@@ -307,6 +307,7 @@ void EPPEncode::encode(Function &F) {
     }
 
     test.print();
+    test.dot();
     test.clear();
 
     auto Loops = common::getLoops(LI);

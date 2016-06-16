@@ -6,6 +6,7 @@
 #include <llvm/ADT/SetVector.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Debug.h>
+#include <llvm/ADT/APInt.h>
 
 #include <memory>
 #include <map>
@@ -31,25 +32,31 @@ typedef SetVector<BasicBlock*, vector<BasicBlock*>,
 typedef MapVector<BasicBlock *, SuccListTy> CFGTy;
 typedef MapVector<Edge, pair<Edge, Edge>> FakeTableTy;
 
-template <typename T>
 class altcfg {
     EdgeListTy Edges;
-    map<Edge, T> Weights;
+    map<Edge, APInt> Weights;
     CFGTy CFG;
     FakeTableTy Fakes;
     public:
     bool add(BasicBlock* Src, BasicBlock* Tgt, 
                 BasicBlock* Entry = nullptr, BasicBlock* Exit = nullptr);
-    T& operator[](Edge);
+    uint64_t& operator[](Edge);
     EdgeListTy get() const;
+    void setWt(Edge, APInt);
     void print(raw_ostream & os = errs()) const;
+    void dot(raw_ostream& os = errs()) const;
     void clear() { Edges.clear(),  Weights.clear(), CFG.clear(); }
 };
 
 
-template <typename T>
+void
+altcfg::setWt(Edge E, APInt Val = APInt(128, 0, true)) {
+    Weights[E] = Val; 
+}
+
+
 EdgeListTy 
-altcfg<T>::get() const {
+altcfg::get() const {
     EdgeListTy Ret;
     for(auto &E : Edges) {
         if(Fakes.count(E)) {
@@ -62,10 +69,8 @@ altcfg<T>::get() const {
     return Ret;
 }
 
-
-template <typename T>
 bool
-altcfg<T>::add(BasicBlock* Src, BasicBlock* Tgt, 
+altcfg::add(BasicBlock* Src, BasicBlock* Tgt, 
         BasicBlock* Entry , BasicBlock* Exit ) {
 
     assert(!((uint64_t)Entry ^ (uint64_t)Exit) && 
@@ -80,12 +85,14 @@ altcfg<T>::add(BasicBlock* Src, BasicBlock* Tgt,
         return false; 
     }
 
-    auto& CFG = this->CFG;
-    auto insertCFG = [&CFG](BasicBlock* Src, BasicBlock* Tgt) {
+    // This is required as in C++11 lambda does not capture this
+    // pointer. 
+    auto insertCFG = [this](BasicBlock* Src, BasicBlock* Tgt) {
         if(CFG.count(Src) == 0) {
             CFG.insert({Src, SuccListTy()});
         }
         CFG[Src].insert(Tgt);
+        setWt({Src, Tgt});
     };
 
     insertCFG(Src, Tgt);
@@ -99,17 +106,29 @@ altcfg<T>::add(BasicBlock* Src, BasicBlock* Tgt,
     }
 }
 
-
-template <typename T>
 void 
-altcfg<T>::print(raw_ostream& os) const {
+altcfg::print(raw_ostream& os) const {
     os << "Alternate CFG for EPP\n";
-
     uint64_t Ctr = 0;
     for(auto &E : get()) {
         os << Ctr++ << " " << SRC(E)->getName() 
-           << "->" << TGT(E)->getName() << "\n";
+           << "->" << TGT(E)->getName() << " " 
+           << Weights.find(E)->second << "\n";
     }
+}
+
+void
+altcfg::dot(raw_ostream& os) const {
+     os << "digraph \"AltCFG\" {\n label=\"AltCFG\";\n";
+    for(auto &KV : CFG) {
+        os << "\tNode" << KV.first << " [shape=record, label=\""
+            << KV.first->getName().str() << "\"];\n";
+        for(auto &S : KV.second) {
+            os << "\tNode" << KV.first << " -> Node" << S << "[style=solid,"
+                << " label=\"" << Weights.find({KV.first, S})->second << "\"];\n";
+        }
+    }
+    os << "}\n";
 }
 
 }
