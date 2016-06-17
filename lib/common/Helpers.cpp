@@ -71,7 +71,8 @@ DFGPrinter::visitBasicBlock(BasicBlock& BB) {
                   string color, string ir) -> string {
         stringstream sstr;
         sstr << id << " [label=\""
-             << label << "(" << id << ")\", color="
+             << label << "(" << id << ")\", opcode=\"" 
+             << label << "\", color="
              << color << ",ir=\"" 
              << ir << "\"];\n";
         return sstr.str();
