@@ -264,7 +264,6 @@ static void computeIncrement(BasicBlock *Entry, BasicBlock *Exit,
     for (auto &C : Chords) {
         Inc[C] = Inc[C] + Val[C];
     }
-
 }
 
 void EPPEncode::releaseMemory() {
@@ -436,6 +435,13 @@ void EPPEncode::encode(Function &F) {
             assert(!Ov && "Integer Overflow");
         }
         numPaths.insert({B, pathCount});
+    }
+    
+    auto TInc = test.getIncrements(Entry, Exit);
+    errs() << "Test Increments :\n";
+    for(auto &T : TInc) {
+        errs() << SRC(T.first)->getName() << "->"
+            << TGT(T.first)->getName() << " " << T.second << "\n";
     }
 
     test.print();
