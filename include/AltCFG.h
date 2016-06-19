@@ -58,7 +58,6 @@ class altcfg {
     SmallVector<BasicBlock*, 4> succs(const BasicBlock*);
     void clear() { Edges.clear(),  Weights.clear(), 
         CFG.clear(); SuccCache.clear(); }
-
 };
 
 }

@@ -367,7 +367,7 @@ void EPPEncode::encode(Function &F) {
     }
 
     // Dot Printer for AltCFG
-    /**** Debug **/
+    /**** Debug 
     const char *EdgeTypeStr[] = {"EHEAD", "ELATCH", "ELIN", "ELOUT1", "ELOUT2",
     "EREAL", "EOUT"};
     ofstream DotFile("altcfg.dot", ios::out);
@@ -387,7 +387,7 @@ void EPPEncode::encode(Function &F) {
         }
     }
     DotFile << "}\n";
-    /****/
+    ***/
 
     // Path Counts
 
@@ -438,17 +438,16 @@ void EPPEncode::encode(Function &F) {
     }
     
     auto TInc = test.getIncrements(Entry, Exit);
-    errs() << "Test Increments :\n";
-    for(auto &T : TInc) {
-        errs() << SRC(T.first)->getName() << "->"
-            << TGT(T.first)->getName() << " " << T.second << "\n";
-    }
+    //errs() << "Test Increments :\n";
+    //for(auto &T : TInc) {
+        //errs() << SRC(T.first)->getName() << "->"
+            //<< TGT(T.first)->getName() << " " << T.second << "\n";
+    //}
 
-    test.print();
+    //test.print();
     error_code EC;
     raw_fd_ostream dotf("test.dot", EC, sys::fs::OpenFlags::F_None);
     test.dot(dotf);
-    test.clear();
 
     DEBUG(errs() << "\nEdge Weights :\n");
     for (auto &V : Val)
@@ -484,7 +483,17 @@ void EPPEncode::encode(Function &F) {
     for (auto &I : Inc)
         DEBUG(errs() << I.first->src()->getName() << " -> "
                      << I.first->tgt()->getName() << " " << I.second << "\n");
-
+    
+    // Cross check the computed increments using the old calc.
+    errs() << "Checking computed increments\n";
+    for (auto &I : Inc) {
+        auto *Src = I.first->src(), *Tgt = I.first->tgt();
+        auto Val = I.second;
+        assert(TInc.count({Src,Tgt}) && "Could not find edge");
+        assert(TInc[make_pair(Src,Tgt)] == Val && "Values do not match");
+    }
+    
+    test.clear();
     errs() << "NumPaths : " << numPaths[Entry] << "\n";
 }
 
