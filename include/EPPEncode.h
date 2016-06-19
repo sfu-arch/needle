@@ -15,6 +15,8 @@
 #include <map>
 #include <unordered_map>
 
+#include "AltCFG.h"
+
 namespace epp {
 
 enum EdgeType {
@@ -55,6 +57,7 @@ struct EPPEncode : public llvm::FunctionPass {
     llvm::DenseMap<llvm::BasicBlock *, llvm::APInt> numPaths;
     std::unordered_map<std::shared_ptr<Edge>, llvm::APInt> Val;
     std::unordered_map<std::shared_ptr<Edge>, llvm::APInt> Inc;
+    altepp::altcfg test;
 
     EPPEncode() : llvm::FunctionPass(ID), LI(nullptr) {}
 

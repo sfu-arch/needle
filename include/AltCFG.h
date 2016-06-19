@@ -38,7 +38,6 @@ class altcfg {
     EdgeListTy Edges;
     EdgeWtMapTy Weights;
     CFGTy CFG;
-    FakeTableTy Fakes;
     SuccCacheTy SuccCache;
     EdgeListTy get() const;
     EdgeListTy getSpanningTree(BasicBlock *);
@@ -47,6 +46,8 @@ class altcfg {
     EdgeListTy getChords(EdgeListTy&) const;
     void computeIncrement(EdgeWtMapTy&, BasicBlock*, BasicBlock*, 
             EdgeListTy&, EdgeListTy&);
+  protected:
+    FakeTableTy Fakes;
   public:
     EdgeWtMapTy getIncrements(BasicBlock*, BasicBlock*);
     bool add(BasicBlock* Src, BasicBlock* Tgt, 
@@ -58,6 +59,35 @@ class altcfg {
     SmallVector<BasicBlock*, 4> succs(const BasicBlock*);
     void clear() { Edges.clear(),  Weights.clear(), 
         CFG.clear(); SuccCache.clear(); }
+};
+
+class CFGInstHelper : public altcfg {
+    EdgeWtMapTy Inc;
+  public:
+    CFGInstHelper(altcfg& A, BasicBlock* B, BasicBlock* C) 
+        : altcfg(A), Inc(A.getIncrements(B, C)) { }
+    std::tuple<bool, APInt, bool, APInt> get(Edge E) const {
+            APInt Val1(128, 0, true), Val2(128, 0, true);
+            bool NeedToLog = false, IncExists = false;
+            if(Fakes.count(E)) {
+                Edge E1 = {nullptr, nullptr}, E2 = {nullptr, nullptr};
+                tie(E1, E2) = Fakes.lookup(E); 
+                Val1 = Inc.lookup(E1);
+                Val2 = Inc.lookup(E2);
+                NeedToLog = IncExists = true; 
+            } else {
+                // If we request an edge which is not found 
+                // in the increment map, this line will segfault when it
+                // tries to assign a default constructed APInt (width 1)
+                // to a 128 bit value. Inc is only initialized to Chords
+                // so check before lookup.
+                if(Inc.count(E)) {
+                    Val1 = Inc.lookup(E); 
+                    IncExists = true; 
+                }
+            }   
+            return {IncExists, Val1, NeedToLog, Val2};
+        }
 };
 
 }

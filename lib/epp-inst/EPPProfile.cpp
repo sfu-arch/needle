@@ -16,6 +16,7 @@
 #include "Common.h"
 #include "EPPEncode.h"
 #include "EPPProfile.h"
+#include "AltCFG.h"
 #include <cassert>
 #include <tuple>
 #include <unordered_map>
@@ -71,16 +72,26 @@ bool EPPProfile::runOnModule(Module &module) {
     return true;
 }
 
-static bool isFunctionExiting(BasicBlock *BB) {
-    if (dyn_cast<ReturnInst>(BB->getTerminator()))
-        return true;
-    return false;
+//static bool isFunctionExiting(BasicBlock *BB) {
+        //return true;
+    //return false;
+//}
+
+static SmallVector<BasicBlock*, 1>
+getFunctionExitBlocks(Function &F) {
+    SmallVector<BasicBlock*, 1> R;
+    for(auto &BB : F) {
+        if (dyn_cast<ReturnInst>(BB.getTerminator())) {
+            R.push_back(&BB);
+        }
+    }
+    return R;
 }
 
 void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     Module *M = F.getParent();
     auto &Ctx = M->getContext();
-    auto *int64Ty = Type::getInt64Ty(Ctx);
+    //auto *int64Ty = Type::getInt64Ty(Ctx);
     auto *voidTy = Type::getVoidTy(Ctx);
 
     auto *CtrTy = Type::getInt128Ty(Ctx);
@@ -94,7 +105,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         ConstantInt::getIntegerValue(CtrTy, APInt(128, 0, true)), Ctr);
     SI->insertAfter(Ctr);
 
-    auto InsertInc = [&int64Ty, &Ctr, &CtrTy](Instruction *addPos,
+    auto InsertInc = [&Ctr, &CtrTy](Instruction *addPos,
                                               APInt Increment) {
         if (Increment.ne(APInt(128, 0, true))) {
             DEBUG(errs() << "Inserting Increment " << Increment << " "
@@ -114,8 +125,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         auto *CI = CallInst::Create(logFun2, {LI}, "");
         CI->insertAfter(LI);
         (new StoreInst(ConstantInt::getIntegerValue(CtrTy, APInt(128, 0, true)),
-                       Ctr))
-            ->insertAfter(CI);
+                       Ctr))->insertAfter(CI);
     };
 
     auto blockIndex = [](const PHINode *Phi, const BasicBlock *BB) -> uint32_t {
@@ -155,6 +165,49 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         return BB;
     };
 
+    auto ExitBlocks = getFunctionExitBlocks(F);
+    auto *Entry = &F.getEntryBlock(), *Exit = *ExitBlocks.begin(); 
+
+    altepp::CFGInstHelper Inst(Enc.test, Entry, Exit);
+
+    APInt BackVal = APInt(128, 0, true);
+
+#define _ std::ignore
+    tie(_, BackVal, _, _) = Inst.get({Exit, Entry});
+#undef _
+
+    // For each edge in the function, get the increments 
+    // for the edge and stick them in there.
+    for(auto &BB : F) {
+        for(auto SB = succ_begin(&BB), SE = succ_end(&BB); 
+                SB != SE; SB++) {
+
+            altepp::Edge E({&BB, *SB});                         
+
+            APInt Val1(128, 0, true), Val2(128, 0, true);
+            bool Log = false, IncExists = false;
+            tie(IncExists, Val1, Log, Val2 ) = Inst.get(E);
+
+            if(IncExists) {
+                auto *Split = interpose(SRC(E), TGT(E));
+                if(Log) {
+                    InsertInc(&*Split->getFirstInsertionPt(), Val1 + BackVal);
+                    InsertLogPath(Split);
+                    InsertInc(Split->getTerminator(), Val2);
+                } else {
+                    InsertInc(&*Split->getFirstInsertionPt(), Val1);
+                }
+            }
+        }
+    }    
+
+    // Add the logpath function for all function exiting
+    // basic blocks.
+    for(auto &EB : ExitBlocks) {
+        InsertLogPath(EB);
+    }
+
+#if 0
     // Maps for all the *special* inc values for loops
     unordered_map<Loop *, pair<APInt, APInt>> LatchMap;
     unordered_map<Loop *, pair<BasicBlock *, APInt>> InMap;
@@ -291,11 +344,11 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         InsertInc(N->getTerminator(), B);
     }
 
-    // Add the logpath function for all function exiting
-    // basic blocks.
-    for (auto &BB : F)
-        if (isFunctionExiting(&BB))
-            InsertLogPath(&BB);
+#endif
+
+    //for (auto &BB : F)
+        //if (isFunctionExiting(&BB))
+            //InsertLogPath(&BB);
 }
 
 char EPPProfile::ID = 0;

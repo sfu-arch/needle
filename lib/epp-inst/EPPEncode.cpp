@@ -15,7 +15,6 @@
 #include "llvm/Support/FileSystem.h"
 
 #include "EPPEncode.h"
-#include "AltCFG.h"
 
 #include <algorithm>
 #include <cassert>
@@ -29,7 +28,6 @@ using namespace llvm;
 using namespace epp;
 using namespace std;
 
-altepp::altcfg test;
 
 typedef pair<BasicBlock *, EdgeType> AltTgtTy;
 typedef SetVector<AltTgtTy, vector<AltTgtTy>,
@@ -271,6 +269,7 @@ void EPPEncode::releaseMemory() {
     numPaths.clear();
     Val.clear();
     Inc.clear();
+    test.clear();
     // selfLoopCounter = 0;
 }
 
@@ -493,7 +492,6 @@ void EPPEncode::encode(Function &F) {
         assert(TInc[make_pair(Src,Tgt)] == Val && "Values do not match");
     }
     
-    test.clear();
     errs() << "NumPaths : " << numPaths[Entry] << "\n";
 }
 
