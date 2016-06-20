@@ -435,7 +435,7 @@ void EPPEncode::encode(Function &F) {
         numPaths.insert({B, pathCount});
     }
     
-    auto TInc = test.getIncrements(Entry, Exit);
+    //auto TInc = test.getIncrements(Entry, Exit);
     //errs() << "Test Increments :\n";
     //for(auto &T : TInc) {
         //errs() << SRC(T.first)->getName() << "->"

@@ -146,7 +146,7 @@ altcfg::add(BasicBlock* Src, BasicBlock* Tgt,
     // two basic blocks. 
     if(CFG.count(Src) &&
             CFG[Src].count(Tgt)) {
-        (errs() << "Edge " << Src->getName() << "->" << 
+        DEBUG(errs() << "Edge " << Src->getName() << "->" << 
                 Tgt->getName() << " already exists in CFG\n");
         return false; 
     }
