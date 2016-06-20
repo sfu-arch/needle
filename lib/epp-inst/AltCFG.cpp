@@ -110,7 +110,7 @@ altcfg::getSpanningTree(BasicBlock* Entry) {
     EdgeListTy SpanningTree;
     DenseSet<BasicBlock *> Seen;
     spanningHelper(Entry, SpanningTree, Seen);
-    assert(SpanningTree.size() == CFG.size() 
+    assert(Seen.size() == CFG.size() 
             && "SpanningTree missing some nodes!");
     return SpanningTree; 
 }
@@ -138,7 +138,8 @@ bool
 altcfg::add(BasicBlock* Src, BasicBlock* Tgt, 
         BasicBlock* Entry , BasicBlock* Exit ) {
 
-    assert(!((uint64_t)Entry ^ (uint64_t)Exit) && 
+    assert(( (Entry == nullptr && Exit == nullptr) 
+                || (Entry != nullptr && Exit != nullptr) ) &&
             "Both Entry and Exit must be defined or neither");
 
     // Enforces the constraint that only one edge can exist between 
@@ -150,10 +151,15 @@ altcfg::add(BasicBlock* Src, BasicBlock* Tgt,
         return false; 
     }
 
-    auto insertCFG = [this](BasicBlock* Src, BasicBlock* Tgt) {
+    auto initSuccList = [this](BasicBlock *Src) {
         if(CFG.count(Src) == 0) {
             CFG.insert({Src, SuccListTy()});
         }
+    };
+
+    auto insertCFG = [this, &initSuccList](BasicBlock* Src, BasicBlock* Tgt) {
+        initSuccList(Src);
+        initSuccList(Tgt);
         CFG[Src].insert(Tgt);
         initWt({Src, Tgt});
     };

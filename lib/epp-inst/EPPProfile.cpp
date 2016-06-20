@@ -27,11 +27,11 @@ using namespace std;
 
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
-                             const cl::list<std::string> &FunctionList);
+        const cl::list<std::string> &FunctionList);
 
 bool EPPProfile::doInitialization(Module &m) {
     assert(FunctionList.size() == 1 &&
-           "Only one function can be marked for profiling");
+            "Only one function can be marked for profiling");
     return false;
 }
 
@@ -59,7 +59,7 @@ bool EPPProfile::runOnModule(Module &module) {
             LI = &getAnalysis<LoopInfoWrapperPass>(func).getLoopInfo();
             auto &enc = getAnalysis<EPPEncode>(func);
             assert(!hasRecursiveCall(func) &&
-                   "Pathprofiling is not implemented for recursive functions");
+                    "Pathprofiling is not implemented for recursive functions");
             instrument(func, enc);
         }
     }
@@ -73,8 +73,8 @@ bool EPPProfile::runOnModule(Module &module) {
 }
 
 //static bool isFunctionExiting(BasicBlock *BB) {
-        //return true;
-    //return false;
+//return true;
+//return false;
 //}
 
 static SmallVector<BasicBlock*, 1>
@@ -91,29 +91,28 @@ getFunctionExitBlocks(Function &F) {
 void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     Module *M = F.getParent();
     auto &Ctx = M->getContext();
-    //auto *int64Ty = Type::getInt64Ty(Ctx);
     auto *voidTy = Type::getVoidTy(Ctx);
 
     auto *CtrTy = Type::getInt128Ty(Ctx);
     auto *logFun2 = M->getOrInsertFunction("PaThPrOfIlInG_logPath2", voidTy,
-                                           CtrTy, nullptr);
+            CtrTy, nullptr);
 
     auto *Ctr = new AllocaInst(CtrTy, nullptr, "epp.ctr",
-                               &*F.getEntryBlock().getFirstInsertionPt());
+            &*F.getEntryBlock().getFirstInsertionPt());
 
     auto *SI = new StoreInst(
-        ConstantInt::getIntegerValue(CtrTy, APInt(128, 0, true)), Ctr);
+            ConstantInt::getIntegerValue(CtrTy, APInt(128, 0, true)), Ctr);
     SI->insertAfter(Ctr);
 
     auto InsertInc = [&Ctr, &CtrTy](Instruction *addPos,
-                                              APInt Increment) {
+            APInt Increment) {
         if (Increment.ne(APInt(128, 0, true))) {
             DEBUG(errs() << "Inserting Increment " << Increment << " "
                          << addPos->getParent()->getName() << "\n");
             // Context Counter
             auto *LI = new LoadInst(Ctr, "ld.epp.ctr", addPos);
             auto *BI = BinaryOperator::CreateAdd(
-                LI, ConstantInt::getIntegerValue(CtrTy, Increment));
+                    LI, ConstantInt::getIntegerValue(CtrTy, Increment));
             BI->insertAfter(LI);
             (new StoreInst(BI, Ctr))->insertAfter(BI);
         }
@@ -137,7 +136,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     };
 
     auto patchPhis = [&blockIndex](BasicBlock *Src, BasicBlock *Tgt,
-                                   BasicBlock *New) {
+            BasicBlock *New) {
         for (auto &I : *Tgt) {
             if (auto *Phi = dyn_cast<PHINode>(&I)) {
                 Phi->setIncomingBlock(blockIndex(Phi, Src), New);
@@ -146,9 +145,9 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     };
 
     auto interpose = [&Ctx, &patchPhis](BasicBlock *Src,
-                                        BasicBlock *Tgt) -> BasicBlock * {
+            BasicBlock *Tgt) -> BasicBlock * {
         DEBUG(errs() << "Split : " << Src->getName() << " " << Tgt->getName()
-                     << "\n");
+                << "\n");
         // Sanity Checks
         auto found = false;
         for (auto S = succ_begin(Src), E = succ_end(Src); S != E; S++)
@@ -171,35 +170,41 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     altepp::CFGInstHelper Inst(Enc.test, Entry, Exit);
 
     APInt BackVal = APInt(128, 0, true);
-
-#define _ std::ignore
-    tie(_, BackVal, _, _) = Inst.get({Exit, Entry});
+#define _ std::ignore 
+    tie(_, BackVal, _, _)= Inst.get({Exit, Entry});
 #undef _
 
+    DEBUG(errs() << "BackVal : " <<  BackVal.toString(10, true) << "\n");
+
+    SmallVector<altepp::Edge, 32> FunctionEdges;
     // For each edge in the function, get the increments 
     // for the edge and stick them in there.
     for(auto &BB : F) {
         for(auto SB = succ_begin(&BB), SE = succ_end(&BB); 
                 SB != SE; SB++) {
-
-            altepp::Edge E({&BB, *SB});                         
-
-            APInt Val1(128, 0, true), Val2(128, 0, true);
-            bool Log = false, IncExists = false;
-            tie(IncExists, Val1, Log, Val2 ) = Inst.get(E);
-
-            if(IncExists) {
-                auto *Split = interpose(SRC(E), TGT(E));
-                if(Log) {
-                    InsertInc(&*Split->getFirstInsertionPt(), Val1 + BackVal);
-                    InsertLogPath(Split);
-                    InsertInc(Split->getTerminator(), Val2);
-                } else {
-                    InsertInc(&*Split->getFirstInsertionPt(), Val1);
-                }
-            }
+            FunctionEdges.push_back({&BB, *SB});                         
         }
     }    
+
+    for(auto &E : FunctionEdges) {
+        APInt Val1(128, 0, true), Val2(128, 0, true);
+        bool Exists = false, Log = false;
+        tie(Exists, Val1, Log, Val2) = Inst.get(E);
+
+        if(Exists) {
+            auto *Split = interpose(SRC(E), TGT(E));
+            if(Log) {
+                DEBUG(errs() << "Val1 : " << Val1.toString(10, true) << "\n");
+                DEBUG(errs() << "Val2 : " << Val2.toString(10, true) << "\n");
+                InsertInc(&*Split->getFirstInsertionPt(), Val1 + BackVal);
+                InsertLogPath(Split);
+                InsertInc(Split->getTerminator(), Val2);
+            } else {
+                DEBUG(errs() << "Val1 : " << Val1.toString(10, true) << "\n");
+                InsertInc(&*Split->getFirstInsertionPt(), Val1);
+            }
+        }
+    }
 
     // Add the logpath function for all function exiting
     // basic blocks.
@@ -231,12 +236,12 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         L->getExitEdges(ExitEdges);
         for (auto &E : ExitEdges) {
             DEBUG(errs() << E.first->getName() << " -- " << E.second->getName()
-                         << "\n");
+                    << "\n");
             auto *Src = const_cast<BasicBlock *>(E.first);
             auto *Tgt = const_cast<BasicBlock *>(E.second);
             OutMap.insert(
-                make_pair(make_pair(Src, Tgt),
-                          make_pair(APInt(128, 0, true), APInt(128, 0, true))));
+                    make_pair(make_pair(Src, Tgt),
+                        make_pair(APInt(128, 0, true), APInt(128, 0, true))));
         }
     }
 
@@ -264,7 +269,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         } else if (E->Type == ELIN) {
             auto *T = E->src()->getTerminator();
             assert(T->getNumSuccessors() == 1 &&
-                   "Should be 1 guaranteed by LoopSimplify");
+                    "Should be 1 guaranteed by LoopSimplify");
             auto *L = LI->getLoopFor(T->getSuccessor(0));
             assert(L && "Loop not found for ELIN");
             InMap[L].second = X;
@@ -327,7 +332,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         auto *PreHeader = V.first;
         auto *Header = L->getHeader();
         assert(Header == PreHeader->getTerminator()->getSuccessor(0) &&
-               "Should be guaranteed by Loop Simplify");
+                "Should be guaranteed by Loop Simplify");
         auto *NPH = interpose(PreHeader, Header);
         InsertInc(NPH->getFirstNonPHI(), V.second + BackVal);
         InsertLogPath(NPH);
@@ -347,8 +352,8 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
 #endif
 
     //for (auto &BB : F)
-        //if (isFunctionExiting(&BB))
-            //InsertLogPath(&BB);
+    //if (isFunctionExiting(&BB))
+    //InsertLogPath(&BB);
 }
 
 char EPPProfile::ID = 0;

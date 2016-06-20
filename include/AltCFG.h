@@ -61,32 +61,30 @@ class altcfg {
         CFG.clear(); SuccCache.clear(); }
 };
 
+
+typedef std::tuple<bool, APInt, bool, APInt> InstValTy;
+
 class CFGInstHelper : public altcfg {
     EdgeWtMapTy Inc;
   public:
     CFGInstHelper(altcfg& A, BasicBlock* B, BasicBlock* C) 
         : altcfg(A), Inc(A.getIncrements(B, C)) { }
-    std::tuple<bool, APInt, bool, APInt> get(Edge E) const {
-            APInt Val1(128, 0, true), Val2(128, 0, true);
-            bool NeedToLog = false, IncExists = false;
+
+    InstValTy get(Edge E) const {
+
+            auto getInc = [this](const Edge E) -> APInt {
+                if(Inc.count(E)) 
+                    return Inc.lookup(E);
+                return APInt(128, 0, true);
+            };
+
             if(Fakes.count(E)) {
-                Edge E1 = {nullptr, nullptr}, E2 = {nullptr, nullptr};
-                tie(E1, E2) = Fakes.lookup(E); 
-                Val1 = Inc.lookup(E1);
-                Val2 = Inc.lookup(E2);
-                NeedToLog = IncExists = true; 
-            } else {
-                // If we request an edge which is not found 
-                // in the increment map, this line will segfault when it
-                // tries to assign a default constructed APInt (width 1)
-                // to a 128 bit value. Inc is only initialized to Chords
-                // so check before lookup.
-                if(Inc.count(E)) {
-                    Val1 = Inc.lookup(E); 
-                    IncExists = true; 
-                }
-            }   
-            return {IncExists, Val1, NeedToLog, Val2};
+                auto F = Fakes.lookup(E); 
+                return {true, getInc(F.first), 
+                        true, getInc(F.second)};
+            }
+            return {true, getInc(E), 
+                    false, APInt(128, 0, true)};
         }
 };
 
