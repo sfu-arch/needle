@@ -414,6 +414,7 @@ void EPPEncode::encode(Function &F) {
     }
 
     // Debug
+    errs() << "NumPaths : " << numPaths[Entry] << "\n";
     numPaths.clear();
 
     for(auto &B : POB) {
