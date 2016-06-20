@@ -26,7 +26,7 @@ namespace altepp {
     (E.second)
 
 typedef pair<BasicBlock*, BasicBlock*> Edge;
-typedef SmallVector<Edge, 32> EdgeListTy; 
+typedef SetVector<Edge> EdgeListTy; 
 typedef SetVector<BasicBlock*, vector<BasicBlock*>,
                   DenseSet<BasicBlock*>> SuccListTy;
 typedef MapVector<const BasicBlock *, SuccListTy> CFGTy;

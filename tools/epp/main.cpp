@@ -195,6 +195,7 @@ int main(int argc, char **argv, const char **env) {
     }
 
     common::optimizeModule(module.get());
+    // These now happen inside the Simplify Pass
     // common::lowerSwitch(*module, FunctionList[0]);
     // common::breakCritEdges(*module, FunctionList[0]);
 

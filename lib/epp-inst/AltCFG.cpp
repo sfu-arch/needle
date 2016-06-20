@@ -55,7 +55,7 @@ altcfg::computeIncrement(EdgeWtMapTy& Inc,
         BasicBlock* Entry, BasicBlock* Exit,
         EdgeListTy& Chords, EdgeListTy& ST) {
         
-    Chords.push_back({Exit,Entry});
+    Chords.insert({Exit,Entry});
     for (auto &C : Chords)
         Inc.insert({C,APInt(128, 0, true)});
 
@@ -78,7 +78,7 @@ altcfg::getChords(EdgeListTy& ST) const {
     EdgeListTy Chords;
     for(auto &E : get()) {
         if(SpanningEdges.count(E) == 0) {
-            Chords.push_back(E);
+            Chords.insert(E);
         }
     }
     return Chords;
@@ -99,7 +99,7 @@ altcfg::spanningHelper(BasicBlock* ToVisit,
     Seen.insert(ToVisit);
     for (auto S : succs(ToVisit)) {
         if (!Seen.count(S)) {
-            ST.push_back({ToVisit, S});
+            ST.insert({ToVisit, S});
             spanningHelper(S, ST, Seen);
         }
     }
@@ -125,10 +125,10 @@ altcfg::get() const {
     EdgeListTy Ret;
     for(auto &E : Edges) {
         if(Fakes.count(E)) {
-            Ret.push_back(Fakes.lookup(E).first);
-            Ret.push_back(Fakes.lookup(E).second);
+            Ret.insert(Fakes.lookup(E).first);
+            Ret.insert(Fakes.lookup(E).second);
         } else {
-            Ret.push_back(E);
+            Ret.insert(E);
         }
     } 
     return Ret;
@@ -146,7 +146,7 @@ altcfg::add(BasicBlock* Src, BasicBlock* Tgt,
     // two basic blocks. 
     if(CFG.count(Src) &&
             CFG[Src].count(Tgt)) {
-        DEBUG(errs() << "Edge " << Src->getName() << "->" << 
+        (errs() << "Edge " << Src->getName() << "->" << 
                 Tgt->getName() << " already exists in CFG\n");
         return false; 
     }
@@ -166,7 +166,7 @@ altcfg::add(BasicBlock* Src, BasicBlock* Tgt,
 
     insertCFG(Src, Tgt);
     SuccCache.erase(Src);
-    Edges.push_back({Src, Tgt});
+    Edges.insert({Src, Tgt});
 
     // This is an edge which needs to segmented
     if( Entry && Exit ) {
