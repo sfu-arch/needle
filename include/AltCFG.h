@@ -80,11 +80,11 @@ class CFGInstHelper : public altcfg {
 
             if(Fakes.count(E)) {
                 auto F = Fakes.lookup(E); 
-                return {true, getInc(F.first), 
-                        true, getInc(F.second)};
+                return make_tuple(true, getInc(F.first), 
+                        true, getInc(F.second));
             }
-            return {true, getInc(E), 
-                    false, APInt(128, 0, true)};
+            return make_tuple(true, getInc(E), 
+                    false, APInt(128, 0, true));
         }
 };
 
