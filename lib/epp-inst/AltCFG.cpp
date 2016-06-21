@@ -142,15 +142,6 @@ altcfg::add(BasicBlock* Src, BasicBlock* Tgt,
                 || (Entry != nullptr && Exit != nullptr) ) &&
             "Both Entry and Exit must be defined or neither");
 
-    // Enforces the constraint that only one edge can exist between 
-    // two basic blocks. 
-    if(CFG.count(Src) &&
-            CFG[Src].count(Tgt)) {
-        DEBUG(errs() << "Edge " << Src->getName() << "->" << 
-                Tgt->getName() << " already exists in CFG\n");
-        return false; 
-    }
-
     auto initSuccList = [this](BasicBlock *Src) {
         if(CFG.count(Src) == 0) {
             CFG.insert({Src, SuccListTy()});
@@ -162,6 +153,7 @@ altcfg::add(BasicBlock* Src, BasicBlock* Tgt,
         initSuccList(Tgt);
         CFG[Src].insert(Tgt);
         initWt({Src, Tgt});
+        errs() << "Added to CFG : " << Src->getName() << " " << Tgt->getName() << "\n";
     };
 
     insertCFG(Src, Tgt);
@@ -170,6 +162,7 @@ altcfg::add(BasicBlock* Src, BasicBlock* Tgt,
 
     // This is an edge which needs to segmented
     if( Entry && Exit ) {
+        errs() << "Adding Fakes\n";
         Fakes[{Src, Tgt}] = {{Src, Exit}, {Entry, Tgt}};
         insertCFG(Src, Exit);
         insertCFG(Entry, Tgt);
