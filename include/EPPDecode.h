@@ -17,9 +17,9 @@ struct EPPDecode : public llvm::ModulePass {
     static char ID;
     llvm::StringRef filename;
     size_t numberToReturn;
-    // llvm::DenseMap<std::uint64_t, std::uint64_t> SelfProfileMap;
 
     std::map<llvm::BasicBlock *, std::vector<std::shared_ptr<Edge>>> ValBySrc;
+    std::map<llvm::BasicBlock *, std::vector<altepp::Edge>> AltValBySrc;
 
     EPPDecode() : llvm::ModulePass(ID) {}
 

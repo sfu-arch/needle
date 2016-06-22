@@ -68,8 +68,8 @@ struct EPPEncode : public llvm::FunctionPass {
 
     virtual bool runOnFunction(llvm::Function &f) override;
     void encode(llvm::Function &f);
-    bool isTargetFunction(llvm::Function &f,
-                          llvm::cl::list<std::string> &FunctionList) const;
+    //bool isTargetFunction(llvm::Function &f,
+                          //llvm::cl::list<std::string> &FunctionList) const;
     bool doInitialization(llvm::Module &m) override;
     bool doFinalization(llvm::Module &m) override;
     virtual void releaseMemory() override;

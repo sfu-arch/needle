@@ -35,10 +35,12 @@ typedef DenseMap<const BasicBlock*, SmallVector<BasicBlock*, 4>> SuccCacheTy;
 typedef MapVector<Edge, APInt> EdgeWtMapTy;
 
 class altcfg {
+
     EdgeListTy Edges;
     EdgeWtMapTy Weights;
     CFGTy CFG;
     SuccCacheTy SuccCache;
+
     EdgeListTy get() const;
     EdgeListTy getSpanningTree(BasicBlock *);
     void spanningHelper(BasicBlock*, EdgeListTy&, 
@@ -46,19 +48,22 @@ class altcfg {
     EdgeListTy getChords(EdgeListTy&) const;
     void computeIncrement(EdgeWtMapTy&, BasicBlock*, BasicBlock*, 
             EdgeListTy&, EdgeListTy&);
+    void initWt(const Edge, const APInt);
+
   protected:
     FakeTableTy Fakes;
-  public:
     EdgeWtMapTy getIncrements(BasicBlock*, BasicBlock*);
+
+  public:
     bool add(BasicBlock* Src, BasicBlock* Tgt, 
                 BasicBlock* Entry = nullptr, BasicBlock* Exit = nullptr);
     APInt& operator[](const Edge&);
-    void initWt(const Edge, const APInt);
     void print(raw_ostream & os = errs()) const;
     void dot(raw_ostream& os = errs()) const;
     SmallVector<BasicBlock*, 4> succs(const BasicBlock*);
     void clear() { Edges.clear(),  Weights.clear(), 
         CFG.clear(); SuccCache.clear(); }
+    bool isFake(Edge E) const { return (bool) Fakes.count(E); }
 };
 
 
@@ -68,7 +73,7 @@ class CFGInstHelper : public altcfg {
     EdgeWtMapTy Inc;
   public:
     CFGInstHelper(altcfg& A, BasicBlock* B, BasicBlock* C) 
-        : altcfg(A), Inc(A.getIncrements(B, C)) { }
+        : altcfg(A) { Inc = getIncrements(B, C); }
 
     InstValTy get(Edge E) const {
 
