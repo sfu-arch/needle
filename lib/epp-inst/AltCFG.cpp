@@ -153,7 +153,7 @@ altcfg::add(BasicBlock* Src, BasicBlock* Tgt,
         initSuccList(Tgt);
         CFG[Src].insert(Tgt);
         initWt({Src, Tgt});
-        errs() << "Added to CFG : " << Src->getName() << " " << Tgt->getName() << "\n";
+        DEBUG(errs() << "Added to CFG : " << Src->getName() << " " << Tgt->getName() << "\n");
     };
 
     insertCFG(Src, Tgt);
@@ -162,7 +162,7 @@ altcfg::add(BasicBlock* Src, BasicBlock* Tgt,
 
     // This is an edge which needs to segmented
     if( Entry && Exit ) {
-        errs() << "Adding Fakes\n";
+        DEBUG(errs() << "Adding Fakes\n");
         Fakes[{Src, Tgt}] = {{Src, Exit}, {Entry, Tgt}};
         insertCFG(Src, Exit);
         insertCFG(Entry, Tgt);

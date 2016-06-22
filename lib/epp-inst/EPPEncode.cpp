@@ -298,13 +298,13 @@ void EPPEncode::encode(Function &F) {
         for (auto S = succ_begin(BB), E = succ_end(BB); S != E; S++) {
             if (BackEdges.count(make_pair(BB, *S)) ||
                 LI->getLoopFor(BB) != LI->getLoopFor(*S)) {
-                errs() << "Adding segmented edge : " << BB->getName() << " "
-                    << S->getName() << " " << Entry->getName() << " " << Exit->getName() << "\n";
+                DEBUG(errs() << "Adding segmented edge : " << BB->getName() << " "
+                    << S->getName() << " " << Entry->getName() << " " << Exit->getName() << "\n");
                 test.add(BB, *S, Entry, Exit);
                 continue;
             }
             AltCFG[BB].insert(make_pair(*S, EREAL));
-            errs() << "Adding Real edge : " << BB->getName() << " " << S->getName() << "\n";
+            DEBUG(errs() << "Adding Real edge : " << BB->getName() << " " << S->getName() << "\n");
             test.add(BB, *S);
         }
     }

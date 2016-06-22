@@ -61,7 +61,7 @@ static uint64_t pathCheck(vector<BasicBlock *> &Blocks) {
                 } else {
                     if (CS.getCalledFunction()->isDeclaration() &&
                         common::checkIntrinsic(CS)) {
-                        DEBUG(errs() << "Lib Call: "
+                        (errs() << "Lib Call: "
                                      << CS.getCalledFunction()->getName()
                                      << "\n");
                         return 0;
@@ -191,7 +191,7 @@ bool EPPDecode::runOnModule(Module &M) {
         DEBUG(errs() << "\n");
     }
 
-    DEBUG(errs() << "Path Check Fails : " << pathFail << "\n");
+    (errs() << "Path Check Fails : " << pathFail << "\n");
 
     return false;
 }
