@@ -12,6 +12,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Support/FileSystem.h"
 
 #include "EPPEncode.h"
 
@@ -27,10 +28,10 @@ using namespace llvm;
 using namespace epp;
 using namespace std;
 
+
 typedef pair<BasicBlock *, EdgeType> AltTgtTy;
 typedef SetVector<AltTgtTy, vector<AltTgtTy>,
-                  DenseSet<AltTgtTy, BlockEdgeTyKeyInfo>>
-    SuccListTy;
+                  DenseSet<AltTgtTy, BlockEdgeTyKeyInfo>> SuccListTy;
 typedef MapVector<BasicBlock *, SuccListTy> AltCFGTy;
 
 bool EPPEncode::doInitialization(Module &m) { return false; }
@@ -268,6 +269,7 @@ void EPPEncode::releaseMemory() {
     numPaths.clear();
     Val.clear();
     Inc.clear();
+    test.clear();
     // selfLoopCounter = 0;
 }
 
@@ -296,11 +298,17 @@ void EPPEncode::encode(Function &F) {
         for (auto S = succ_begin(BB), E = succ_end(BB); S != E; S++) {
             if (BackEdges.count(make_pair(BB, *S)) ||
                 LI->getLoopFor(BB) != LI->getLoopFor(*S)) {
+                errs() << "Adding segmented edge : " << BB->getName() << " "
+                    << S->getName() << " " << Entry->getName() << " " << Exit->getName() << "\n";
+                test.add(BB, *S, Entry, Exit);
                 continue;
             }
             AltCFG[BB].insert(make_pair(*S, EREAL));
+            errs() << "Adding Real edge : " << BB->getName() << " " << S->getName() << "\n";
+            test.add(BB, *S);
         }
     }
+
 
     auto Loops = common::getLoops(LI);
 
@@ -361,7 +369,6 @@ void EPPEncode::encode(Function &F) {
     }
 
     // Dot Printer for AltCFG
-    /**** Debug
     const char *EdgeTypeStr[] = {"EHEAD", "ELATCH", "ELIN", "ELOUT1", "ELOUT2",
     "EREAL", "EOUT"};
     ofstream DotFile("altcfg.dot", ios::out);
@@ -381,7 +388,7 @@ void EPPEncode::encode(Function &F) {
         }
     }
     DotFile << "}\n";
-    ****/
+    DotFile.close();
 
     // Path Counts
 
@@ -408,6 +415,35 @@ void EPPEncode::encode(Function &F) {
         }
         numPaths.insert(make_pair(BB, pathCount));
     }
+
+    // Debug
+    errs() << "NumPaths : " << numPaths[Entry] << "\n";
+    numPaths.clear();
+
+    for(auto &B : POB) {
+        APInt pathCount(128, 0, true);
+
+        if (isFunctionExiting(B)) 
+            pathCount = 1;
+
+        for(auto &S : test.succs(B)) {
+            test[{B,S}] = pathCount;
+            if (numPaths.count(S) == 0)
+                numPaths.insert(make_pair(S, APInt(128, 0, true)));
+             
+            // This is the only place we need to check for overflow.
+            bool Ov = false;
+            pathCount = pathCount.sadd_ov(numPaths[S], Ov);
+            assert(!Ov && "Integer Overflow");
+        }
+        numPaths.insert({B, pathCount});
+    }
+    
+    //test.print();
+    error_code EC;
+    raw_fd_ostream dotf("test.dot", EC, sys::fs::OpenFlags::F_None);
+    test.dot(dotf);
+    dotf.close();
 
     DEBUG(errs() << "\nEdge Weights :\n");
     for (auto &V : Val)
@@ -443,7 +479,8 @@ void EPPEncode::encode(Function &F) {
     for (auto &I : Inc)
         DEBUG(errs() << I.first->src()->getName() << " -> "
                      << I.first->tgt()->getName() << " " << I.second << "\n");
-
+    
+    
     errs() << "NumPaths : " << numPaths[Entry] << "\n";
 }
 

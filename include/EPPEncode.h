@@ -4,6 +4,7 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Module.h"
@@ -12,8 +13,9 @@
 #include "llvm/Transforms/Utils/UnifyFunctionExitNodes.h"
 
 #include <map>
-#include <queue>
 #include <unordered_map>
+
+#include "AltCFG.h"
 
 namespace epp {
 
@@ -29,8 +31,9 @@ enum EdgeType {
 
 struct Edge {
     llvm::BasicBlock *Src, *Tgt;
+    std::shared_ptr<Edge> Fakes[2]; 
     EdgeType Type;
-    uint64_t Id;
+    //uint64_t Id;
     Edge(llvm::BasicBlock *S, llvm::BasicBlock *T, EdgeType ET)
         : Src(S), Tgt(T), Type(ET) {}
     llvm::BasicBlock *src() { return Src; }
@@ -54,6 +57,7 @@ struct EPPEncode : public llvm::FunctionPass {
     llvm::DenseMap<llvm::BasicBlock *, llvm::APInt> numPaths;
     std::unordered_map<std::shared_ptr<Edge>, llvm::APInt> Val;
     std::unordered_map<std::shared_ptr<Edge>, llvm::APInt> Inc;
+    altepp::altcfg test;
 
     EPPEncode() : llvm::FunctionPass(ID), LI(nullptr) {}
 
@@ -64,8 +68,8 @@ struct EPPEncode : public llvm::FunctionPass {
 
     virtual bool runOnFunction(llvm::Function &f) override;
     void encode(llvm::Function &f);
-    bool isTargetFunction(llvm::Function &f,
-                          llvm::cl::list<std::string> &FunctionList) const;
+    //bool isTargetFunction(llvm::Function &f,
+                          //llvm::cl::list<std::string> &FunctionList) const;
     bool doInitialization(llvm::Module &m) override;
     bool doFinalization(llvm::Module &m) override;
     virtual void releaseMemory() override;
@@ -88,5 +92,7 @@ struct BlockEdgeTyKeyInfo {
         return LHS.first == RHS.first && LHS.second == RHS.second;
     }
 };
+
+
 }
 #endif
