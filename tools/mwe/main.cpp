@@ -174,7 +174,7 @@ int main(int argc, char **argv, const char **env) {
     }
     // StripDebugInfo(*Composite);
 
-    // common::writeModule(Composite.get(), "full.ll" );
+    common::writeModule(Composite.get(), "full.ll" );
 
     common::generateBinary(*Composite, outFile, optLevel, libPaths, libraries);
 
