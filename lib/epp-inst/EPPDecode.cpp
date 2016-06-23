@@ -61,6 +61,7 @@ static uint64_t pathCheck(vector<BasicBlock *> &Blocks) {
                 } else {
                     if (CS.getCalledFunction()->isDeclaration() &&
                         common::checkIntrinsic(CS)) {
+                        errs() << "In BasicBlock : " << BB->getName() << "\n";
                         (errs() << "Lib Call: "
                                      << CS.getCalledFunction()->getName()
                                      << "\n");
@@ -295,6 +296,12 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
     if(ACFG.isFake(SelectedEdges.back()))
         SET_BIT(Type, 1);
 #undef SET_BIT
+
+    errs() << "Type " << static_cast<PathType>(Type) << "\n";
+    for(auto BB : Sequence) {
+        errs() << BB->getName()<< " ";
+    }
+    errs() << "\n";
 
     return make_pair(static_cast<PathType>(Type), Sequence);
 }
