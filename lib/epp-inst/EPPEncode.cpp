@@ -122,12 +122,15 @@ static const vector<BasicBlock *> functionPostorderTraversal(Function &F,
     return PostOrderBlocks;
 }
 
+
 static bool isFunctionExiting(BasicBlock *BB) {
     if (BB->getTerminator()->getNumSuccessors() == 0)
         return true;
 
     return false;
 }
+
+#if 0
 
 static shared_ptr<Edge>
 findEdgeInVal(const BasicBlock *Src, const BasicBlock *Tgt, const EdgeType Ty,
@@ -263,7 +266,7 @@ static void computeIncrement(BasicBlock *Entry, BasicBlock *Exit,
         Inc[C] = Inc[C] + Val[C];
     }
 }
-
+#endif
 void EPPEncode::releaseMemory() {
     LI = nullptr;
     numPaths.clear();
@@ -309,7 +312,7 @@ void EPPEncode::encode(Function &F) {
         }
     }
 
-
+#if 0
     auto Loops = common::getLoops(LI);
 
     // Add all fake edges for loops
@@ -420,6 +423,8 @@ void EPPEncode::encode(Function &F) {
     errs() << "NumPaths : " << numPaths[Entry] << "\n";
     numPaths.clear();
 
+#endif
+
     for(auto &B : POB) {
         APInt pathCount(128, 0, true);
 
@@ -439,14 +444,7 @@ void EPPEncode::encode(Function &F) {
         numPaths.insert({B, pathCount});
     }
     
-    //test.print();
-    error_code EC;
-    raw_fd_ostream dotf("test.dot", EC, sys::fs::OpenFlags::F_None);
-    test.dot(dotf);
-    dotf.close();
-
-    common::printCFG(F);
-
+#if 0
     DEBUG(errs() << "\nEdge Weights :\n");
     for (auto &V : Val)
         DEBUG(errs() << V.first->src()->getName() << " -> "
@@ -481,8 +479,7 @@ void EPPEncode::encode(Function &F) {
     for (auto &I : Inc)
         DEBUG(errs() << I.first->src()->getName() << " -> "
                      << I.first->tgt()->getName() << " " << I.second << "\n");
-    
-    
+#endif
     errs() << "NumPaths : " << numPaths[Entry] << "\n";
 }
 

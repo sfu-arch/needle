@@ -37,18 +37,18 @@ bool EPPProfile::doInitialization(Module &m) {
 
 bool EPPProfile::doFinalization(Module &m) { return false; }
 
-bool hasRecursiveCall(Function &F) {
-    for (auto &BB : F) {
-        for (auto &I : BB) {
-            CallSite CS(&I);
-            if (CS.isCall() || CS.isInvoke()) {
-                if (CS.getCalledFunction() == &F)
-                    return true;
-            }
-        }
-    }
-    return false;
-}
+// bool hasRecursiveCall(Function &F) {
+//     for (auto &BB : F) {
+//         for (auto &I : BB) {
+//             CallSite CS(&I);
+//             if (CS.isCall() || CS.isInvoke()) {
+//                 if (CS.getCalledFunction() == &F)
+//                     return true;
+//             }
+//         }
+//     }
+//     return false;
+// }
 
 bool EPPProfile::runOnModule(Module &module) {
     DEBUG(errs() << "Running Profile\n");
@@ -58,8 +58,6 @@ bool EPPProfile::runOnModule(Module &module) {
         if (isTargetFunction(func, FunctionList)) {
             LI = &getAnalysis<LoopInfoWrapperPass>(func).getLoopInfo();
             auto &enc = getAnalysis<EPPEncode>(func);
-            assert(!hasRecursiveCall(func) &&
-                    "Pathprofiling is not implemented for recursive functions");
             instrument(func, enc);
         }
     }
@@ -212,7 +210,6 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         InsertLogPath(EB);
     }
 
-    common::printCFG(F);
 
 #if 0
     // Maps for all the *special* inc values for loops
@@ -351,11 +348,12 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         InsertInc(N->getTerminator(), B);
     }
 
+    for (auto &BB : F)
+        if (isFunctionExiting(&BB))
+            InsertLogPath(&BB);
+
 #endif
 
-    //for (auto &BB : F)
-    //if (isFunctionExiting(&BB))
-    //InsertLogPath(&BB);
 }
 
 char EPPProfile::ID = 0;
