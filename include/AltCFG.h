@@ -17,7 +17,7 @@ using namespace llvm;
 using namespace std;
 
 
-namespace altepp {
+namespace epp {
 
 #define SRC(E) \
     (E.first)
@@ -51,7 +51,7 @@ class altcfg {
     void initWt(const Edge, const APInt);
 
   protected:
-    FakeTableTy Fakes;
+    FakeTableTy SegmentMap;
     EdgeWtMapTy getIncrements(BasicBlock*, BasicBlock*);
 
   public:
@@ -63,7 +63,7 @@ class altcfg {
     SmallVector<BasicBlock*, 4> succs(const BasicBlock*);
     void clear() { Edges.clear(),  Weights.clear(), 
         CFG.clear(); SuccCache.clear(); }
-    bool isFake(Edge E) const { return (bool) Fakes.count(E); }
+    EdgeListTy getFakeEdges() const;
 };
 
 
@@ -83,8 +83,8 @@ class CFGInstHelper : public altcfg {
                 return APInt(128, 0, true);
             };
 
-            if(Fakes.count(E)) {
-                auto F = Fakes.lookup(E); 
+            if(SegmentMap.count(E)) {
+                auto F = SegmentMap.lookup(E); 
                 return make_tuple(true, getInc(F.first), 
                         true, getInc(F.second));
             }
