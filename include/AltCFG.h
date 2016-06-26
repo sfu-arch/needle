@@ -17,7 +17,7 @@ using namespace llvm;
 using namespace std;
 
 
-namespace altepp {
+namespace epp {
 
 #define SRC(E) \
     (E.first)

@@ -18,9 +18,6 @@ struct EPPDecode : public llvm::ModulePass {
     llvm::StringRef filename;
     size_t numberToReturn;
 
-    std::map<llvm::BasicBlock *, std::vector<std::shared_ptr<Edge>>> ValBySrc;
-    std::map<llvm::BasicBlock *, std::vector<altepp::Edge>> AltValBySrc;
-
     EPPDecode() : llvm::ModulePass(ID) {}
 
     virtual void getAnalysisUsage(llvm::AnalysisUsage &au) const override {
@@ -28,7 +25,6 @@ struct EPPDecode : public llvm::ModulePass {
     }
 
     virtual bool runOnModule(llvm::Module &m) override;
-    virtual void releaseMemory() override;
 
     std::pair<PathType, std::vector<llvm::BasicBlock *>>
     decode(llvm::Function &f, llvm::APInt pathID, EPPEncode &E);

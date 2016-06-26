@@ -141,6 +141,14 @@ bool EPPDecode::runOnModule(Module &M) {
         bbSequences.push_back(decode(*path.Func, path.id, *Enc));
     }
 
+
+    // Sort the paths in descending order of their frequency
+    // If the frequency is same, descending order of id (id cannot be same)
+    sort(paths.begin(), paths.end(), [](const Path &P1, const Path &P2) {
+        return (P1.count > P2.count) ||
+               (P1.count == P2.count && P1.id.uge(P2.id));
+    });
+
     ofstream Outfile("epp-sequences.txt", ios::out);
 
     uint64_t pathFail = 0;
@@ -189,23 +197,22 @@ bool EPPDecode::runOnModule(Module &M) {
     return false;
 }
 
-void EPPDecode::releaseMemory() { ValBySrc.clear(); }
 
 pair<PathType, vector<llvm::BasicBlock *>>
 EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
     vector<llvm::BasicBlock *> Sequence;
     auto *Position = &F.getEntryBlock();
-    auto &ACFG = Enc.test; 
+    auto &ACFG = Enc.ACFG; 
 
     DEBUG(errs() << "Decode Called On: " << pathID << "\n");
 
-    vector<altepp::Edge> SelectedEdges;
+    vector<Edge> SelectedEdges;
     while(true) {
         Sequence.push_back(Position);
         if(isFunctionExiting(Position)) 
             break;
         APInt Wt(128, 0, true);
-        altepp::Edge Select = {nullptr, nullptr};
+        Edge Select = {nullptr, nullptr};
         DEBUG(errs() << Position->getName() << " (\n");
         for(auto *Tgt : ACFG.succs(Position)) {
             auto EWt = ACFG[{Position, Tgt}];
@@ -223,65 +230,6 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
         pathID -= Wt;
     }
 
-
-    // vector<shared_ptr<Edge>> SelectedEdges;
-    // while (true) {
-    //     sequence.push_back(Position);
-    //     if (isFunctionExiting(Position))
-    //         break;
-
-    //     // Find the edge with the max weight <= pathID
-    //     APInt Wt(128, 0, true);
-    //     shared_ptr<Edge> Select = nullptr;
-    //     for (auto &E : ValBySrc[Position]) {
-    //         // Unsigned comparisons are OK since Vals are always +ve
-    //         // Inc can be negative.
-    //         if (Enc.Val[E].uge(Wt) && Enc.Val[E].ule(pathID)) {
-    //             Select = E;
-    //             Wt = Enc.Val[E];
-    //         }
-    //     }
-
-    //     SelectedEdges.push_back(Select);
-    //     Position = Select->tgt();
-    //     pathID -= Wt;
-    //     DEBUG(errs() << pathID << "\n");
-    // }
-
-    // return make_pair(RIRO, sequence);
-    // Only one path so it must be REAL
-    // if (SelectedEdges.empty()) {
-    //     return make_pair(RIRO, Sequence);
-    // }
-
-    //enum EdgeType {
-        //EHEAD,
-        //ELATCH,
-        //ELIN,
-        //ELOUT1, // To Exit
-        //ELOUT2, // From Entry
-        //EREAL,
-        //EOUT
-    //};
-
-//#define SET_BIT(n, x) (n |= 1ULL << x)
-    //uint64_t Type = 0;
-    //switch (SelectedEdges.front()->Type) {
-    //case EHEAD:
-    //case ELOUT2:
-        //SET_BIT(Type, 0);
-    //default:
-        //break;
-    //}
-    //switch (SelectedEdges.back()->Type) {
-    //case ELATCH:
-    //case ELOUT1:
-    //case ELIN:
-        //SET_BIT(Type, 1);
-    //default:
-        //break;
-    //}
-//#undef SET_BIT
 
     if(SelectedEdges.empty())
         return {RIRO, Sequence};

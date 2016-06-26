@@ -1,7 +1,7 @@
 #define DEBUG_TYPE "epp_encode"
 #include "AltCFG.h"
 
-namespace altepp {
+namespace epp {
 
 inline void
 altcfg::initWt(Edge E, APInt Val = APInt(128, 0, true)) {
