@@ -445,6 +445,8 @@ void EPPEncode::encode(Function &F) {
     test.dot(dotf);
     dotf.close();
 
+    common::printCFG(F);
+
     DEBUG(errs() << "\nEdge Weights :\n");
     for (auto &V : Val)
         DEBUG(errs() << V.first->src()->getName() << " -> "
@@ -470,9 +472,9 @@ void EPPEncode::encode(Function &F) {
 
     computeIncrement(Entry, Exit, Inc, Val, T, Chords);
 
-    DEBUG(errs() << "\nVals :\n");
+    (errs() << "\nVals :\n");
     for (auto &V : Val)
-        DEBUG(errs() << V.first->src()->getName() << " -> "
+        (errs() << V.first->src()->getName() << " -> "
                      << V.first->tgt()->getName() << " " << V.second << "\n");
 
     DEBUG(errs() << "\nIncrements :\n");

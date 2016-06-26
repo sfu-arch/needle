@@ -124,9 +124,9 @@ EdgeListTy
 altcfg::get() const {
     EdgeListTy Ret;
     for(auto &E : Edges) {
-        if(Fakes.count(E)) {
-            Ret.insert(Fakes.lookup(E).first);
-            Ret.insert(Fakes.lookup(E).second);
+        if(SegmentMap.count(E)) {
+            Ret.insert(SegmentMap.lookup(E).first);
+            Ret.insert(SegmentMap.lookup(E).second);
         } else {
             Ret.insert(E);
         }
@@ -163,7 +163,7 @@ altcfg::add(BasicBlock* Src, BasicBlock* Tgt,
     // This is an edge which needs to segmented
     if( Entry && Exit ) {
         DEBUG(errs() << "Adding Fakes\n");
-        Fakes[{Src, Tgt}] = {{Src, Exit}, {Entry, Tgt}};
+        SegmentMap[{Src, Tgt}] = {{Src, Exit}, {Entry, Tgt}};
         insertCFG(Src, Exit);
         insertCFG(Entry, Tgt);
         SuccCache.erase(Entry);
@@ -213,6 +213,17 @@ altcfg::dot(raw_ostream& os) const {
             << N->getName().str() << "\"];\n";
     }
     os << "}\n";
+}
+
+EdgeListTy
+altcfg::getFakeEdges() const {
+    EdgeListTy F;
+    for(auto &KV : SegmentMap) {
+        auto Fakes = KV.second;
+        F.insert(Fakes.first);
+        F.insert(Fakes.second);
+    }
+    return F;
 }
 
 }

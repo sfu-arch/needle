@@ -204,6 +204,7 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
     vector<llvm::BasicBlock *> Sequence;
     auto *Position = &F.getEntryBlock();
     auto &ACFG = Enc.test; 
+
     DEBUG(errs() << "Decode Called On: " << pathID << "\n");
 
     vector<altepp::Edge> SelectedEdges;
@@ -213,13 +214,17 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
             break;
         APInt Wt(128, 0, true);
         altepp::Edge Select = {nullptr, nullptr};
+        errs() << Position->getName() << " (\n";
         for(auto *Tgt : ACFG.succs(Position)) {
+            auto EWt = ACFG[{Position, Tgt}];
+            errs() << "\t" << Tgt->getName() << " [" << EWt<< "]\n";
             if (ACFG[{Position, Tgt}].uge(Wt) 
                     && ACFG[{Position, Tgt}].ule(pathID)) {
                 Select = {Position, Tgt};
                 Wt = ACFG[{Position, Tgt}];
             }
         }
+        errs() << " )\n\n\n";
 
         SelectedEdges.push_back(Select);
         Position = TGT(Select);
@@ -289,12 +294,27 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
     if(SelectedEdges.empty())
         return {RIRO, Sequence};
 
+    // for(auto &KV : ACFG.SegmentMap) {
+    //     auto Real = KV.first;
+    //     auto Fakes = KV.second;
+    //     errs() << "K: " << SRC(Real)->getName()
+    //            << "->" << TGT(Real)->getName() << "\n";
+    //     errs() << "F1: " << SRC(Fakes.first)->getName()
+    //            << "->" << TGT(Fakes.first)->getName() << "\n";
+    //     errs() << "F2: " << SRC(Fakes.second)->getName()
+    //            << "->" << TGT(Fakes.second)->getName() << "\n";
+    // }
+
+    auto FakeEdges = ACFG.getFakeEdges();
+
 #define SET_BIT(n, x) (n |= 1ULL << x)
     uint64_t Type = 0;
-    if(ACFG.isFake(SelectedEdges.front()))
+    if(FakeEdges.count(SelectedEdges.front())) {
         SET_BIT(Type, 0);
-    if(ACFG.isFake(SelectedEdges.back()))
+    }
+    if(FakeEdges.count(SelectedEdges.back())) {
         SET_BIT(Type, 1);
+    }
 #undef SET_BIT
 
     errs() << "Type " << static_cast<PathType>(Type) << "\n";

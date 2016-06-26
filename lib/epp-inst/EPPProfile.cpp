@@ -212,6 +212,8 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         InsertLogPath(EB);
     }
 
+    common::printCFG(F);
+
 #if 0
     // Maps for all the *special* inc values for loops
     unordered_map<Loop *, pair<APInt, APInt>> LatchMap;
