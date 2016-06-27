@@ -1,4 +1,4 @@
-add_library(common
+add_library(InstruMem
     InstruMem.cpp
     runtime.cpp)
 

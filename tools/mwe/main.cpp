@@ -50,6 +50,11 @@ cl::opt<std::string>
     UndoLib("u", cl::desc("Path to the undo library bitcode module"),
             cl::Required);
 
+cl::opt<std::string>
+    RuntimeLib("r", cl::desc("Path to the runtime library bitcode module"),
+            cl::Required);
+
+
 cl::opt<ExtractType> ExtractAs(cl::desc("Choose extract type, trace / chop"),
                                cl::values(clEnumVal(trace, "Extract as trace"),
                                           clEnumVal(chop, "Extract as chop"),
@@ -166,6 +171,11 @@ int main(int argc, char **argv, const char **env) {
     unique_ptr<Module> UndoMod(parseIRFile(UndoLib, err, getGlobalContext()));
     assert(UndoMod.get() && "Unable to read undo bitcode module");
     L.linkInModule(std::move(UndoMod));
+
+    unique_ptr<Module> RuntimeMod(parseIRFile(RuntimeLib, err, getGlobalContext()));
+    assert(RuntimeMod.get() && "Unable to read runtime bitcode module");
+    L.linkInModule(std::move(RuntimeMod));
+
 
     for (auto &M : ExtractedModules) {
         errs() << "Linking " << M->getName() << "\n";

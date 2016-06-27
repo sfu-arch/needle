@@ -19,35 +19,36 @@ namespace instrumem{
 
 
 
-struct InstruMemPass : public llvm::ModulePass, llvm::InstVisitor<InstruMemPass> {
+struct InstruMemPass : public llvm::FunctionPass, llvm::InstVisitor<InstruMemPass> {
 
 	static char ID;
 	
-	int loadId = 0;
-	
+	//int loadId = 0;
+	//int storeId = 0;
 
 
 
 	InstruMemPass();
 
     virtual void getAnalysisUsage(AnalysisUsage &AU) const override {
-      AU.addRequired<DataLayoutPass>();
+      //AU.addRequired<DataLayoutPass>();
     }
 
 
-	bool runOnModule(llvm::Module &m) override;
+	bool runOnFunction(llvm::Function& f) override;
 
 	
 	llvm::Type *i8PtrTy = nullptr;
 
 	llvm::Constant *onLoad  = nullptr;
-
+    llvm::Constant *onStore = nullptr;
 	
 
 
 	void visitLoadInst(LoadInst &li);
+	void visitStoreInst(StoreInst &si);
 
-
+    void visitFunction(Function& f);
 
 
 };

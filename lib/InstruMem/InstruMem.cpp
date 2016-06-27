@@ -26,16 +26,16 @@ using namespace instrumem;
 
 
 InstruMemPass::InstruMemPass()
-	:ModulePass(ID) {
+	:FunctionPass(ID) {
 
 }//InstruMemPass
 
 
 bool
-InstruMemPass::runOnModule(Module &m) {
+InstruMemPass::runOnFunction(Function& f) {
   
 
-	visit(m);
+	visit(f);
 
 	return true;
 }
@@ -43,16 +43,20 @@ InstruMemPass::runOnModule(Module &m) {
 
 
 
-void InstruMemPass::visitModule(Module& m) {
-	auto *voidTy = Type::getVoidTy(m.getContext());
-	auto *i64Ty  = Type::getInt64Ty(m.getContext());
-	i8PtrTy      = Type::getInt8PtrTy(m.getContext());
-	auto* fTy = Type::getFloatTy(m.getContext());
-	auto* dTy = Type::getDoubleTy(m.getContext());
+void InstruMemPass::visitFunction(Function& f) {
+    Module* m = f.getParent();
+    
 
-	std::string pre = "InstruMem_";
-	onLoad  = m.getOrInsertFunction(pre+"load", voidTy, i64Ty, i8PtrTy, nullptr);
-	
+	auto *voidTy = Type::getVoidTy(m->getContext());
+	auto *i64Ty  = Type::getInt64Ty(m->getContext());
+	i8PtrTy      = Type::getInt8PtrTy(m->getContext());
+	auto* fTy = Type::getFloatTy(m->getContext());
+	auto* dTy = Type::getDoubleTy(m->getContext());
+
+	std::string pre = "__InstruMem_";
+	onLoad  = m->getOrInsertFunction(pre+"load", voidTy, i64Ty, i8PtrTy, nullptr);
+	onStore  = m->getOrInsertFunction(pre+"store", voidTy, i64Ty, i8PtrTy, nullptr);
+
 }
 
 
@@ -60,28 +64,33 @@ void InstruMemPass::visitModule(Module& m) {
 
 void InstruMemPass::visitLoadInst(LoadInst &li) {
 
-	uint64_t size    = getAnalysis<DataLayoutPass>().getDataLayout().getTypeStoreSize(li.getType());
+    int loadId = 0;
+
 	auto  *i64Ty     = Type::getInt64Ty(li.getContext());
 
 	Value *loaded = li.getPointerOperand();
 	BitCastInst* bc = new BitCastInst(loaded, i8PtrTy, "", &li);
+    
+    if (auto *N = dyn_cast<Instruction>(&li)->getMetadata("UID")) {
+        auto *S = dyn_cast<MDString>(N->getOperand(0));
+        loadId = stoi(S->getString().str());
+    } else assert(0);
 
-
-		loadId ++;
+    errs() << "instrumenting load " << loadId << "\n";
 
     if (!li.isTerminator()) {
 
-        BasicBlock::iterator insrtPt = li;
+        /*BasicBlock::iterator insrtPt = li;
         insrtPt++;
-        Instruction* next = &*insrtPt;			
+        Instruction* next = &*insrtPt;*/			
     
     
         Value *args[] = {
             ConstantInt::get(i64Ty, loadId),
             bc};
         
-        };	
-        CallInst::Create(onLoad, args, "", next);	
+        	
+        CallInst::Create(onLoad, args)->insertAfter(&li);	
     }//load NOT at end of BB
     else {
 
@@ -93,13 +102,56 @@ void InstruMemPass::visitLoadInst(LoadInst &li) {
         CallInst::Create(onLoad, args, "", parent);				
 
     }//load at end of BB
-
-
+ 
 
 
 }//visitLoad
 
 
+void InstruMemPass::visitStoreInst(StoreInst &si) {
+
+    int storeId = 0;
+
+	auto  *i64Ty     = Type::getInt64Ty(si.getContext());
+
+	Value *stored = si.getPointerOperand();
+	BitCastInst* bc = new BitCastInst(stored, i8PtrTy, "", &si);
+    
+    if (auto *N = dyn_cast<Instruction>(&si)->getMetadata("UID")) {
+        auto *S = dyn_cast<MDString>(N->getOperand(0));
+        storeId = stoi(S->getString().str());
+    } else assert(0);
+
+    errs() << "instrumenting store " << storeId << "\n";
+
+    if (!si.isTerminator()) {
+
+        /*BasicBlock::iterator insrtPt = si;
+        insrtPt++;
+        Instruction* next = &*insrtPt;*/			
+    
+    
+        Value *args[] = {
+            ConstantInt::get(i64Ty, storeId),
+            bc};
+        
+        	
+        CallInst::Create(onStore, args)->insertAfter(&si);	
+    }//store NOT at end of BB
+    else {
+
+        BasicBlock* parent = si.getParent();
+
+        Value *args[] = {
+            ConstantInt::get(i64Ty, storeId),
+            bc};	
+        CallInst::Create(onStore, args, "", parent);				
+
+    }//store at end of BB
+ 
+
+
+}//visitStore
 
 
 
