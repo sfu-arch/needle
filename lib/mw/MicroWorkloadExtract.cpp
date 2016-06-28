@@ -657,38 +657,6 @@ Function *MicroWorkloadExtract::extract(
                RevTopoChop.end();
     };
 
-    // auto processLiveOut =
-    //[&LiveOut, &RevTopoChop, &StartBB, &LastBB, &LiveIn, &notInChop, &DT,
-    //&LI, &ReachableFromLast](Instruction *Ins, Instruction *UIns) {
-    // if (isa<PHINode>(UIns) && UIns->getParent() == StartBB) {
-    // errs() << "Live Out : " << *Ins << "\n";
-    // errs() << "Phi User : " << *UIns << " "
-    //<< UIns->getParent()->getName() << "\n";
-    // LiveOut.insert(Ins);
-    //} else if (isa<PHINode>(UIns) && Ins->getParent() != LastBB) {
-    // errs() << "Skipping LiveOut: " << *Ins << "\n";
-    // errs() << "User is : " << *UIns << "\n";
-    // return;
-    //} else if (notInChop(UIns) &&
-    //// DT->dominates(LastBB, UIns->getParent() ) &&
-    //// llvm::isPotentiallyReachable(LastBB,
-    //// UIns->getParent(), DT, LI) &&
-    // ReachableFromLast.count(UIns->getParent()) &&
-    // UIns->getParent() != LastBB) {
-    // errs() << "Live Out : " << *Ins << "\n";
-    // errs() << "Outside User : " << *UIns << " "
-    //<< UIns->getParent()->getName() << "\n";
-    // LiveOut.insert(Ins);
-    //} else if (LiveIn.count(UIns)) {
-    //// Required for loop induction phi's
-    // errs() << "Live Out : " << *Ins << "\n";
-    // errs() << "Live in User : " << *UIns << " "
-    //<< UIns->getParent()->getName() << "\n";
-    // LiveOut.insert(Ins);
-    //}
-
-    //};
-
     // Value is a live out only if it is used by an instruction
     // a. Reachable from the last block
     // b. As input itself (Induction Phis)
@@ -759,7 +727,8 @@ Function *MicroWorkloadExtract::extract(
     case 0: {
         auto *RT = dyn_cast<ReturnInst>(LastT);
         assert(RT && "Path with 0 successor should have returninst");
-        if (auto *Val = RT->getReturnValue()) {
+        auto *Val = RT->getReturnValue();
+        if ( Val != nullptr && !isa<Constant>(Val)) {
             LiveOut.insert(Val);
         }
     } break;
@@ -866,14 +835,15 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     if (Blocks.size() == 1) {
         auto *B = Blocks.front();
         auto *R = B->splitBasicBlock(B->getTerminator(), "unit.split");
-        errs() << "Unit Block Live In : \n";
-        for (auto &V : LiveIn)
-            errs() << *V << "\n";
-        errs() << "Unit Block Live Out : \n";
-        for (auto &V : LiveOut)
-            errs() << *V << "\n";
+        // errs() << "Unit Block Live In : \n";
+        // for (auto &V : LiveIn)
+        //     errs() << *V << "\n";
+        // errs() << "Unit Block Live Out : \n";
+        // for (auto &V : LiveOut)
+        //     errs() << *V << "\n";
         Blocks.insert(Blocks.begin(), R);
     }
+
     // Setup Basic Control Flow
     BasicBlock *StartBB = Blocks.back(), *LastBB = Blocks.front();
     auto BackEdges = common::getBackEdges(StartBB);
@@ -888,6 +858,7 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
     auto *Offload = cast<Function>(
         Mod->getOrInsertFunction("__offload_func_" + Id, OffloadTy));
+
     // Split the start basic block so that we can insert a call to the offloaded
     // function while maintaining the rest of the original CFG.
     auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
@@ -1008,21 +979,21 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     // Success Path - End
 }
 
-static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
-                       FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
-                       SetVector<Value *> &LiveOut, DominatorTree *DT,
-                       mwe::PathType Type, string &Id) {
-    switch (Type) {
-    case FIRO:
-    case RIFO:
-    case RIRO:
-    case FIFO:
-        instrument(F, Blocks, OffloadTy, LiveIn, LiveOut, DT, Id);
-        break;
-    default:
-        assert(false && "Unexpected");
-    }
-}
+//static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
+                       //FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
+                       //SetVector<Value *> &LiveOut, DominatorTree *DT,
+                       //mwe::PathType Type, string &Id) {
+    //switch (Type) {
+    //case FIRO:
+    //case RIFO:
+    //case RIRO:
+    //case FIFO:
+        //instrument(F, Blocks, OffloadTy, LiveIn, LiveOut, DT, Id);
+        //break;
+    //default:
+        //assert(false && "Unexpected");
+    //}
+//}
 
 static void runHelperPasses(Function *Offload, Function *Undo,
                             Module *Generated) {
@@ -1062,8 +1033,8 @@ void MicroWorkloadExtract::process(Function &F) {
         // crash thus nullptr is passed. CLEANME
         runHelperPasses(Offload, nullptr, Mod);
 
-        instrument(F, Blocks, Offload->getFunctionType(), LiveIn, LiveOut, DT,
-                   P.PType, P.Id);
+        instrument(F, Blocks, Offload->getFunctionType(), 
+                LiveIn, LiveOut, DT, P.Id);
 
         common::printCFG(F);
 
