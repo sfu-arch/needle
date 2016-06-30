@@ -326,6 +326,15 @@ void printDFG(Function& F) {
     FPM.doFinalization();
 }
 
+
+void instrumentDFG(Function& F) {
+    legacy::FunctionPassManager FPM(F.getParent());
+    FPM.add(new instrumem::InstruMemPass());
+    FPM.doInitialization();
+    FPM.run(F);
+    FPM.doFinalization();
+}
+
 void printDFG(Module& M) {
     for(auto &F : M)
         printDFG(F);

@@ -218,6 +218,7 @@ void MicroWorkloadHelper::replaceGuards() {
 bool MicroWorkloadHelper::runOnModule(Module &M) {
     common::optimizeModule(&M);
     common::labelUID(*Offload);
+    common::instrumentDFG(*Offload);
     common::printDFG(*Offload);
     replaceGuards();
     addUndoLog();

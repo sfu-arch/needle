@@ -9,6 +9,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/IR/InstVisitor.h"
+#include "../lib/InstruMem/InstruMem.h"
 
 #include <string>
 #include <sstream>
@@ -46,6 +47,7 @@ void printDFG(llvm::Function&);
 void printDFG(llvm::Module&); 
 void labelUID(llvm::Module&);
 void labelUID(llvm::Function&);
+void instrumentDFG(llvm::Function&);
 }
 
 namespace helpers {

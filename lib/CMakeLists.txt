@@ -8,3 +8,5 @@ add_subdirectory(common)
 add_subdirectory(sb)
 add_subdirectory(count)
 add_subdirectory(simplify)
+add_subdirectory(InstruMem)
+

@@ -57,14 +57,26 @@ DFGPrinter::visitBasicBlock(BasicBlock& BB) {
                 auto *S = dyn_cast<MDString>(N->getOperand(0));
                 auto id = stoi(S->getString().str());
                 nodes[V] = id;
-            }
+                return true;
+            }//has metadata label
+            else return false;
         } else if(isa<Instruction>(V)) {
             if(auto *N = dyn_cast<Instruction>(V)->getMetadata("UID")) {
                 auto *S = dyn_cast<MDString>(N->getOperand(0));
                 auto id = stoi(S->getString().str());
                 nodes[V] = id;
-            }
-        }
+
+#if 0
+                if(isa<LoadInst>(V)){
+                    errs() << "load inst metadata: " << id << "\n";
+                } else if(isa<StoreInst>(V)) {
+                    errs() << "store inst metadata: " << id << "\n";
+                }
+#endif
+                return true;
+            }//has metadata label
+            else return false;
+        } 
     };
 
     auto nodeFormat = [](uint64_t id, string label, 
@@ -79,13 +91,16 @@ DFGPrinter::visitBasicBlock(BasicBlock& BB) {
     };
 
     if(nodes.count(&BB) == 0) {
-        insertNode(&BB, counter);
+        bool success = insertNode(&BB, counter);
+        if (!success) return;
         //nodes.insert(make_pair(&BB, counter));
         counter++;
         dot << nodeFormat(nodes[&BB], "BB", "red", BB.getName().str());
     }
     auto BBId = nodes[&BB];
-    
+
+
+
     for(auto &I : BB) {
         if(checkCall(I,"llvm.dbg")) continue;
 
@@ -97,7 +112,8 @@ DFGPrinter::visitBasicBlock(BasicBlock& BB) {
         // then create a new entry for it and save 
         // the value of the counter (identifier).
         if(nodes.count(&I) == 0) {
-            insertNode(&I, counter);
+            bool success = insertNode(&I, counter);
+            if (!success) continue;
             //nodes.insert(make_pair(&I, counter));
             counter++;
             if(checkCall(I, "__guard_func")) {
@@ -182,6 +198,7 @@ LabelUID::visitFunction(Function& F) {
 void 
 LabelUID::visitInstruction(Instruction& I) {
     visitGeneric<Instruction>("UID", I);
+
 }
 
 void 
@@ -194,6 +211,8 @@ LabelUID::visitBasicBlock(BasicBlock& BB) {
     MDNode *N = MDNode::get(Context, 
             MDString::get(Context, to_string(values[&BB])));
     BB.getTerminator()->setMetadata("BB_UID", N);
+
+
 }
 
 
