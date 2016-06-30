@@ -676,10 +676,8 @@ Function *MicroWorkloadExtract::extract(
                            &notInChop, &DT, &LI, &ReachableFromLast,
                            &isLabelReachable](Instruction *Ins,
                                               Instruction *UIns) {
-        if (notInChop(UIns) && ((!isa<PHINode>(UIns) &&
-                                 ReachableFromLast.count(UIns->getParent())) ||
-                                (isa<PHINode>(UIns) &&
-                                 isLabelReachable(cast<PHINode>(UIns), Ins)))) {
+        if ( notInChop(UIns) && ( (!isa<PHINode>(UIns) && ReachableFromLast.count(UIns->getParent())) ||
+                                  (isa<PHINode>(UIns) && isLabelReachable(cast<PHINode>(UIns), Ins))) ) {
             LiveOut.insert(Ins);
         } else if (LiveIn.count(UIns)) {
             LiveOut.insert(Ins);
