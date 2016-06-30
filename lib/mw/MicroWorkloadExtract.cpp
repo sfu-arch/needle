@@ -705,7 +705,15 @@ Function *MicroWorkloadExtract::extract(
         }
     }
 
-    auto *LastT = LastBB->getTerminator();
+
+    auto isDefInOutlineBlocks = [&StartBB, &notInChop](Value* Val) -> bool {
+        if( isa<Constant>(Val) ||
+           (isa<Instruction>(Val) && notInChop(dyn_cast<Instruction>(Val))) ||
+           (isa<PHINode>(Val) && dyn_cast<PHINode>(Val)->getParent() == StartBB) ) {
+            return false;
+        }
+        return true;
+    };
 
     // If LastT has 2 successors then, evaluate condition inside
     // and create a condition inside the success block to do the
@@ -716,6 +724,8 @@ Function *MicroWorkloadExtract::extract(
 
     // If the LastT has 0 successor then, there may be a return
     // value to patch.
+
+    auto *LastT = LastBB->getTerminator();
 
     switch (LastT->getNumSuccessors()) {
     case 2: {
@@ -728,7 +738,9 @@ Function *MicroWorkloadExtract::extract(
         auto *RT = dyn_cast<ReturnInst>(LastT);
         assert(RT && "Path with 0 successor should have returninst");
         auto *Val = RT->getReturnValue();
-        if ( Val != nullptr && !isa<Constant>(Val)) {
+        // This Val is added to the live out set only if it
+        // is def'ed in the extracted region. 
+        if ( Val != nullptr && isDefInOutlineBlocks(Val)) {
             LiveOut.insert(Val);
         }
     } break;
