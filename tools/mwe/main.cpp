@@ -47,7 +47,7 @@ enum ExtractType { trace, chop };
 // MWE-only options
 
 cl::opt<std::string>
-    UndoLib("u", cl::desc("Path to the undo library bitcode module"),
+    HelperLib("u", cl::desc("Path to the undo library bitcode module"),
             cl::Required);
 
 // cl::opt<std::string>
@@ -172,9 +172,9 @@ int main(int argc, char **argv, const char **env) {
 
     L.linkInModule(move(module));
 
-    unique_ptr<Module> UndoMod(parseIRFile(UndoLib, err, getGlobalContext()));
-    assert(UndoMod.get() && "Unable to read undo bitcode module");
-    L.linkInModule(std::move(UndoMod));
+    unique_ptr<Module> HelperMod(parseIRFile(HelperLib, err, getGlobalContext()));
+    assert(HelperMod.get() && "Unable to read undo bitcode module");
+    L.linkInModule(std::move(HelperMod));
 
     //unique_ptr<Module> RuntimeMod(parseIRFile(RuntimeLib, err, getGlobalContext()));
     //assert(RuntimeMod.get() && "Unable to read runtime bitcode module");

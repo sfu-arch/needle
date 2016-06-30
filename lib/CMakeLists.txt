@@ -9,4 +9,4 @@ add_subdirectory(sb)
 add_subdirectory(count)
 add_subdirectory(simplify)
 add_subdirectory(InstruMem)
-
+add_subdirectory(bitcode)

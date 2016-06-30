@@ -12,6 +12,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/" ${CMAKE_MODULE_PATH})
 ############## LLVM CONFIGURATION #################
 
 # LLVM_DIR must be set to the prefix of /share/llvm/cmake via commandline
@@ -54,6 +55,36 @@ if(Boost_FOUND)
 else()
     message( FATAL_ERROR "Pasha needs Boost 1.55 or higher, CMake will exit.")
 endif()
+
+# Find clang 
+
+set(CLANG_VERSION_REQ "${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}")
+find_package(Clang)
+if(CLANG_FOUND)
+    if(${CLANG_VERSION} VERSION_EQUAL CLANG_VERSION_REQ) 
+    else()
+        message(FATAL_ERROR "Incompatible clang version -- need ${CLANG_VERSION_REQ}, found ${CLANG_VERSION}")
+    endif()
+else()
+    message(FATAL_ERROR "Pasha needs clang ${CLANG_VERSION_REQ}.X in PATH, Cmake will exit" )
+endif()
+
+function(add_bitcode BC FILES) 
+    add_custom_command(
+        OUTPUT ${BC}
+        COMMAND ${CLANG_EXE} 
+                -c -emit-llvm
+                ${FILES}
+                -o ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${BC}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        DEPENDS ${FILES}
+    )
+    add_custom_target(bitcode ALL
+        DEPENDS ${BC}
+        COMMENT "Generate bitcode for helpers"
+    )
+endfunction(add_bitcode)
+
 
 ############## FINAL PROJECT CONFIG #################
 
