@@ -32,6 +32,8 @@ extern SmallVector<BasicBlock *, 16>
 getTopoChop(DenseSet<BasicBlock *> &Chop, BasicBlock *StartBB,
             DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges);
 
+extern bool SimulateDFG;
+
 // Static Functions
 
 static SmallVector<BasicBlock *, 16> getFunctionRPO(Function &F) {
@@ -208,8 +210,8 @@ void MicroWorkloadHelper::replaceGuards() {
 
     // It's possible that the guard function gets removed from 
     // the Offload Function via optimizations. This happens
-    // particularly when the extracted sequence is only a single
-    // block.
+    // (usually) when the extracted sequence is only a single
+    // block (no branches == no guards).
     auto *GuardFunc = Offload->getParent()->getFunction("__guard_func");
     if(GuardFunc)
         GuardFunc->eraseFromParent();
@@ -217,9 +219,11 @@ void MicroWorkloadHelper::replaceGuards() {
 
 bool MicroWorkloadHelper::runOnModule(Module &M) {
     common::optimizeModule(&M);
-    common::labelUID(*Offload);
-    common::instrumentDFG(*Offload);
-    common::printDFG(*Offload);
+    if(SimulateDFG) {
+        common::labelUID(*Offload);
+        common::instrumentDFG(*Offload);
+        common::printDFG(*Offload);
+    }
     replaceGuards();
     addUndoLog();
     return false;

@@ -39,3 +39,13 @@ void
 __fail() {
     printf("fail\n"); 
 }
+
+void 
+___attribute__ ((noinline)) _InstruMem_load(uint64_t id, char* ptr) {
+    asm("");
+}
+
+void 
+___attribute__ ((noinline)) _InstruMem_store(uint64_t id, char* ptr) {
+    asm("");
+}

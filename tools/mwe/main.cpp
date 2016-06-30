@@ -50,9 +50,9 @@ cl::opt<std::string>
     UndoLib("u", cl::desc("Path to the undo library bitcode module"),
             cl::Required);
 
-cl::opt<std::string>
-    RuntimeLib("r", cl::desc("Path to the runtime library bitcode module"),
-            cl::Required);
+// cl::opt<std::string>
+//     RuntimeLib("r", cl::desc("Path to the runtime library bitcode module"),
+//             cl::Required);
 
 
 cl::opt<ExtractType> ExtractAs(cl::desc("Choose extract type, trace / chop"),
@@ -91,6 +91,10 @@ cl::list<string> libraries("l", cl::Prefix,
 
 cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
                         cl::value_desc("filename"), cl::Required);
+
+cl::opt<bool> SimulateDFG("simdfg", 
+        cl::desc("Generate dfg.<>.dot for simulation, add instrumentation to binary for Pintool"), 
+        cl::value_desc("boolean"), cl::Optional, cl::init(false));
 
 bool isTargetFunction(const Function &f,
                       const cl::list<std::string> &FunctionList) {
@@ -172,9 +176,9 @@ int main(int argc, char **argv, const char **env) {
     assert(UndoMod.get() && "Unable to read undo bitcode module");
     L.linkInModule(std::move(UndoMod));
 
-    unique_ptr<Module> RuntimeMod(parseIRFile(RuntimeLib, err, getGlobalContext()));
-    assert(RuntimeMod.get() && "Unable to read runtime bitcode module");
-    L.linkInModule(std::move(RuntimeMod));
+    //unique_ptr<Module> RuntimeMod(parseIRFile(RuntimeLib, err, getGlobalContext()));
+    //assert(RuntimeMod.get() && "Unable to read runtime bitcode module");
+    //L.linkInModule(std::move(RuntimeMod));
 
 
     for (auto &M : ExtractedModules) {
