@@ -37,6 +37,8 @@ extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
 
+extern bool SimulateDFG;
+
 void MicroWorkloadExtract::readSequences() {
     ifstream SeqFile(SeqFilePath.c_str(), ios::in);
     assert(SeqFile.is_open() && "Could not open file");
@@ -860,9 +862,15 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     auto ReachableFromLast = fSliceDFS(LastBB, BackEdges);
     auto &Ctx = F.getContext();
     auto *Mod = F.getParent();
+    auto *VoidTy = Type::getVoidTy(Ctx);
     auto *Int64Ty = Type::getInt64Ty(Ctx);
     auto *Int32Ty = Type::getInt32Ty(Ctx);
     auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
+
+    if(SimulateDFG)
+        CallInst::Create(Mod->getOrInsertFunction("__success", 
+                FunctionType::get(VoidTy, {}, false)), {}, "", Success);
+
     auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
     auto *Merge = BasicBlock::Create(Ctx, "mergeblock", &F, nullptr);
     ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
@@ -917,7 +925,11 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     // Fail -- Undo memory
     vector<Value *> Args = {UGEP, NSLoad};
     CallInst::Create(Undo, Args, "", Fail);
-    // CallInst::Create(Mod->getFunction("__fail"), {}, "", Fail);
+
+    if(SimulateDFG)
+        CallInst::Create(Mod->getOrInsertFunction("__fail", 
+                FunctionType::get(VoidTy, {}, false)), {}, "", Fail);
+
     BranchInst::Create(SSplit, Fail);
     // Fail Path -- End
 
