@@ -85,6 +85,19 @@ function(add_bitcode BC FILES)
     )
 endfunction(add_bitcode)
 
+# Documentation 
+
+find_package(Doxygen)
+if(DOXYGEN_FOUND)
+    message(STATUS "Doxygen found, the `doc` target is available to generate html documentation")
+    configure_file(${CMAKE_SOURCE_DIR}/Doxyfile.in ${CMAKE_BINARY_DIR}/Doxyfile @ONLY)
+    add_custom_target(doc
+        ${DOXYGEN_EXECUTABLE} ${CMAKE_BINARY_DIR}/Doxyfile
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        COMMENT "Generating API documentation for PASHA" VERBATIM
+    )
+endif(DOXYGEN_FOUND)
+
 
 ############## FINAL PROJECT CONFIG #################
 

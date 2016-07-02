@@ -174,7 +174,7 @@ void EPPEncode::encode(Function &F) {
         }
         numPaths.insert({B, pathCount});
     }
-    
+   
     errs() << "NumPaths : " << numPaths[Entry] << "\n";
 }
 

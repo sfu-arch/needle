@@ -18,9 +18,15 @@
 #include "llvm/Transforms/IPO/InlinerPass.h"
 #include <fstream>
 
+/// @file wut wut
+/// @brief nope nope
+
 using namespace llvm;
 
 namespace epp {
+
+/// Inliner class which inlines everything. Very docu
+///
 struct PeruseInliner : public Inliner {
     static char ID;
 
