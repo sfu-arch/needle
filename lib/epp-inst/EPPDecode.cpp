@@ -123,17 +123,6 @@ bool EPPDecode::runOnModule(Module &M) {
     }
     inFile.close();
 
-    // for (auto &V : Enc->Val) {
-    //     auto Src = V.first->src();
-    //     if (ValBySrc.count(Src) == 0)
-    //         ValBySrc[Src] = vector<shared_ptr<Edge>>();
-
-    //     if (V.first->src() != V.first->tgt())
-    //         ValBySrc[Src].push_back(V.first);
-    //     // assert(V.first->src() != V.first->tgt() && "Noooo!");
-    // }
-
-
     vector<pair<PathType, vector<llvm::BasicBlock *>>>
         bbSequences;
     bbSequences.reserve(totalPathCount);

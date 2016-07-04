@@ -1,4 +1,3 @@
-#include "epprt.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
@@ -7,6 +6,7 @@
 #include <fstream>
 #include <unordered_map>
 
+#include "epprt.h"
 #include <map>
 
 extern "C" {
@@ -28,8 +28,9 @@ void EPP(save)() {
         uint64_t high = (KV.first >> 64);
         // Print the hex values with a 0x prefix messes up
         // the APInt constructor.
-        fprintf(fp, "%lx%lx %lu\n", high, low, KV.second);
+        fprintf(fp, "%016lx%016lx %lu\n", high, low, KV.second);
     }
     fclose(fp);
 }
+
 }
