@@ -144,6 +144,9 @@ void link(const string &objectFile, const string &outputFile, char optLevel,
 
     vector<string> args{clang.get(), opt, "-o", outputFile, objectFile};
 
+    // DEBUG
+    args.push_back("-v");
+
     for (auto &libPath : libPaths) {
         args.push_back("-L" + libPath);
     }
@@ -159,9 +162,9 @@ void link(const string &objectFile, const string &outputFile, char optLevel,
     charArgs.push_back(0);
 
     for (auto &arg : args) {
-        DEBUG(outs() << arg.c_str() << " ");
+        (errs() << arg.c_str() << " ");
     }
-    DEBUG(outs() << "\n");
+    (errs() << "\n");
 
     string err;
     if (-1 == sys::ExecuteAndWait(clang.get(), &charArgs[0], nullptr, 0, 0, 0,
