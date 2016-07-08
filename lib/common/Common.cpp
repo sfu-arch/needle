@@ -169,9 +169,9 @@ void link(const string &objectFile, const string &outputFile, char optLevel,
     charArgs.push_back(0);
 
     for (auto &arg : args) {
-        (errs() << arg.c_str() << " ");
+        DEBUG(errs() << arg.c_str() << " ");
     }
-    (errs() << "\n");
+    DEBUG(errs() << "\n");
 
     string err;
     if (-1 == sys::ExecuteAndWait(clang.get(), &charArgs[0], nullptr, 0, 0, 0,
