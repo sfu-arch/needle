@@ -5,6 +5,7 @@
 1. LLVM 3.8.0
 2. Boost 1.55  
 3. CMake 2.8.8  
+4. Doxygen 1.7.6 (optional)
 
 ### Build 
 0. Download LLVM 3.8.0 source from [here](http://llvm.org/releases/download.html). Also download the Clang source code.   
@@ -29,4 +30,8 @@
     `$ mkdir pasha-build && cd pasha-build`  
     `$ cmake -DLLVM_ENABLE_EH=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_DIR=<path/to/llvm-build/share/llvm/cmake> -DBOOST_ROOT=<path/to/boost>`  
     `$ make -j <cpu_count>`  
+4. Generate Doxygen (Optional) : If doxygen is detected on the system, `doc` target is available to generate documentation. Run `make doc` to generate documentation.
+5. 32-bit runtime (Optional) :
+    To work with 32 bit bitcode on a 64 bit system, pass `-DRT32=ON` while running `cmake`. This will make the toolchain produce 32 bit executables. Note number of paths we can support is reduced by a factor of 2, i.e 2^64.
+
 

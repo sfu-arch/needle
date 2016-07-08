@@ -58,6 +58,12 @@ void compile(Module &m, string outputPath, char optLevel) {
     string err;
 
     Triple triple = Triple(m.getTargetTriple());
+
+#ifdef RT32
+    assert(triple.isArch32Bit() 
+            && "RT32 defined by CMake but input bitcode is not 32 bit!");
+#endif
+
     const Target *target = TargetRegistry::lookupTarget(MArch, triple, err);
     if (!target) {
         report_fatal_error("Unable to find target:\n " + err);
@@ -144,8 +150,9 @@ void link(const string &objectFile, const string &outputFile, char optLevel,
 
     vector<string> args{clang.get(), opt, "-o", outputFile, objectFile};
 
-    // DEBUG
-    args.push_back("-v");
+#ifdef RT32
+    args.push_back("-m32");
+#endif
 
     for (auto &libPath : libPaths) {
         args.push_back("-L" + libPath);

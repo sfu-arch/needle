@@ -73,15 +73,21 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     auto &Ctx = M->getContext();
     auto *voidTy = Type::getVoidTy(Ctx);
 
+#ifndef RT32
     auto *CtrTy = Type::getInt128Ty(Ctx);
+    auto *Zap = ConstantInt::getIntegerValue(CtrTy, APInt(128, 0, true));
+#else
+    auto *CtrTy = Type::getInt64Ty(Ctx);
+    auto *Zap = ConstantInt::getIntegerValue(CtrTy, APInt(64, 0, true));
+#endif
+
     auto *logFun2 = M->getOrInsertFunction("PaThPrOfIlInG_logPath2", voidTy,
             CtrTy, nullptr);
 
     auto *Ctr = new AllocaInst(CtrTy, nullptr, "epp.ctr",
             &*F.getEntryBlock().getFirstInsertionPt());
 
-    auto *SI = new StoreInst(
-            ConstantInt::getIntegerValue(CtrTy, APInt(128, 0, true)), Ctr);
+    auto *SI = new StoreInst(Zap, Ctr);
     SI->insertAfter(Ctr);
 
     auto InsertInc = [&Ctr, &CtrTy](Instruction *addPos,
@@ -91,20 +97,25 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
                          << addPos->getParent()->getName() << "\n");
             // Context Counter
             auto *LI = new LoadInst(Ctr, "ld.epp.ctr", addPos);
-            auto *BI = BinaryOperator::CreateAdd(
-                    LI, ConstantInt::getIntegerValue(CtrTy, Increment));
+
+#ifndef RT32
+            auto *CI = ConstantInt::getIntegerValue(CtrTy, Increment);
+#else
+            auto I64 = APInt(64, Increment.getLimitedValue(), true);
+            auto *CI = ConstantInt::getIntegerValue(CtrTy, I64);
+#endif
+            auto *BI = BinaryOperator::CreateAdd(LI, CI);
             BI->insertAfter(LI);
             (new StoreInst(BI, Ctr))->insertAfter(BI);
         }
     };
 
-    auto InsertLogPath = [&logFun2, &Ctr, &CtrTy](BasicBlock *BB) {
+    auto InsertLogPath = [&logFun2, &Ctr, &CtrTy, &Zap](BasicBlock *BB) {
         auto logPos = BB->getTerminator();
         auto *LI = new LoadInst(Ctr, "ld.epp.ctr", logPos);
         auto *CI = CallInst::Create(logFun2, {LI}, "");
         CI->insertAfter(LI);
-        (new StoreInst(ConstantInt::getIntegerValue(CtrTy, APInt(128, 0, true)),
-                       Ctr))->insertAfter(CI);
+        (new StoreInst(Zap, Ctr))->insertAfter(CI);
     };
 
     auto blockIndex = [](const PHINode *Phi, const BasicBlock *BB) -> uint32_t {

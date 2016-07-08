@@ -174,6 +174,11 @@ void EPPEncode::encode(Function &F) {
         }
         numPaths.insert({B, pathCount});
     }
+
+#ifdef RT32
+    assert(numPaths[Entry].getLimitedValue() < ~0ULL
+            && "Numpaths greater than 2^64, recompile in 64-bit mode");
+#endif
    
     errs() << "NumPaths : " << numPaths[Entry] << "\n";
 }

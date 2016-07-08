@@ -7,6 +7,7 @@ set(PACKAGE_STRING "${PACKAGE_NAME} ${PACKAGE_VERSION}")
 set(PACKAGE_BUGREPORT "ska124@sfu.ca")
 
 set(CMAKE_CXX_FLAGS "-std=c++1y -Wno-deprecated-declarations")
+option(RT32 "32 bit EPP Runtime" OFF)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -69,11 +70,21 @@ else()
     message(FATAL_ERROR "Pasha needs clang ${CLANG_VERSION_REQ}.X in PATH, Cmake will exit" )
 endif()
 
+
+# 32 bit runtime
+if(RT32)
+    message(STATUS "Building 32 bit runtime for EPP")
+    set(BITCODE_FLAGS "-m32")
+else()
+    set(BITCODE_FLAGS "")
+endif()
+
+
 function(add_bitcode BC FILES) 
     add_custom_command(
         OUTPUT ${BC}
         COMMAND ${CLANG_EXE} 
-                -c -emit-llvm
+                -c -emit-llvm ${BITCODE_FLAGS}
                 ${FILES}
                 -o ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${BC}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -97,6 +108,8 @@ if(DOXYGEN_FOUND)
         COMMENT "Generating API documentation for PASHA" VERBATIM
     )
 endif(DOXYGEN_FOUND)
+
+
 
 
 ############## FINAL PROJECT CONFIG #################
