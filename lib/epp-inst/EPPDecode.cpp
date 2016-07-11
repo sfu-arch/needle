@@ -35,6 +35,7 @@ struct Path {
     Function *Func;
     APInt id;
     uint64_t count;
+    pair<PathType, vector<BasicBlock*>> blocks;
 };
 
 static bool isFunctionExiting(BasicBlock *BB) {
@@ -123,11 +124,16 @@ bool EPPDecode::runOnModule(Module &M) {
     }
     inFile.close();
 
-    vector<pair<PathType, vector<llvm::BasicBlock *>>>
-        bbSequences;
-    bbSequences.reserve(totalPathCount);
+    //vector<pair<PathType, vector<llvm::BasicBlock *>>>
+        //bbSequences;
+    //bbSequences.reserve(totalPathCount);
+    //for (auto &path : paths) {
+        //bbSequences.push_back(decode(*path.Func, path.id, *Enc));
+    //}
+
+
     for (auto &path : paths) {
-        bbSequences.push_back(decode(*path.Func, path.id, *Enc));
+        path.blocks = decode(*path.Func, path.id, *Enc);
     }
 
 
@@ -142,8 +148,9 @@ bool EPPDecode::runOnModule(Module &M) {
 
     uint64_t pathFail = 0;
     // Dump paths
-    for (size_t i = 0, e = bbSequences.size(); i < e; ++i) {
-        auto pType = bbSequences[i].first;
+    //for (size_t i = 0, e = bbSequences.size(); i < e; ++i) {
+    for (auto &path : paths) {
+        auto pType = path.blocks.first; 
         int start = 0, end = 0;
         switch (pType) {
         case RIRO:
@@ -159,12 +166,12 @@ bool EPPDecode::runOnModule(Module &M) {
             end = 1;
             break;
         }
-        vector<BasicBlock *> blocks(bbSequences[i].second.begin() + start,
-                                    bbSequences[i].second.end() - end);
+        vector<BasicBlock *> blocks(path.blocks.second.begin() + start,
+                                    path.blocks.second.end() - end);
 
         if (auto Count = pathCheck(blocks)) {
-            DEBUG(errs() << i << " " << paths[i].count << " ");
-            Outfile << paths[i].id.toString(10, false) << " " << paths[i].count
+            DEBUG(errs() << path.count << " ");
+            Outfile << path.id.toString(10, false) << " " << path.count
                     << " ";
             Outfile << static_cast<int>(pType) << " ";
             Outfile << Count << " ";
@@ -174,8 +181,8 @@ bool EPPDecode::runOnModule(Module &M) {
             pathFail++;
             DEBUG(errs() << "Path Fail\n");
         }
-        DEBUG(errs() << "Path ID: " << paths[i].id.toString(10, false)
-                     << " Freq: " << paths[i].count << "\n");
+        DEBUG(errs() << "Path ID: " << path.id.toString(10, false)
+                     << " Freq: " << path.count << "\n");
         if (printSrcLines)
             printPathSrc(blocks);
         DEBUG(errs() << "\n");
