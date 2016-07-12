@@ -48,6 +48,7 @@ void printDFG(llvm::Module&);
 void labelUID(llvm::Module&);
 void labelUID(llvm::Function&);
 void instrumentDFG(llvm::Function&);
+vector<BasicBlock *> postOrder(Function &, LoopInfo *);
 }
 
 namespace helpers {
@@ -93,4 +94,5 @@ class LabelUID : public FunctionPass, public InstVisitor<LabelUID> {
 };
     
 }
+
 #endif
