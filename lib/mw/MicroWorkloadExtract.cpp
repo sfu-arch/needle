@@ -867,10 +867,11 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     auto *Int32Ty = Type::getInt32Ty(Ctx);
     auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
 
-    // Debug
-    // if(SimulateDFG)
-    //     CallInst::Create(Mod->getOrInsertFunction("__success", 
-    //             FunctionType::get(VoidTy, {}, false)), {}, "", Success);
+#ifdef PASHA_DEBUG
+     if(SimulateDFG)
+         CallInst::Create(Mod->getOrInsertFunction("__success", 
+                 FunctionType::get(VoidTy, {}, false)), {}, "", Success);
+#endif
 
     auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
     auto *Merge = BasicBlock::Create(Ctx, "mergeblock", &F, nullptr);
@@ -927,10 +928,11 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     vector<Value *> Args = {UGEP, NSLoad};
     CallInst::Create(Undo, Args, "", Fail);
 
-    // Debug
-    // if(SimulateDFG)
-    //     CallInst::Create(Mod->getOrInsertFunction("__fail", 
-    //             FunctionType::get(VoidTy, {}, false)), {}, "", Fail);
+#ifdef PASHA_DEBUG
+     if(SimulateDFG)
+         CallInst::Create(Mod->getOrInsertFunction("__fail", 
+                 FunctionType::get(VoidTy, {}, false)), {}, "", Fail);
+#endif    
 
     BranchInst::Create(SSplit, Fail);
     // Fail Path -- End

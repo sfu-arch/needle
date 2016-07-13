@@ -109,7 +109,11 @@ if(DOXYGEN_FOUND)
     )
 endif(DOXYGEN_FOUND)
 
+# Debug Variable Definition
 
+if(CMAKE_BUILD_TYPE EQUAL "Debug")
+    add_definitions(-DPASHA_DEBUG)
+endif()
 
 
 ############## FINAL PROJECT CONFIG #################
