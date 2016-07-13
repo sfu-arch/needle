@@ -37,7 +37,7 @@ extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
 
-extern bool SimulateDFG;
+extern cl::opt<bool> SimulateDFG;
 
 void MicroWorkloadExtract::readSequences() {
     ifstream SeqFile(SeqFilePath.c_str(), ios::in);
