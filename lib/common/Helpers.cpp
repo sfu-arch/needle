@@ -132,18 +132,19 @@ DFGPrinter::visitBasicBlock(BasicBlock& BB) {
             for(unsigned c = 0; c < I.getNumOperands(); c++)
                 Operands.push_back(I.getOperand(c));
         }
-
+       
         for(auto OI : Operands) {
-            OI->print(rso);
+            std::string op;
+            llvm::raw_string_ostream rso2(op);
+            OI->print(rso2);
             if(nodes.count(OI) == 0) {
                 insertNode(OI, counter);
-                //nodes.insert(make_pair(OI, counter));
                 counter++;
                 if(isa<Argument>(OI)) {
-                    dot << nodeFormat(nodes[OI], "Arg", "blue", rso.str());
+                    dot << nodeFormat(nodes[OI], "Arg", "blue", rso2.str());
                     dot << nodes[OI] << "->" << nodes[&I] << " [color=blue];\n";  
                 } else if(isa<Constant>(OI)) {
-                    dot << nodeFormat(nodes[OI], "Const", "green", rso.str());
+                    dot << nodeFormat(nodes[OI], "Const", "green", rso2.str());
                     dot << nodes[OI] << "->" << nodes[&I] << " [color=green];\n";  
                 } else if(isa<BasicBlock>(OI)){
                     dot << nodeFormat(nodes[OI], "BB", "green", BB.getName().str());
