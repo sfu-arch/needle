@@ -1,9 +1,5 @@
 #include <cstdint>
 #include <cstdio>
-#include <fstream>
-#include <unordered_map>
-
-#include "epprt.h"
 #include <map>
 
 extern "C" {
@@ -12,6 +8,8 @@ extern "C" {
 // conflict with existing symbol names in the examined programs.
 // e.g. EPP(entry) yields PaThPrOfIlInG_entry
 #define EPP(X) PaThPrOfIlInG_##X
+
+#ifndef RT32
 
 std::map<__int128, uint64_t> EPP(path);
 
@@ -29,5 +27,23 @@ void EPP(save)() {
     }
     fclose(fp);
 }
+
+#else
+
+std::map<uint64_t, uint64_t> EPP(path);
+
+void EPP(logPath2)(uint64_t Val) { EPP(path)[Val] += 1; }
+
+void EPP(save)() {
+    FILE *fp = fopen("path-profile-results.txt", "w");
+    fprintf(fp, "%u\n", EPP(path).size());
+    for (auto &KV : EPP(path)) {
+        // Print the hex values with a 0x prefix messes up
+        // the APInt constructor.
+        fprintf(fp, "%016llx %llu\n", KV.first, KV.second);
+    }
+    fclose(fp);
+}
+#endif
 
 }

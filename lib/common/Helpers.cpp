@@ -123,7 +123,17 @@ DFGPrinter::visitBasicBlock(BasicBlock& BB) {
             } 
         }
 
-        for(auto OI : I.operand_values()) {
+        vector<Value*> Operands;
+        if(isa<CallInst>(&I) || isa<InvokeInst>(&I)) {
+            CallSite CS(&I);
+            for(unsigned c = 0; c < CS.getNumArgOperands(); c++) 
+                Operands.push_back(CS.getArgument(c));
+        } else {
+            for(unsigned c = 0; c < I.getNumOperands(); c++)
+                Operands.push_back(I.getOperand(c));
+        }
+
+        for(auto OI : Operands) {
             OI->print(rso);
             if(nodes.count(OI) == 0) {
                 insertNode(OI, counter);

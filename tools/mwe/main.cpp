@@ -50,11 +50,6 @@ cl::opt<std::string>
     HelperLib("u", cl::desc("Path to the undo library bitcode module"),
             cl::Required);
 
-// cl::opt<std::string>
-//     RuntimeLib("r", cl::desc("Path to the runtime library bitcode module"),
-//             cl::Required);
-
-
 cl::opt<ExtractType> ExtractAs(cl::desc("Choose extract type, trace / chop"),
                                cl::values(clEnumVal(trace, "Extract as trace"),
                                           clEnumVal(chop, "Extract as chop"),
@@ -93,8 +88,8 @@ cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
                         cl::value_desc("filename"), cl::Required);
 
 cl::opt<bool> SimulateDFG("simdfg", 
-        cl::desc("Generate dfg.<>.dot for simulation, add instrumentation to binary for Pintool"), 
-        cl::value_desc("boolean"), cl::Optional, cl::init(false));
+        cl::desc("Generate dfg.*.dot for simulation, add instrumentation to binary for Pintool"), 
+        cl::value_desc("boolean"), cl::init(false));
 
 bool isTargetFunction(const Function &f,
                       const cl::list<std::string> &FunctionList) {
@@ -136,11 +131,8 @@ int main(int argc, char **argv, const char **env) {
     vector<unique_ptr<Module>> ExtractedModules;
 
     common::optimizeModule(module.get());
-    // common::lowerSwitch(*module, FunctionList[0]);
-    // common::breakCritEdges(*module, FunctionList[0]);
 
     legacy::PassManager pm;
-    // pm.add(new DataLayoutPass());
     pm.add(new llvm::AssumptionCacheTracker());
     pm.add(createLoopSimplifyPass());
     pm.add(createBasicAAWrapperPass());
@@ -149,7 +141,6 @@ int main(int argc, char **argv, const char **env) {
     pm.add(new epp::PeruseInliner());
     pm.add(new pasha::Simplify(FunctionList[0]));
     pm.add(new epp::Namer());
-    // pm.add(new pasha::LoopConverter());
     pm.add(new LoopInfoWrapperPass());
     pm.add(llvm::createPostDomTree());
     pm.add(new DominatorTreeWrapperPass());
@@ -162,7 +153,6 @@ int main(int argc, char **argv, const char **env) {
     pm.add(createVerifierPass());
     pm.run(*module);
 
-    // common::writeModule(module.get(), "orig.ll" );
 
     // Use a Composite module instead of linkning into the original
     // as it doesn't work -- no idea why.
@@ -176,20 +166,13 @@ int main(int argc, char **argv, const char **env) {
     assert(HelperMod.get() && "Unable to read undo bitcode module");
     L.linkInModule(std::move(HelperMod));
 
-    //unique_ptr<Module> RuntimeMod(parseIRFile(RuntimeLib, err, getGlobalContext()));
-    //assert(RuntimeMod.get() && "Unable to read runtime bitcode module");
-    //L.linkInModule(std::move(RuntimeMod));
-
-
     for (auto &M : ExtractedModules) {
         errs() << "Linking " << M->getName() << "\n";
         bool ret = L.linkInModule(move(M));
         assert(ret == false && "Error in linkInModule");
     }
-    // StripDebugInfo(*Composite);
 
     common::writeModule(Composite.get(), "full.ll" );
-
     common::generateBinary(*Composite, outFile, optLevel, libPaths, libraries);
 
     return 0;

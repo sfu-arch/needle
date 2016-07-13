@@ -6,7 +6,7 @@ set(PACKAGE_VERSION 0.1)
 set(PACKAGE_STRING "${PACKAGE_NAME} ${PACKAGE_VERSION}")
 set(PACKAGE_BUGREPORT "ska124@sfu.ca")
 
-set(CMAKE_CXX_FLAGS "-std=c++1y -Wno-deprecated-declarations")
+set(CMAKE_CXX_FLAGS "-std=c++1y -Werror -Wno-deprecated-declarations")
 option(RT32 "32 bit EPP Runtime" OFF)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)

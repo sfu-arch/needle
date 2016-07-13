@@ -32,7 +32,7 @@ extern SmallVector<BasicBlock *, 16>
 getTopoChop(DenseSet<BasicBlock *> &Chop, BasicBlock *StartBB,
             DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges);
 
-extern bool SimulateDFG;
+extern cl::opt<bool> SimulateDFG;
 
 // Static Functions
 
