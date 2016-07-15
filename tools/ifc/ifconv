@@ -1,0 +1,68 @@
+#!/usr/bin/python
+
+import sys
+import networkx as nx
+import sympy as sm
+
+def getCond(CFG, n, p, conds):
+    if CFG.node[p]['S0'] == str(n):
+        return conds[n]
+    else:
+        return ~conds[n]
+
+def forwardBranchRemoval(CFG):
+    """
+    Remove forward branches by applying if-conversion.
+    Each basic block has a predicate and a condition. 
+    If the block is terminated by a conditional branch the 
+    For block B_n, which is the target of the True condition
+    the predicate for the block is computed as P_{n-1} & C_{n-1}.
+    At merge points the predicate is computed as the disjunction 
+    of all incoming predicate and condition conjunctions of 
+    predecessors.
+    """
+
+    nodes = nx.algorithms.topological_sort(CFG)
+
+    conds = {}
+    # Initialize node to conditions map, the symbol is the condition
+    # for each block. The predicate for each block is computed from
+    # the condition of its predecessors.     
+    for k,v in zip(nodes, sm.symbols(nodes)):
+        conds[k] = v
+   
+    preds = {}
+    # Use a symbolic version of True to represent the fact that
+    # the predicate for the entry block to the function is always 
+    # true. The predicate for the
+    # entry block is always True.
+
+    preds[nodes[0]] = sm.true
+
+    # Compute predicates
+    for n in nodes[1:]:
+        preds[n] = sm.false
+        for p in CFG.predecessors(n):
+            preds[n] = preds[n] | (preds[p] & getCond(CFG, n, p, conds)) 
+
+    print "Predicates"
+    for n in nodes:
+        print CFG.node[n]['label'], preds[n]
+    
+    print
+    print "Predicates - Simplified"
+    for n in nodes:
+        print CFG.node[n]['label'], sm.to_dnf(preds[n], True)
+        
+    
+
+def main(filename):
+    CFG = nx.DiGraph(nx.drawing.nx_agraph.read_dot(filename))
+    assert nx.algorithms.is_directed_acyclic_graph(CFG) 
+    for n in CFG.nodes():
+        assert CFG.out_degree(n) <= 2
+    forwardBranchRemoval(CFG) 
+
+
+if __name__ == "__main__":
+    main(sys.argv[1])
