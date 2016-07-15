@@ -217,6 +217,28 @@ void MicroWorkloadHelper::replaceGuards() {
         GuardFunc->eraseFromParent();
 }
 
+void 
+writeIfConversionDot(Function &F) {
+    ofstream Out("ifc."+F.getName().str()+".dot", ios::out);
+    Out << "digraph \"IFC Graph\" {\n";
+    for(auto &BB : F) {
+        Out << "Node" << &BB 
+            << " [shape=record, label=\"" << BB.getName().str() << "\""; 
+
+        auto T = BB.getTerminator();
+        for(unsigned I = 0; I < T->getNumSuccessors(); I++) {
+            Out << ", S" << I << "=\"Node" << T->getSuccessor(I) << "\"";
+        }
+        Out << "];\n";
+
+        for(unsigned I = 0; I < T->getNumSuccessors(); I++) {
+            Out << "Node" << &BB << "->Node" << T->getSuccessor(I) << ";\n";
+        } 
+    } 
+    Out << "}\n";
+    Out.close();
+}
+
 bool MicroWorkloadHelper::runOnModule(Module &M) {
     common::optimizeModule(&M);
     if(SimulateDFG) {
@@ -226,6 +248,7 @@ bool MicroWorkloadHelper::runOnModule(Module &M) {
     }
     replaceGuards();
     addUndoLog();
+    writeIfConversionDot(*Offload);
     return false;
 }
 
