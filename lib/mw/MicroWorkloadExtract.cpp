@@ -317,48 +317,6 @@ void MicroWorkloadExtract::extractHelper(
         }
     }
 
-    // function<void(Value &)> handleOperands;
-    // handleOperands = [&VMap, &handleOperands, &StaticFunc](Value &V) {
-    //     User &I = *cast<User>(&V);
-    //     for (auto OI = I.op_begin(), E = I.op_end(); OI != E; ++OI) {
-    //         if (auto CE = dyn_cast<ConstantExpr>(*OI)) {
-    //             handleOperands(*CE);
-    //         }
-    //         if (auto *GV = dyn_cast<GlobalVariable>(*OI)) {
-    //             // Since we may have already patched the global
-    //             // don't try to patch it again.
-    //             if (VMap.count(GV) == 0)
-    //                 continue;
-    //             // Check if we came from a ConstantExpr
-    //             if (auto CE = dyn_cast<ConstantExpr>(&V)) {
-    //                 int32_t OpIdx = -1;
-    //                 while (I.getOperand(++OpIdx) != GV)
-    //                     ;
-    //                 auto NCE = CE->getWithOperandReplaced(
-    //                     OpIdx, cast<Constant>(VMap[GV]));
-    //                 vector<User *> Users(CE->user_begin(), CE->user_end());
-    //                 for (auto U = Users.begin(), UE = Users.end(); U != UE;
-    //                      ++U) {
-    //                     // All users of ConstExpr should be instructions
-    //                     auto Ins = dyn_cast<Instruction>(*U);
-    //                     if (Ins->getParent()->getParent() == StaticFunc) {
-    //                         Ins->replaceUsesOfWith(CE, NCE);
-    //                     }
-    //                 }
-    //             } else {
-    //                 I.replaceUsesOfWith(GV, VMap[GV]);
-    //             }
-    //         }
-    //     }
-    // };
-
-    // // Patch Globals
-    // for (auto &BB : *StaticFunc) {
-    //     for (auto &I : BB) {
-    //         handleOperands(I);
-    //     }
-    // }
-    //
 
     auto handleCExpr = [] (ConstantExpr *CE, Value *Old, Value *New) -> ConstantExpr* {
         int32_t OpIdx = -1;
@@ -400,10 +358,8 @@ void MicroWorkloadExtract::extractHelper(
     unsigned count = 0;
     for(auto &CE : UpdateCExpr) {
         vector<ConstantExpr*> More;
-        //vector<User *> Users(CE->user_begin(), CE->user_end());
-        //for (auto &U : Users ) {
-        //vector<User *> Users(CE->user_begin(), CE->user_end());
-        for (auto U = CE->user_begin(), UE = CE->user_end(); U != UE; U++) {
+        for (auto U = CE->user_begin(), 
+                UE = CE->user_end(); U != UE; U++) {
             if(auto UCE = dyn_cast<ConstantExpr>(*U)) {
                 assert(VMap.count(CE) && "Mapping for ConstantExpr");
                 auto NCE = handleCExpr(UCE, CE, VMap[CE]);
