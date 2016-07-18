@@ -43,7 +43,7 @@ def forwardBranchRemoval(CFG):
     for n in nodes[1:]:
         preds[n] = sm.false
         for p in CFG.predecessors(n):
-            preds[n] = preds[n] | (preds[p] & getCond(CFG, n, p, conds)) 
+            preds[n] = preds[n] | (preds[p] & getCond(CFG, n, p, conds))
 
     print "Predicates"
     for n in nodes:

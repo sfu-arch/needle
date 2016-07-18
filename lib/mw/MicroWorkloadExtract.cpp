@@ -317,45 +317,114 @@ void MicroWorkloadExtract::extractHelper(
         }
     }
 
-    function<void(Value &)> handleOperands;
-    handleOperands = [&VMap, &handleOperands, &StaticFunc](Value &V) {
-        User &I = *cast<User>(&V);
-        for (auto OI = I.op_begin(), E = I.op_end(); OI != E; ++OI) {
-            if (auto CE = dyn_cast<ConstantExpr>(*OI)) {
-                handleOperands(*CE);
-            }
-            if (auto *GV = dyn_cast<GlobalVariable>(*OI)) {
-                // Since we may have already patched the global
-                // don't try to patch it again.
-                if (VMap.count(GV) == 0)
-                    continue;
-                // Check if we came from a ConstantExpr
-                if (auto CE = dyn_cast<ConstantExpr>(&V)) {
-                    int32_t OpIdx = -1;
-                    while (I.getOperand(++OpIdx) != GV)
-                        ;
-                    auto NCE = CE->getWithOperandReplaced(
-                        OpIdx, cast<Constant>(VMap[GV]));
-                    vector<User *> Users(CE->user_begin(), CE->user_end());
-                    for (auto U = Users.begin(), UE = Users.end(); U != UE;
-                         ++U) {
-                        // All users of ConstExpr should be instructions
-                        auto Ins = dyn_cast<Instruction>(*U);
-                        if (Ins->getParent()->getParent() == StaticFunc) {
-                            Ins->replaceUsesOfWith(CE, NCE);
-                        }
-                    }
-                } else {
-                    I.replaceUsesOfWith(GV, VMap[GV]);
-                }
-            }
+    // function<void(Value &)> handleOperands;
+    // handleOperands = [&VMap, &handleOperands, &StaticFunc](Value &V) {
+    //     User &I = *cast<User>(&V);
+    //     for (auto OI = I.op_begin(), E = I.op_end(); OI != E; ++OI) {
+    //         if (auto CE = dyn_cast<ConstantExpr>(*OI)) {
+    //             handleOperands(*CE);
+    //         }
+    //         if (auto *GV = dyn_cast<GlobalVariable>(*OI)) {
+    //             // Since we may have already patched the global
+    //             // don't try to patch it again.
+    //             if (VMap.count(GV) == 0)
+    //                 continue;
+    //             // Check if we came from a ConstantExpr
+    //             if (auto CE = dyn_cast<ConstantExpr>(&V)) {
+    //                 int32_t OpIdx = -1;
+    //                 while (I.getOperand(++OpIdx) != GV)
+    //                     ;
+    //                 auto NCE = CE->getWithOperandReplaced(
+    //                     OpIdx, cast<Constant>(VMap[GV]));
+    //                 vector<User *> Users(CE->user_begin(), CE->user_end());
+    //                 for (auto U = Users.begin(), UE = Users.end(); U != UE;
+    //                      ++U) {
+    //                     // All users of ConstExpr should be instructions
+    //                     auto Ins = dyn_cast<Instruction>(*U);
+    //                     if (Ins->getParent()->getParent() == StaticFunc) {
+    //                         Ins->replaceUsesOfWith(CE, NCE);
+    //                     }
+    //                 }
+    //             } else {
+    //                 I.replaceUsesOfWith(GV, VMap[GV]);
+    //             }
+    //         }
+    //     }
+    // };
+
+    // // Patch Globals
+    // for (auto &BB : *StaticFunc) {
+    //     for (auto &I : BB) {
+    //         handleOperands(I);
+    //     }
+    // }
+    //
+
+    auto handleCExpr = [] (ConstantExpr *CE, Value *Old, Value *New) -> ConstantExpr* {
+        int32_t OpIdx = -1;
+        while (CE->getOperand(++OpIdx) != Old);
+        auto NCE = CE->getWithOperandReplaced(OpIdx, cast<Constant>(New));
+        return cast<ConstantExpr>(NCE);
+    };
+    
+    auto replaceIfOutlined = [&StaticFunc](Instruction* I, 
+            Value* Old, Value* New) {
+        if (I->getParent()->getParent() == StaticFunc) {
+            I->replaceUsesOfWith(Old, New);
         }
     };
+   
+    vector<ConstantExpr*> UpdateCExpr;
+    
+    for(auto &GV : Globals) {
+        // Get the user of the global
+        vector<User *> Users(GV->user_begin(), GV->user_end());
+        for (auto &U : Users ) {
+            if(auto I = dyn_cast<Instruction>(U)) {
+                replaceIfOutlined(I, GV, VMap[GV]);
+            } else if(auto CE = dyn_cast<ConstantExpr>(U)) {
+                auto NCE = handleCExpr(CE, GV, VMap[GV]);
+                VMap[CE] = NCE;
+                UpdateCExpr.push_back(CE);
+            } else {
+                assert(false && "Unexpected Global User");
+            }
+        }
+    }
 
-    // Patch Globals
-    for (auto &BB : *StaticFunc) {
-        for (auto &I : BB) {
-            handleOperands(I);
+
+    // Update the uses of the constant expression which now have
+    // copies if their use exists in the outlined region.
+
+    vector<ConstantExpr*> AllCExpr(UpdateCExpr.begin(), UpdateCExpr.end());
+    unsigned count = 0;
+    for(auto &CE : UpdateCExpr) {
+        vector<ConstantExpr*> More;
+        //vector<User *> Users(CE->user_begin(), CE->user_end());
+        //for (auto &U : Users ) {
+        //vector<User *> Users(CE->user_begin(), CE->user_end());
+        for (auto U = CE->user_begin(), UE = CE->user_end(); U != UE; U++) {
+            if(auto UCE = dyn_cast<ConstantExpr>(*U)) {
+                assert(VMap.count(CE) && "Mapping for ConstantExpr");
+                auto NCE = handleCExpr(UCE, CE, VMap[CE]);
+                VMap[UCE] = NCE;
+                More.push_back(UCE);
+            }
+        }
+        AllCExpr.insert(AllCExpr.end(), More.begin(), More.end());
+        UpdateCExpr.clear();
+        copy(More.begin(), More.end(), back_inserter(UpdateCExpr));
+        // WTF : Using vector::swap instead of clear and subsequent 
+        // copy causes memory corruption?
+    }
+
+    for(auto &ACE : AllCExpr) {
+        vector<User *> Users(ACE->user_begin(), ACE->user_end());
+        for (auto &U : Users) {
+            if(auto I = dyn_cast<Instruction>(U)) {
+                assert(VMap[ACE] && "ConstantExpr not mapped");
+                replaceIfOutlined(I, ACE, VMap[ACE]);
+            }
         }
     }
 
@@ -475,9 +544,9 @@ void MicroWorkloadExtract::extractHelper(
 
             // Is this a backedge? Remove the incoming value
             // Is this predicated on a block outside the chop? Remove
-            assert(BackEdges.count(make_pair(Blk, Phi->getParent())) == 0 &&
-                   "Backedge Phi's should not exists -- should be promoted "
-                   "to LiveIn");
+            //assert(BackEdges.count(make_pair(Blk, Phi->getParent())) == 0 &&
+                   //"Backedge Phi's should not exists -- should be promoted "
+                   //"to LiveIn");
 
             if (find(RevTopoChop.begin(), RevTopoChop.end(), Blk) ==
                 RevTopoChop.end()) {
@@ -1062,9 +1131,9 @@ void MicroWorkloadExtract::process(Function &F) {
         instrument(F, Blocks, Offload->getFunctionType(), 
                 LiveIn, LiveOut, DT, P.Id);
 
-        common::printCFG(F);
-
-        common::writeModule(Mod, (P.Id) + string(".ll"));
+        //common::printCFG(F);
+        //common::writeModule(Mod, (P.Id) + string(".ll"));
+        //
         assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
     }
 }
