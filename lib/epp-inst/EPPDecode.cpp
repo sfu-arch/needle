@@ -23,8 +23,7 @@ extern bool isTargetFunction(const Function &, const cl::list<string> &);
 extern cl::opt<string> profile;
 extern cl::opt<bool> printSrcLines;
 
-void printPath(vector<llvm::BasicBlock *> &Blocks,
-               ofstream &Outfile) {
+void printPath(vector<llvm::BasicBlock *> &Blocks, ofstream &Outfile) {
     for (auto *BB : Blocks) {
         DEBUG(errs() << BB->getName() << " ");
         Outfile << BB->getName().str() << " ";
@@ -35,7 +34,7 @@ struct Path {
     Function *Func;
     APInt id;
     uint64_t count;
-    pair<PathType, vector<BasicBlock*>> blocks;
+    pair<PathType, vector<BasicBlock *>> blocks;
 };
 
 static bool isFunctionExiting(BasicBlock *BB) {
@@ -124,18 +123,16 @@ bool EPPDecode::runOnModule(Module &M) {
     }
     inFile.close();
 
-    //vector<pair<PathType, vector<llvm::BasicBlock *>>>
-        //bbSequences;
-    //bbSequences.reserve(totalPathCount);
-    //for (auto &path : paths) {
-        //bbSequences.push_back(decode(*path.Func, path.id, *Enc));
+    // vector<pair<PathType, vector<llvm::BasicBlock *>>>
+    // bbSequences;
+    // bbSequences.reserve(totalPathCount);
+    // for (auto &path : paths) {
+    // bbSequences.push_back(decode(*path.Func, path.id, *Enc));
     //}
-
 
     for (auto &path : paths) {
         path.blocks = decode(*path.Func, path.id, *Enc);
     }
-
 
     // Sort the paths in descending order of their frequency
     // If the frequency is same, descending order of id (id cannot be same)
@@ -148,9 +145,9 @@ bool EPPDecode::runOnModule(Module &M) {
 
     uint64_t pathFail = 0;
     // Dump paths
-    //for (size_t i = 0, e = bbSequences.size(); i < e; ++i) {
+    // for (size_t i = 0, e = bbSequences.size(); i < e; ++i) {
     for (auto &path : paths) {
-        auto pType = path.blocks.first; 
+        auto pType = path.blocks.first;
         int start = 0, end = 0;
         switch (pType) {
         case RIRO:
@@ -171,8 +168,7 @@ bool EPPDecode::runOnModule(Module &M) {
 
         if (auto Count = pathCheck(blocks)) {
             DEBUG(errs() << path.count << " ");
-            Outfile << path.id.toString(10, false) << " " << path.count
-                    << " ";
+            Outfile << path.id.toString(10, false) << " " << path.count << " ";
             Outfile << static_cast<int>(pType) << " ";
             Outfile << Count << " ";
             printPath(blocks, Outfile);
@@ -193,28 +189,27 @@ bool EPPDecode::runOnModule(Module &M) {
     return false;
 }
 
-
 pair<PathType, vector<llvm::BasicBlock *>>
 EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
     vector<llvm::BasicBlock *> Sequence;
     auto *Position = &F.getEntryBlock();
-    auto &ACFG = Enc.ACFG; 
+    auto &ACFG = Enc.ACFG;
 
     DEBUG(errs() << "Decode Called On: " << pathID << "\n");
 
     vector<Edge> SelectedEdges;
-    while(true) {
+    while (true) {
         Sequence.push_back(Position);
-        if(isFunctionExiting(Position)) 
+        if (isFunctionExiting(Position))
             break;
         APInt Wt(128, 0, true);
         Edge Select = {nullptr, nullptr};
         DEBUG(errs() << Position->getName() << " (\n");
-        for(auto *Tgt : ACFG.succs(Position)) {
+        for (auto *Tgt : ACFG.succs(Position)) {
             auto EWt = ACFG[{Position, Tgt}];
-            DEBUG(errs() << "\t" << Tgt->getName() << " [" << EWt<< "]\n");
-            if (ACFG[{Position, Tgt}].uge(Wt) 
-                    && ACFG[{Position, Tgt}].ule(pathID)) {
+            DEBUG(errs() << "\t" << Tgt->getName() << " [" << EWt << "]\n");
+            if (ACFG[{Position, Tgt}].uge(Wt) &&
+                ACFG[{Position, Tgt}].ule(pathID)) {
                 Select = {Position, Tgt};
                 Wt = ACFG[{Position, Tgt}];
             }
@@ -226,18 +221,17 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
         pathID -= Wt;
     }
 
-
-    if(SelectedEdges.empty())
+    if (SelectedEdges.empty())
         return {RIRO, Sequence};
 
     auto FakeEdges = ACFG.getFakeEdges();
 
 #define SET_BIT(n, x) (n |= 1ULL << x)
     uint64_t Type = 0;
-    if(FakeEdges.count(SelectedEdges.front())) {
+    if (FakeEdges.count(SelectedEdges.front())) {
         SET_BIT(Type, 0);
     }
-    if(FakeEdges.count(SelectedEdges.back())) {
+    if (FakeEdges.count(SelectedEdges.back())) {
         SET_BIT(Type, 1);
     }
 #undef SET_BIT

@@ -13,10 +13,10 @@
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 
+#include "AltCFG.h"
 #include "Common.h"
 #include "EPPEncode.h"
 #include "EPPProfile.h"
-#include "AltCFG.h"
 #include <cassert>
 #include <tuple>
 #include <unordered_map>
@@ -27,11 +27,11 @@ using namespace std;
 
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
-        const cl::list<std::string> &FunctionList);
+                             const cl::list<std::string> &FunctionList);
 
 bool EPPProfile::doInitialization(Module &m) {
     assert(FunctionList.size() == 1 &&
-            "Only one function can be marked for profiling");
+           "Only one function can be marked for profiling");
     return false;
 }
 
@@ -51,7 +51,7 @@ bool EPPProfile::runOnModule(Module &module) {
 
     auto *voidTy = Type::getVoidTy(Ctx);
 
-    auto *init = 
+    auto *init =
         module.getOrInsertFunction("PaThPrOfIlInG_init", voidTy, nullptr);
     appendToGlobalCtors(module, llvm::cast<Function>(init), 0);
 
@@ -59,14 +59,12 @@ bool EPPProfile::runOnModule(Module &module) {
         module.getOrInsertFunction("PaThPrOfIlInG_save", voidTy, nullptr);
     appendToGlobalDtors(module, llvm::cast<Function>(printer), 0);
 
-
     return true;
 }
 
-static SmallVector<BasicBlock*, 1>
-getFunctionExitBlocks(Function &F) {
-    SmallVector<BasicBlock*, 1> R;
-    for(auto &BB : F) {
+static SmallVector<BasicBlock *, 1> getFunctionExitBlocks(Function &F) {
+    SmallVector<BasicBlock *, 1> R;
+    for (auto &BB : F) {
         if (dyn_cast<ReturnInst>(BB.getTerminator())) {
             R.push_back(&BB);
         }
@@ -88,16 +86,15 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
 #endif
 
     auto *logFun2 = M->getOrInsertFunction("PaThPrOfIlInG_logPath2", voidTy,
-            CtrTy, nullptr);
+                                           CtrTy, nullptr);
 
     auto *Ctr = new AllocaInst(CtrTy, nullptr, "epp.ctr",
-            &*F.getEntryBlock().getFirstInsertionPt());
+                               &*F.getEntryBlock().getFirstInsertionPt());
 
     auto *SI = new StoreInst(Zap, Ctr);
     SI->insertAfter(Ctr);
 
-    auto InsertInc = [&Ctr, &CtrTy](Instruction *addPos,
-            APInt Increment) {
+    auto InsertInc = [&Ctr, &CtrTy](Instruction *addPos, APInt Increment) {
         if (Increment.ne(APInt(128, 0, true))) {
             DEBUG(errs() << "Inserting Increment " << Increment << " "
                          << addPos->getParent()->getName() << "\n");
@@ -133,7 +130,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     };
 
     auto patchPhis = [&blockIndex](BasicBlock *Src, BasicBlock *Tgt,
-            BasicBlock *New) {
+                                   BasicBlock *New) {
         for (auto &I : *Tgt) {
             if (auto *Phi = dyn_cast<PHINode>(&I)) {
                 Phi->setIncomingBlock(blockIndex(Phi, Src), New);
@@ -142,9 +139,9 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     };
 
     auto interpose = [&Ctx, &patchPhis](BasicBlock *Src,
-            BasicBlock *Tgt) -> BasicBlock * {
+                                        BasicBlock *Tgt) -> BasicBlock * {
         DEBUG(errs() << "Split : " << Src->getName() << " " << Tgt->getName()
-                << "\n");
+                     << "\n");
         // Sanity Checks
         auto found = false;
         for (auto S = succ_begin(Src), E = succ_end(Src); S != E; S++)
@@ -162,35 +159,34 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     };
 
     auto ExitBlocks = getFunctionExitBlocks(F);
-    auto *Entry = &F.getEntryBlock(), *Exit = *ExitBlocks.begin(); 
+    auto *Entry = &F.getEntryBlock(), *Exit = *ExitBlocks.begin();
 
     CFGInstHelper Inst(Enc.ACFG, Entry, Exit);
 
     APInt BackVal = APInt(128, 0, true);
-#define _ std::ignore 
-    tie(_, BackVal, _, _)= Inst.get({Exit, Entry});
+#define _ std::ignore
+    tie(_, BackVal, _, _) = Inst.get({Exit, Entry});
 #undef _
 
-    DEBUG(errs() << "BackVal : " <<  BackVal.toString(10, true) << "\n");
+    DEBUG(errs() << "BackVal : " << BackVal.toString(10, true) << "\n");
 
     SmallVector<Edge, 32> FunctionEdges;
-    // For each edge in the function, get the increments 
+    // For each edge in the function, get the increments
     // for the edge and stick them in there.
-    for(auto &BB : F) {
-        for(auto SB = succ_begin(&BB), SE = succ_end(&BB); 
-                SB != SE; SB++) {
-            FunctionEdges.push_back({&BB, *SB});                         
+    for (auto &BB : F) {
+        for (auto SB = succ_begin(&BB), SE = succ_end(&BB); SB != SE; SB++) {
+            FunctionEdges.push_back({&BB, *SB});
         }
-    }    
+    }
 
-    for(auto &E : FunctionEdges) {
+    for (auto &E : FunctionEdges) {
         APInt Val1(128, 0, true), Val2(128, 0, true);
         bool Exists = false, Log = false;
         tie(Exists, Val1, Log, Val2) = Inst.get(E);
 
-        if(Exists) {
+        if (Exists) {
             auto *Split = interpose(SRC(E), TGT(E));
-            if(Log) {
+            if (Log) {
                 DEBUG(errs() << "Val1 : " << Val1.toString(10, true) << "\n");
                 DEBUG(errs() << "Val2 : " << Val2.toString(10, true) << "\n");
                 InsertInc(&*Split->getFirstInsertionPt(), Val1 + BackVal);
@@ -205,7 +201,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
 
     // Add the logpath function for all function exiting
     // basic blocks.
-    for(auto &EB : ExitBlocks) {
+    for (auto &EB : ExitBlocks) {
         InsertLogPath(EB);
     }
 }

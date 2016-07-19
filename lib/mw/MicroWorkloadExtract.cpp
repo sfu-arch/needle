@@ -318,31 +318,32 @@ void MicroWorkloadExtract::extractHelper(
         }
     }
 
-
-    auto handleCExpr = [] (ConstantExpr *CE, Value *Old, Value *New) -> ConstantExpr* {
+    auto handleCExpr = [](ConstantExpr *CE, Value *Old,
+                          Value *New) -> ConstantExpr * {
         int32_t OpIdx = -1;
-        while (CE->getOperand(++OpIdx) != Old);
+        while (CE->getOperand(++OpIdx) != Old)
+            ;
         auto NCE = CE->getWithOperandReplaced(OpIdx, cast<Constant>(New));
         return cast<ConstantExpr>(NCE);
     };
-    
-    auto replaceIfOutlined = [&StaticFunc](Instruction* I, 
-            Value* Old, Value* New) {
+
+    auto replaceIfOutlined = [&StaticFunc](Instruction *I, Value *Old,
+                                           Value *New) {
         if (I->getParent()->getParent() == StaticFunc) {
             I->replaceUsesOfWith(Old, New);
         }
     };
-   
-    //vector<ConstantExpr*> UpdateCExpr;
-    deque<ConstantExpr*> UpdateCExpr;  
-    
-    for(auto &GV : Globals) {
+
+    // vector<ConstantExpr*> UpdateCExpr;
+    deque<ConstantExpr *> UpdateCExpr;
+
+    for (auto &GV : Globals) {
         // Get the user of the global
         vector<User *> Users(GV->user_begin(), GV->user_end());
-        for (auto &U : Users ) {
-            if(auto I = dyn_cast<Instruction>(U)) {
+        for (auto &U : Users) {
+            if (auto I = dyn_cast<Instruction>(U)) {
                 replaceIfOutlined(I, GV, VMap[GV]);
-            } else if(auto CE = dyn_cast<ConstantExpr>(U)) {
+            } else if (auto CE = dyn_cast<ConstantExpr>(U)) {
                 auto NCE = handleCExpr(CE, GV, VMap[GV]);
                 VMap[CE] = NCE;
                 UpdateCExpr.push_back(CE);
@@ -352,14 +353,13 @@ void MicroWorkloadExtract::extractHelper(
         }
     }
 
-
     // Update the uses of the constant expression which now have
     // copies if their use exists in the outlined region.
 
-    vector<ConstantExpr*> AllCExpr(UpdateCExpr.begin(), UpdateCExpr.end());
+    vector<ConstantExpr *> AllCExpr(UpdateCExpr.begin(), UpdateCExpr.end());
     // for(auto &CE : UpdateCExpr) {
     //     vector<ConstantExpr*> More;
-    //     for (auto U = CE->user_begin(), 
+    //     for (auto U = CE->user_begin(),
     //             UE = CE->user_end(); U != UE; U++) {
     //         if(auto UCE = dyn_cast<ConstantExpr>(*U)) {
     //             assert(VMap.count(CE) && "Mapping for ConstantExpr");
@@ -373,11 +373,10 @@ void MicroWorkloadExtract::extractHelper(
     //     copy(More.begin(), More.end(), back_inserter(UpdateCExpr));
     // }
 
-    while(!UpdateCExpr.empty()) {
+    while (!UpdateCExpr.empty()) {
         auto CE = UpdateCExpr.front();
-         for (auto U = CE->user_begin(), 
-                UE = CE->user_end(); U != UE; U++) {
-            if(auto UCE = dyn_cast<ConstantExpr>(*U)) {
+        for (auto U = CE->user_begin(), UE = CE->user_end(); U != UE; U++) {
+            if (auto UCE = dyn_cast<ConstantExpr>(*U)) {
                 assert(VMap.count(CE) && "Mapping for ConstantExpr");
                 auto NCE = handleCExpr(UCE, CE, VMap[CE]);
                 VMap[UCE] = NCE;
@@ -385,13 +384,13 @@ void MicroWorkloadExtract::extractHelper(
                 AllCExpr.push_back(UCE);
             }
         }
-         UpdateCExpr.pop_front();
+        UpdateCExpr.pop_front();
     }
 
-    for(auto &ACE : AllCExpr) {
+    for (auto &ACE : AllCExpr) {
         vector<User *> Users(ACE->user_begin(), ACE->user_end());
         for (auto &U : Users) {
-            if(auto I = dyn_cast<Instruction>(U)) {
+            if (auto I = dyn_cast<Instruction>(U)) {
                 assert(VMap[ACE] && "ConstantExpr not mapped");
                 replaceIfOutlined(I, ACE, VMap[ACE]);
             }
@@ -514,9 +513,9 @@ void MicroWorkloadExtract::extractHelper(
 
             // Is this a backedge? Remove the incoming value
             // Is this predicated on a block outside the chop? Remove
-            //assert(BackEdges.count(make_pair(Blk, Phi->getParent())) == 0 &&
-                   //"Backedge Phi's should not exists -- should be promoted "
-                   //"to LiveIn");
+            // assert(BackEdges.count(make_pair(Blk, Phi->getParent())) == 0 &&
+            //"Backedge Phi's should not exists -- should be promoted "
+            //"to LiveIn");
 
             if (find(RevTopoChop.begin(), RevTopoChop.end(), Blk) ==
                 RevTopoChop.end()) {
@@ -717,8 +716,10 @@ Function *MicroWorkloadExtract::extract(
                            &notInChop, &DT, &LI, &ReachableFromLast,
                            &isLabelReachable](Instruction *Ins,
                                               Instruction *UIns) {
-        if ( notInChop(UIns) && ( (!isa<PHINode>(UIns) && ReachableFromLast.count(UIns->getParent())) ||
-                                  (isa<PHINode>(UIns) && isLabelReachable(cast<PHINode>(UIns), Ins))) ) {
+        if (notInChop(UIns) && ((!isa<PHINode>(UIns) &&
+                                 ReachableFromLast.count(UIns->getParent())) ||
+                                (isa<PHINode>(UIns) &&
+                                 isLabelReachable(cast<PHINode>(UIns), Ins)))) {
             LiveOut.insert(Ins);
         } else if (LiveIn.count(UIns)) {
             LiveOut.insert(Ins);
@@ -744,11 +745,11 @@ Function *MicroWorkloadExtract::extract(
         }
     }
 
-
-    auto isDefInOutlineBlocks = [&StartBB, &notInChop](Value* Val) -> bool {
-        if( isa<Constant>(Val) ||
-           (isa<Instruction>(Val) && notInChop(dyn_cast<Instruction>(Val))) ||
-           (isa<PHINode>(Val) && dyn_cast<PHINode>(Val)->getParent() == StartBB) ) {
+    auto isDefInOutlineBlocks = [&StartBB, &notInChop](Value *Val) -> bool {
+        if (isa<Constant>(Val) ||
+            (isa<Instruction>(Val) && notInChop(dyn_cast<Instruction>(Val))) ||
+            (isa<PHINode>(Val) &&
+             dyn_cast<PHINode>(Val)->getParent() == StartBB)) {
             return false;
         }
         return true;
@@ -778,8 +779,8 @@ Function *MicroWorkloadExtract::extract(
         assert(RT && "Path with 0 successor should have returninst");
         auto *Val = RT->getReturnValue();
         // This Val is added to the live out set only if it
-        // is def'ed in the extracted region. 
-        if ( Val != nullptr && isDefInOutlineBlocks(Val)) {
+        // is def'ed in the extracted region.
+        if (Val != nullptr && isDefInOutlineBlocks(Val)) {
             LiveOut.insert(Val);
         }
     } break;
@@ -907,9 +908,10 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
 
 #ifdef PASHA_DEBUG
-     if(SimulateDFG)
-         CallInst::Create(Mod->getOrInsertFunction("__success", 
-                 FunctionType::get(VoidTy, {}, false)), {}, "", Success);
+    if (SimulateDFG)
+        CallInst::Create(Mod->getOrInsertFunction(
+                             "__success", FunctionType::get(VoidTy, {}, false)),
+                         {}, "", Success);
 #endif
 
     auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
@@ -968,10 +970,11 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     CallInst::Create(Undo, Args, "", Fail);
 
 #ifdef PASHA_DEBUG
-     if(SimulateDFG)
-         CallInst::Create(Mod->getOrInsertFunction("__fail", 
-                 FunctionType::get(VoidTy, {}, false)), {}, "", Fail);
-#endif    
+    if (SimulateDFG)
+        CallInst::Create(Mod->getOrInsertFunction(
+                             "__fail", FunctionType::get(VoidTy, {}, false)),
+                         {}, "", Fail);
+#endif
 
     BranchInst::Create(SSplit, Fail);
     // Fail Path -- End
@@ -1044,20 +1047,20 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     // Success Path - End
 }
 
-//static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
-                       //FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
-                       //SetVector<Value *> &LiveOut, DominatorTree *DT,
-                       //mwe::PathType Type, string &Id) {
-    //switch (Type) {
-    //case FIRO:
-    //case RIFO:
-    //case RIRO:
-    //case FIFO:
-        //instrument(F, Blocks, OffloadTy, LiveIn, LiveOut, DT, Id);
-        //break;
-    //default:
-        //assert(false && "Unexpected");
-    //}
+// static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
+// FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
+// SetVector<Value *> &LiveOut, DominatorTree *DT,
+// mwe::PathType Type, string &Id) {
+// switch (Type) {
+// case FIRO:
+// case RIFO:
+// case RIRO:
+// case FIFO:
+// instrument(F, Blocks, OffloadTy, LiveIn, LiveOut, DT, Id);
+// break;
+// default:
+// assert(false && "Unexpected");
+//}
 //}
 
 static void runHelperPasses(Function *Offload, Function *Undo,
@@ -1098,11 +1101,11 @@ void MicroWorkloadExtract::process(Function &F) {
         // crash thus nullptr is passed. CLEANME
         runHelperPasses(Offload, nullptr, Mod);
 
-        instrument(F, Blocks, Offload->getFunctionType(), 
-                LiveIn, LiveOut, DT, P.Id);
+        instrument(F, Blocks, Offload->getFunctionType(), LiveIn, LiveOut, DT,
+                   P.Id);
 
-        //common::printCFG(F);
-        //common::writeModule(Mod, (P.Id) + string(".ll"));
+        // common::printCFG(F);
+        // common::writeModule(Mod, (P.Id) + string(".ll"));
         //
         assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
     }

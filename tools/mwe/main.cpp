@@ -48,7 +48,7 @@ enum ExtractType { trace, chop };
 
 cl::opt<std::string>
     HelperLib("u", cl::desc("Path to the undo library bitcode module"),
-            cl::Required);
+              cl::Required);
 
 cl::opt<ExtractType> ExtractAs(cl::desc("Choose extract type, trace / chop"),
                                cl::values(clEnumVal(trace, "Extract as trace"),
@@ -87,9 +87,10 @@ cl::list<string> libraries("l", cl::Prefix,
 cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
                         cl::value_desc("filename"), cl::Required);
 
-cl::opt<bool> SimulateDFG("simdfg", 
-        cl::desc("Generate dfg.*.dot for simulation, add instrumentation to binary for Pintool"), 
-        cl::value_desc("boolean"), cl::init(false));
+cl::opt<bool> SimulateDFG("simdfg",
+                          cl::desc("Generate dfg.*.dot for simulation, add "
+                                   "instrumentation to binary for Pintool"),
+                          cl::value_desc("boolean"), cl::init(false));
 
 bool isTargetFunction(const Function &f,
                       const cl::list<std::string> &FunctionList) {
@@ -153,7 +154,6 @@ int main(int argc, char **argv, const char **env) {
     pm.add(createVerifierPass());
     pm.run(*module);
 
-
     // Use a Composite module instead of linkning into the original
     // as it doesn't work -- no idea why.
     auto Composite = llvm::make_unique<Module>("llvm-link", getGlobalContext());
@@ -162,7 +162,8 @@ int main(int argc, char **argv, const char **env) {
 
     L.linkInModule(move(module));
 
-    unique_ptr<Module> HelperMod(parseIRFile(HelperLib, err, getGlobalContext()));
+    unique_ptr<Module> HelperMod(
+        parseIRFile(HelperLib, err, getGlobalContext()));
     assert(HelperMod.get() && "Unable to read undo bitcode module");
     L.linkInModule(std::move(HelperMod));
 
@@ -172,7 +173,7 @@ int main(int argc, char **argv, const char **env) {
         assert(ret == false && "Error in linkInModule");
     }
 
-    common::writeModule(Composite.get(), "full.ll" );
+    common::writeModule(Composite.get(), "full.ll");
     common::generateBinary(*Composite, outFile, optLevel, libPaths, libraries);
 
     return 0;

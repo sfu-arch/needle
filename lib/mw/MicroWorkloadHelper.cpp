@@ -21,7 +21,6 @@
 
 #include "Common.h"
 
-
 using namespace llvm;
 using namespace mwe;
 using namespace std;
@@ -208,40 +207,39 @@ void MicroWorkloadHelper::replaceGuards() {
     if (!changed)
         RetFalseBlock->eraseFromParent();
 
-    // It's possible that the guard function gets removed from 
+    // It's possible that the guard function gets removed from
     // the Offload Function via optimizations. This happens
     // (usually) when the extracted sequence is only a single
     // block (no branches == no guards).
     auto *GuardFunc = Offload->getParent()->getFunction("__guard_func");
-    if(GuardFunc)
+    if (GuardFunc)
         GuardFunc->eraseFromParent();
 }
 
-void 
-writeIfConversionDot(Function &F) {
-    ofstream Out("ifc."+F.getName().str()+".dot", ios::out);
+void writeIfConversionDot(Function &F) {
+    ofstream Out("ifc." + F.getName().str() + ".dot", ios::out);
     Out << "digraph \"IFC Graph\" {\n";
-    for(auto &BB : F) {
-        Out << "Node" << &BB 
-            << " [shape=record, label=\"" << BB.getName().str() << "\""; 
+    for (auto &BB : F) {
+        Out << "Node" << &BB << " [shape=record, label=\"" << BB.getName().str()
+            << "\"";
 
         auto T = BB.getTerminator();
-        for(unsigned I = 0; I < T->getNumSuccessors(); I++) {
+        for (unsigned I = 0; I < T->getNumSuccessors(); I++) {
             Out << ", S" << I << "=\"Node" << T->getSuccessor(I) << "\"";
         }
         Out << "];\n";
 
-        for(unsigned I = 0; I < T->getNumSuccessors(); I++) {
+        for (unsigned I = 0; I < T->getNumSuccessors(); I++) {
             Out << "Node" << &BB << "->Node" << T->getSuccessor(I) << ";\n";
-        } 
-    } 
+        }
+    }
     Out << "}\n";
     Out.close();
 }
 
 bool MicroWorkloadHelper::runOnModule(Module &M) {
     common::optimizeModule(&M);
-    if(SimulateDFG) {
+    if (SimulateDFG) {
         common::labelUID(*Offload);
         common::instrumentDFG(*Offload);
         common::printDFG(*Offload);

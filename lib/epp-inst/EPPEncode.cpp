@@ -10,9 +10,9 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/Support/FileSystem.h"
 
 #include "EPPEncode.h"
 
@@ -27,8 +27,6 @@
 using namespace llvm;
 using namespace epp;
 using namespace std;
-
-
 
 bool EPPEncode::doInitialization(Module &m) { return false; }
 bool EPPEncode::doFinalization(Module &m) { return false; }
@@ -64,28 +62,29 @@ void EPPEncode::encode(Function &F) {
         for (auto S = succ_begin(BB), E = succ_end(BB); S != E; S++) {
             if (BackEdges.count(make_pair(BB, *S)) ||
                 LI->getLoopFor(BB) != LI->getLoopFor(*S)) {
-                DEBUG(errs() << "Adding segmented edge : " << BB->getName() << " "
-                    << S->getName() << " " << Entry->getName() << " " << Exit->getName() << "\n");
+                DEBUG(errs() << "Adding segmented edge : " << BB->getName()
+                             << " " << S->getName() << " " << Entry->getName()
+                             << " " << Exit->getName() << "\n");
                 ACFG.add(BB, *S, Entry, Exit);
                 continue;
             }
-            DEBUG(errs() << "Adding Real edge : " << BB->getName() << " " << S->getName() << "\n");
+            DEBUG(errs() << "Adding Real edge : " << BB->getName() << " "
+                         << S->getName() << "\n");
             ACFG.add(BB, *S);
         }
     }
 
-
-    for(auto &B : POB) {
+    for (auto &B : POB) {
         APInt pathCount(128, 0, true);
 
-        if (isFunctionExiting(B)) 
+        if (isFunctionExiting(B))
             pathCount = 1;
 
-        for(auto &S : ACFG.succs(B)) {
-            ACFG[{B,S}] = pathCount;
+        for (auto &S : ACFG.succs(B)) {
+            ACFG[{B, S}] = pathCount;
             if (numPaths.count(S) == 0)
                 numPaths.insert(make_pair(S, APInt(128, 0, true)));
-             
+
             // This is the only place we need to check for overflow.
             bool Ov = false;
             pathCount = pathCount.sadd_ov(numPaths[S], Ov);
@@ -95,10 +94,10 @@ void EPPEncode::encode(Function &F) {
     }
 
 #ifdef RT32
-    assert(numPaths[Entry].getLimitedValue() < ~0ULL
-            && "Numpaths greater than 2^64, recompile in 64-bit mode");
+    assert(numPaths[Entry].getLimitedValue() < ~0ULL &&
+           "Numpaths greater than 2^64, recompile in 64-bit mode");
 #endif
-   
+
     errs() << "NumPaths : " << numPaths[Entry] << "\n";
 }
 

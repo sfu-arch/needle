@@ -1,7 +1,7 @@
 #define DEBUG_TYPE "pasha_common"
 #include "Common.h"
-#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SCCIterator.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/CFGPrinter.h"
@@ -61,8 +61,8 @@ void compile(Module &m, string outputPath, char optLevel) {
     Triple triple = Triple(m.getTargetTriple());
 
 #ifdef RT32
-    assert(triple.isArch32Bit() 
-            && "RT32 defined by CMake but input bitcode is not 32 bit!");
+    assert(triple.isArch32Bit() &&
+           "RT32 defined by CMake but input bitcode is not 32 bit!");
 #endif
 
     const Target *target = TargetRegistry::lookupTarget(MArch, triple, err);
@@ -329,7 +329,7 @@ void writeModule(Module *Mod, string Name) {
     File.close();
 }
 
-void printDFG(Function& F) {
+void printDFG(Function &F) {
     legacy::FunctionPassManager FPM(F.getParent());
     FPM.add(new helpers::DFGPrinter());
     FPM.doInitialization();
@@ -337,8 +337,7 @@ void printDFG(Function& F) {
     FPM.doFinalization();
 }
 
-
-void instrumentDFG(Function& F) {
+void instrumentDFG(Function &F) {
     legacy::FunctionPassManager FPM(F.getParent());
     FPM.add(new instrumem::InstruMemPass());
     FPM.doInitialization();
@@ -346,12 +345,12 @@ void instrumentDFG(Function& F) {
     FPM.doFinalization();
 }
 
-void printDFG(Module& M) {
-    for(auto &F : M)
+void printDFG(Module &M) {
+    for (auto &F : M)
         printDFG(F);
 }
 
-void labelUID(Function& F) {
+void labelUID(Function &F) {
     legacy::FunctionPassManager FPM(F.getParent());
     FPM.add(new helpers::LabelUID());
     FPM.doInitialization();
@@ -359,16 +358,15 @@ void labelUID(Function& F) {
     FPM.doFinalization();
 }
 
-void labelUID(Module& M) {
-    for(auto &F : M)
+void labelUID(Module &M) {
+    for (auto &F : M)
         labelUID(F);
 }
 
-void 
-loopPostorderHelper(BasicBlock *toVisit, const Loop *loop,
-                                vector<BasicBlock *> &blocks,
-                                DenseSet<BasicBlock *> &seen,
-                                const set<BasicBlock *> &SCCBlocks) {
+void loopPostorderHelper(BasicBlock *toVisit, const Loop *loop,
+                         vector<BasicBlock *> &blocks,
+                         DenseSet<BasicBlock *> &seen,
+                         const set<BasicBlock *> &SCCBlocks) {
     seen.insert(toVisit);
     for (auto s = succ_begin(toVisit), e = succ_end(toVisit); s != e; ++s) {
 
@@ -382,8 +380,8 @@ loopPostorderHelper(BasicBlock *toVisit, const Loop *loop,
     blocks.push_back(toVisit);
 }
 
-vector<BasicBlock *>
-postOrder(const Loop *loop, const set<BasicBlock *> &SCCBlocks) {
+vector<BasicBlock *> postOrder(const Loop *loop,
+                               const set<BasicBlock *> &SCCBlocks) {
     vector<BasicBlock *> ordered;
     DenseSet<BasicBlock *> seen;
     loopPostorderHelper(loop->getHeader(), loop, ordered, seen, SCCBlocks);
@@ -445,5 +443,4 @@ vector<BasicBlock *> postOrder(Function &F, LoopInfo *LI) {
 
     return PostOrderBlocks;
 }
-
 }
