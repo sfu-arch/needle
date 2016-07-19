@@ -28,6 +28,7 @@
 #include <cxxabi.h>
 
 #include <algorithm>
+#include <deque>
 
 using namespace llvm;
 using namespace mwe;
@@ -332,7 +333,8 @@ void MicroWorkloadExtract::extractHelper(
         }
     };
    
-    vector<ConstantExpr*> UpdateCExpr;
+    //vector<ConstantExpr*> UpdateCExpr;
+    deque<ConstantExpr*> UpdateCExpr;  
     
     for(auto &GV : Globals) {
         // Get the user of the global
@@ -355,23 +357,34 @@ void MicroWorkloadExtract::extractHelper(
     // copies if their use exists in the outlined region.
 
     vector<ConstantExpr*> AllCExpr(UpdateCExpr.begin(), UpdateCExpr.end());
-    unsigned count = 0;
-    for(auto &CE : UpdateCExpr) {
-        vector<ConstantExpr*> More;
-        for (auto U = CE->user_begin(), 
+    // for(auto &CE : UpdateCExpr) {
+    //     vector<ConstantExpr*> More;
+    //     for (auto U = CE->user_begin(), 
+    //             UE = CE->user_end(); U != UE; U++) {
+    //         if(auto UCE = dyn_cast<ConstantExpr>(*U)) {
+    //             assert(VMap.count(CE) && "Mapping for ConstantExpr");
+    //             auto NCE = handleCExpr(UCE, CE, VMap[CE]);
+    //             VMap[UCE] = NCE;
+    //             More.push_back(UCE);
+    //         }
+    //     }
+    //     AllCExpr.insert(AllCExpr.end(), More.begin(), More.end());
+    //     UpdateCExpr.clear();
+    //     copy(More.begin(), More.end(), back_inserter(UpdateCExpr));
+    // }
+
+    while(!UpdateCExpr.empty()) {
+        auto CE = UpdateCExpr.pop_front();
+         for (auto U = CE->user_begin(), 
                 UE = CE->user_end(); U != UE; U++) {
             if(auto UCE = dyn_cast<ConstantExpr>(*U)) {
                 assert(VMap.count(CE) && "Mapping for ConstantExpr");
                 auto NCE = handleCExpr(UCE, CE, VMap[CE]);
                 VMap[UCE] = NCE;
-                More.push_back(UCE);
+                UpdateCExpr.push_back(UCE);
+                AllCExpr.push_back(UCE);
             }
         }
-        AllCExpr.insert(AllCExpr.end(), More.begin(), More.end());
-        UpdateCExpr.clear();
-        copy(More.begin(), More.end(), back_inserter(UpdateCExpr));
-        // WTF : Using vector::swap instead of clear and subsequent 
-        // copy causes memory corruption?
     }
 
     for(auto &ACE : AllCExpr) {
