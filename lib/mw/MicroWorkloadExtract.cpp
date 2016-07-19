@@ -374,7 +374,7 @@ void MicroWorkloadExtract::extractHelper(
     // }
 
     while(!UpdateCExpr.empty()) {
-        auto CE = UpdateCExpr.pop_front();
+        auto CE = UpdateCExpr.front();
          for (auto U = CE->user_begin(), 
                 UE = CE->user_end(); U != UE; U++) {
             if(auto UCE = dyn_cast<ConstantExpr>(*U)) {
@@ -385,6 +385,7 @@ void MicroWorkloadExtract::extractHelper(
                 AllCExpr.push_back(UCE);
             }
         }
+         UpdateCExpr.pop_front();
     }
 
     for(auto &ACE : AllCExpr) {

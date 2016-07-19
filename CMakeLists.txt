@@ -8,6 +8,7 @@ set(PACKAGE_BUGREPORT "ska124@sfu.ca")
 
 set(CMAKE_CXX_FLAGS "-std=c++1y -Werror -Wno-deprecated-declarations")
 option(RT32 "32 bit EPP Runtime" OFF)
+option(TRACE_RUNTIME "Collect Run Length Encoded (RLE) Trace for EPP" OFF)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)

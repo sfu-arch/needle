@@ -13,6 +13,8 @@ extern "C" {
 
 std::map<__int128, uint64_t> EPP(path);
 
+void EPP(init)() {}
+
 void EPP(logPath2)(__int128 Val) { EPP(path)[Val] += 1; }
 
 void EPP(save)() {
@@ -29,6 +31,8 @@ void EPP(save)() {
 }
 
 #else
+
+void EPP(init)() {}
 
 std::map<uint64_t, uint64_t> EPP(path);
 

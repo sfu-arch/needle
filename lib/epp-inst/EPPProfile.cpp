@@ -50,9 +50,15 @@ bool EPPProfile::runOnModule(Module &module) {
     }
 
     auto *voidTy = Type::getVoidTy(Ctx);
+
+    auto *init = 
+        module.getOrInsertFunction("PaThPrOfIlInG_init", voidTy, nullptr);
+    appendToGlobalCtors(module, llvm::cast<Function>(init), 0);
+
     auto *printer =
         module.getOrInsertFunction("PaThPrOfIlInG_save", voidTy, nullptr);
     appendToGlobalDtors(module, llvm::cast<Function>(printer), 0);
+
 
     return true;
 }
