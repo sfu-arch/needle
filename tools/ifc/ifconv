@@ -5,10 +5,14 @@ import networkx as nx
 import sympy as sm
 
 def getCond(CFG, n, p, conds):
+
+    if 'S1' not in CFG.node[p].keys():
+        return True
+
     if CFG.node[p]['S0'] == str(n):
-        return conds[n]
+        return conds[p]
     else:
-        return ~conds[n]
+        return ~conds[p]
 
 def forwardBranchRemoval(CFG):
     """
