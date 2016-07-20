@@ -12,18 +12,18 @@ add_library(epp-rt-agg SHARED
     RuntimeAgg.cpp
 )
 
-# if(TRACE_RUNTIME)
-#     message(STATUS "Using RLE Trace Runtime for EPP")
-# add_custom_command(
-#     TARGET epp-rt-rle POST_BUILD
-#     COMMAND ln -sf ${CMAKE_BINARY_DIR}/lib/libepp-rt-rle.so ${CMAKE_BINARY_DIR}/lib/libepp-rt.so
-# )
-# else()
-# add_custom_command(
-#     TARGET epp-rt-agg POST_BUILD
-#     COMMAND ln -sf ${CMAKE_BINARY_DIR}/lib/libepp-rt-agg.so ${CMAKE_BINARY_DIR}/lib/libepp-rt.so
-# )
-# endif()
+if(TRACE_RUNTIME)
+    message(STATUS "Using RLE Trace Runtime for EPP")
+add_custom_command(
+    TARGET epp-rt-rle POST_BUILD
+    COMMAND ln -sf ${CMAKE_BINARY_DIR}/lib/libepp-rt-rle.so ${CMAKE_BINARY_DIR}/lib/libepp-rt.so
+)
+else()
+add_custom_command(
+    TARGET epp-rt-agg POST_BUILD
+    COMMAND ln -sf ${CMAKE_BINARY_DIR}/lib/libepp-rt-agg.so ${CMAKE_BINARY_DIR}/lib/libepp-rt.so
+)
+endif()
 
 if(RT32 OR CMAKE_SIZEOF_VOID_P EQUAL 4)
     set_target_properties(epp-rt-agg PROPERTIES COMPILE_FLAGS "-m32" LINK_FLAGS "-m32")
