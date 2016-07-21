@@ -77,7 +77,7 @@ def forwardBranchRemoval(CFG):
     print
     print "Predicates - Simplified"
     for n in nodes:
-        simplified = z3.simplify(preds[n], ctx_solver_simplify=True)
+        simplified = z3.Then('simplify', 'ctx-solver-simplify')(preds[n]).as_expr()
         print CFG.node[n]['label'], countTerms(simplified)
         
     
