@@ -37,18 +37,17 @@ using namespace std;
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
-
 extern cl::opt<bool> SimulateDFG;
+extern cl::opt<bool> ConvertGlobalToLiveIn;
+extern cl::opt<ExtractType> ExtractAs;
 
 void MicroWorkloadExtract::readSequences() {
     ifstream SeqFile(SeqFilePath.c_str(), ios::in);
     assert(SeqFile.is_open() && "Could not open file");
     string Line;
-    // TODO: We can do more than one in case they are not overlapping
-    // I will add the checks later.
-    assert(NumSeq == 1 && "Can't do more than 1 since original"
-                          "bitcode is modified");
-    for (int64_t Count = 0; getline(SeqFile, Line);) {
+
+    int64_t Count = 0;
+    for (; getline(SeqFile, Line);) {
         Path P;
         std::vector<std::string> Tokens;
         boost::split(Tokens, Line, boost::is_any_of("\t "));
@@ -66,9 +65,11 @@ void MicroWorkloadExtract::readSequences() {
         Sequences.push_back(P);
         errs() << *P.Seq.begin() << " " << *P.Seq.rbegin() << "\n";
         Count++;
-        if (Count == NumSeq)
+        
+        if(ExtractAs == trace || ExtractAs == slice)
             break;
     }
+    errs() << "read " << Count << " block sequences\n";
     SeqFile.close();
 }
 
@@ -120,20 +121,15 @@ fSliceDFS(BasicBlock *Begin,
 }
 
 static DenseSet<BasicBlock *>
-getChop(BasicBlock *StartBB, BasicBlock *LastBB,
+getSliceChop(BasicBlock *StartBB, BasicBlock *LastBB,
         DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
 
-    DEBUG(errs() << "BackEdges : \n");
-    for (auto &BE : BackEdges) {
-        DEBUG(errs() << BE.first->getName() << "->" << BE.second->getName()
-                     << "\n");
-    }
-    DEBUG(errs() << "------------------------------\n");
-
-    // Compute Forward Slice from starting of path
-    // Compute Backward Slice from last block in path
-    // Compute the set intersection (chop) of these two
-    // Construct an array ref of the blocks and hand off to the CodeExtractor
+    // DEBUG(errs() << "BackEdges : \n");
+    // for (auto &BE : BackEdges) {
+    //     DEBUG(errs() << BE.first->getName() << "->" << BE.second->getName()
+    //                  << "\n");
+    // }
+    // DEBUG(errs() << "------------------------------\n");
 
     DenseSet<BasicBlock *> FSlice = fSliceDFS(StartBB, BackEdges);
     DenseSet<BasicBlock *> BSlice = bSliceDFS(LastBB, BackEdges);
@@ -143,23 +139,23 @@ getChop(BasicBlock *StartBB, BasicBlock *LastBB,
         if (BSlice.count(FB))
             Chop.insert(FB);
 
-    DEBUG(errs() << "Forward : " << StartBB->getName() << "\n");
-    for (auto &F : FSlice) {
-        DEBUG(errs() << F->getName() << "\n");
-    }
-    DEBUG(errs() << "------------------------------\n");
+    // DEBUG(errs() << "Forward : " << StartBB->getName() << "\n");
+    // for (auto &F : FSlice) {
+    //     DEBUG(errs() << F->getName() << "\n");
+    // }
+    // DEBUG(errs() << "------------------------------\n");
 
-    DEBUG(errs() << "Backward : " << LastBB->getName() << "\n");
-    for (auto &B : BSlice) {
-        DEBUG(errs() << B->getName() << "\n");
-    }
-    DEBUG(errs() << "------------------------------\n");
+    // DEBUG(errs() << "Backward : " << LastBB->getName() << "\n");
+    // for (auto &B : BSlice) {
+    //     DEBUG(errs() << B->getName() << "\n");
+    // }
+    // DEBUG(errs() << "------------------------------\n");
 
-    DEBUG(errs() << "Chop : \n");
-    for (auto &C : Chop) {
-        DEBUG(errs() << C->getName() << "\n");
-    }
-    DEBUG(errs() << "------------------------------\n");
+    // DEBUG(errs() << "Chop : \n");
+    // for (auto &C : Chop) {
+    //     DEBUG(errs() << C->getName() << "\n");
+    // }
+    // DEBUG(errs() << "------------------------------\n");
 
     return Chop;
 }
@@ -582,7 +578,7 @@ void MicroWorkloadExtract::extractHelper(
 
 static void getTopoChopHelper(
     BasicBlock *BB, DenseSet<BasicBlock *> &Chop, DenseSet<BasicBlock *> &Seen,
-    SmallVector<BasicBlock *, 16> &Order,
+    SetVector<BasicBlock *> &Order,
     DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
     Seen.insert(BB);
     for (auto SB = succ_begin(BB), SE = succ_end(BB); SB != SE; SB++) {
@@ -590,13 +586,13 @@ static void getTopoChopHelper(
             getTopoChopHelper(*SB, Chop, Seen, Order, BackEdges);
         }
     }
-    Order.push_back(BB);
+    Order.insert(BB);
 }
 
-SmallVector<BasicBlock *, 16>
+SetVector<BasicBlock *>
 getTopoChop(DenseSet<BasicBlock *> &Chop, BasicBlock *StartBB,
             DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
-    SmallVector<BasicBlock *, 16> Order;
+    SetVector<BasicBlock *> Order;
     DenseSet<BasicBlock *> Seen;
     getTopoChopHelper(StartBB, Chop, Seen, Order, BackEdges);
     return Order;
@@ -855,26 +851,26 @@ Function *MicroWorkloadExtract::extract(
     return StaticFunc;
 }
 
-static SmallVector<BasicBlock *, 16>
-getChopBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
+static SetVector<BasicBlock *>
+getSliceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
     auto *StartBB = BlockMap[P.Seq.front()];
     auto *LastBB = BlockMap[P.Seq.back()];
     auto BackEdges = common::getBackEdges(StartBB);
-    auto Chop = getChop(StartBB, LastBB, BackEdges);
+
+    auto Chop = getSliceChop(StartBB, LastBB, BackEdges);
     auto RevTopoChop = getTopoChop(Chop, StartBB, BackEdges);
-    assert(StartBB == RevTopoChop.back() && LastBB == RevTopoChop.front() &&
-           "Sanity Check");
+
     return RevTopoChop;
 }
 
-static SmallVector<BasicBlock *, 16>
+static SetVector<BasicBlock *>
 getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
-    SmallVector<BasicBlock *, 16> RPath;
+    SetVector<BasicBlock *> RPath;
     for (auto RB = P.Seq.rbegin(), RE = P.Seq.rend(); RB != RE; RB++) {
         if (BlockMap.count(*RB) == 0)
             errs() << "Missing :" << *RB << "\n";
         assert(BlockMap.count(*RB) && "Path does not exist");
-        RPath.push_back(BlockMap[*RB]);
+        RPath.insert(BlockMap[*RB]);
     }
     return RPath;
 }
@@ -883,16 +879,9 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                        FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
                        SetVector<Value *> &LiveOut, DominatorTree *DT,
                        string &Id) {
-    // assert(Blocks.size() > 1 && "Can't extract unit block paths");
     if (Blocks.size() == 1) {
         auto *B = Blocks.front();
         auto *R = B->splitBasicBlock(B->getTerminator(), "unit.split");
-        // errs() << "Unit Block Live In : \n";
-        // for (auto &V : LiveIn)
-        //     errs() << *V << "\n";
-        // errs() << "Unit Block Live Out : \n";
-        // for (auto &V : LiveOut)
-        //     errs() << *V << "\n";
         Blocks.insert(Blocks.begin(), R);
     }
 
@@ -923,7 +912,7 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     // Split the start basic block so that we can insert a call to the offloaded
     // function while maintaining the rest of the original CFG.
     auto *SSplit = StartBB->splitBasicBlock(StartBB->getFirstInsertionPt());
-    SSplit->setName(StartBB->getName() + ".split");
+    SSplit->setName(StartBB->getName());
     BranchInst::Create(Merge, Success);
 
     // Add a struct to the function entry block in order to
@@ -1047,21 +1036,6 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     // Success Path - End
 }
 
-// static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
-// FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
-// SetVector<Value *> &LiveOut, DominatorTree *DT,
-// mwe::PathType Type, string &Id) {
-// switch (Type) {
-// case FIRO:
-// case RIFO:
-// case RIRO:
-// case FIFO:
-// instrument(F, Blocks, OffloadTy, LiveIn, LiveOut, DT, Id);
-// break;
-// default:
-// assert(false && "Unexpected");
-//}
-//}
 
 static void runHelperPasses(Function *Offload, Function *Undo,
                             Module *Generated) {
@@ -1081,34 +1055,58 @@ void MicroWorkloadExtract::process(Function &F) {
     for (auto &BB : F)
         BlockMap[BB.getName().str()] = &BB;
 
-    for (auto &P : Sequences) {
+    SetVector<BasicBlock *> Blocks;
+    std::string Id;
+    if(ExtractAs == merge) {
+        BasicBlock *Start = nullptr, *End = nullptr;
+        DenseSet<BasicBlock *> MergeBlocks;
+        for (auto &P : Sequences) {
+            if(Start == nullptr) {
+                Start = BlockMap[P.Seq.front()];
+                End = BlockMap[P.Seq.back()];
+                Id = P.Id;
+            }
 
-        ExtractedModules.push_back(
-            llvm::make_unique<Module>(P.Id, getGlobalContext()));
-        Module *Mod = ExtractedModules.back().get();
-        Mod->setDataLayout(F.getParent()->getDataLayout());
-        SmallVector<BasicBlock *, 16> Blocks =
-            extractAsChop ? getChopBlocks(P, BlockMap)
-                          : getTraceBlocks(P, BlockMap);
+            if( Start == BlockMap[P.Seq.front()] &&
+                    End == BlockMap[P.Seq.back()] ) {
+                for(auto BN : P.Seq) 
+                    MergeBlocks.insert(BlockMap[BN]);
+            } else {
+                errs() << "Skipping path " << P.Id << "\n";
+            }
+        }
+        
+        auto BackEdges = common::getBackEdges(Start);
+        Blocks = getTopoChop(MergeBlocks, Start, BackEdges);
 
-        // Extract the blocks and create a new function
-        SetVector<Value *> LiveOut, LiveIn;
-        Function *Offload =
-            extract(PostDomTree, Mod, Blocks, LiveIn, LiveOut, DT, LI);
+    } else {
+        assert(Sequences.size() == 1 && "Only 1 sequence for trace and slice (chop)");
+        auto &P = Sequences.front();
 
-        // Creating a definition of the Undo function here and
-        // then creating the body inside the pass causes LLVM to
-        // crash thus nullptr is passed. CLEANME
-        runHelperPasses(Offload, nullptr, Mod);
+        Blocks = extractAsChop ? getSliceBlocks(P, BlockMap)
+                   : getTraceBlocks(P, BlockMap);
 
-        instrument(F, Blocks, Offload->getFunctionType(), LiveIn, LiveOut, DT,
-                   P.Id);
-
-        // common::printCFG(F);
-        // common::writeModule(Mod, (P.Id) + string(".ll"));
-        //
-        assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
     }
+
+    ExtractedModules.push_back(llvm::make_unique<Module>("mwe-module", getGlobalContext()));
+    Module *Mod = ExtractedModules.back().get();
+    Mod->setDataLayout(F.getParent()->getDataLayout());
+
+    SmallVector<BasicBlock*, 16> BlockV(Blocks.begin(), Blocks.end());
+
+    // Extract the blocks and create a new function
+    SetVector<Value *> LiveOut, LiveIn;
+    Function *Offload = extract(PostDomTree, Mod, BlockV, LiveIn, LiveOut, DT, LI);
+
+    // Creating a definition of the Undo function here and
+    // then creating the body inside the pass causes LLVM to
+    // crash thus nullptr is passed. CLEANME
+    runHelperPasses(Offload, nullptr, Mod);
+    instrument(F, BlockV, Offload->getFunctionType(), LiveIn, LiveOut, DT, Id);
+
+    common::printCFG(F);
+    common::writeModule(Mod, (Id) + string(".ll"));
+    assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
 }
 
 bool MicroWorkloadExtract::runOnModule(Module &M) {

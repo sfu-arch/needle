@@ -37,7 +37,8 @@
 namespace mwe {
 
 // R=Real F=Fake I=In O=Out
-enum PathType { RIRO, FIRO, RIFO, FIFO};
+enum PathType { RIRO, FIRO, RIFO, FIFO };
+enum ExtractType { trace, slice, merge };
 
 struct Path {
     std::string Id;

@@ -35,14 +35,12 @@
 #include "Namer.h"
 #include "Namer.h"
 #include "Simplify.h"
-//#include "LoopConverter.h"
 
 using namespace std;
 using namespace llvm;
 using namespace llvm::sys;
 using namespace mwe;
 
-enum ExtractType { trace, chop };
 
 // MWE-only options
 
@@ -51,8 +49,9 @@ cl::opt<std::string>
               cl::Required);
 
 cl::opt<ExtractType> ExtractAs(cl::desc("Choose extract type, trace / chop"),
-                               cl::values(clEnumVal(trace, "Extract as trace"),
-                                          clEnumVal(chop, "Extract as chop"),
+                               cl::values(clEnumVal(mwe::trace, "Extract as trace"),
+                                          clEnumVal(mwe::slice, "Extract as slice (chop)"),
+                                          clEnumVal(mwe::merge, "Extract as merge (chop)"),
                                           clEnumValEnd),
                                cl::Required);
 
@@ -64,6 +63,7 @@ cl::opt<string> SeqFilePath("seq",
                             cl::value_desc("filename"),
                             cl::init("epp-sequences.txt"));
 
+// This option is not used anymore
 cl::opt<int> NumSeq("num", cl::desc("Number of sequences to analyse"),
                     cl::value_desc("positive integer"), cl::init(1));
 
@@ -92,6 +92,12 @@ cl::opt<bool> SimulateDFG("simdfg",
                                    "instrumentation to binary for Pintool"),
                           cl::value_desc("boolean"), cl::init(false));
 
+cl::opt<bool> ConvertGlobalToLiveIn("c",
+                cl::desc("Convert references to Globals in the extracted function to live in pointers"), cl::value_desc("boolean"), cl::init(false));
+
+cl::opt<bool> DumpStats("dump-stats", cl::desc("Pasha stats"),
+        cl::value_desc("boolean"), cl::init(false));
+
 bool isTargetFunction(const Function &f,
                       const cl::list<std::string> &FunctionList) {
     if (f.isDeclaration())
@@ -119,6 +125,7 @@ int main(int argc, char **argv, const char **env) {
     cl::AddExtraVersionPrinter(
         TargetRegistry::printRegisteredTargetsForVersion);
     cl::ParseCommandLineOptions(argc, argv);
+
 
     // Construct an IR file from the filename passed on the command line.
     SMDiagnostic err;
@@ -157,7 +164,6 @@ int main(int argc, char **argv, const char **env) {
     // Use a Composite module instead of linkning into the original
     // as it doesn't work -- no idea why.
     auto Composite = llvm::make_unique<Module>("llvm-link", getGlobalContext());
-
     Linker L(*Composite);
 
     L.linkInModule(move(module));
