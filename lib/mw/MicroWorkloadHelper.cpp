@@ -17,8 +17,13 @@
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Transforms/Utils/CodeExtractor.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/BasicAliasAnalysis.h"
+#include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include <boost/algorithm/string.hpp>
 #include <cxxabi.h>
+#include "Statistics.h"
 
 #include "Common.h"
 
@@ -28,6 +33,18 @@ using namespace std;
 
 
 extern cl::opt<bool> SimulateDFG;
+
+static void runStatsPasses(Function *Offload) {
+
+    legacy::FunctionPassManager FPM(Offload->getParent());
+    FPM.add(createBasicAAWrapperPass());
+    FPM.add(llvm::createTypeBasedAAWrapperPass());
+    FPM.add(new pasha::Statistics());
+    FPM.doInitialization();
+    FPM.run(*Offload);
+    FPM.doFinalization();
+
+}
 
 static bool replaceGuardsHelper(Function &F, BasicBlock *RetBlock) {
     for (auto &BB : F) {
@@ -224,6 +241,8 @@ bool MicroWorkloadHelper::runOnFunction(Function &F) {
         common::instrumentDFG(F);
         common::printDFG(F);
     }
+
+    runStatsPasses(&F);
     replaceGuards(&F);
     addUndoLog(&F);
     writeIfConversionDot(F);

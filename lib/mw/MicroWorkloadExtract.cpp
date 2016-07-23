@@ -1,14 +1,13 @@
 #define DEBUG_TYPE "pasha_mwe"
 #include "MicroWorkloadExtract.h"
 #include "Common.h"
-#include "Statistics.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/BasicAliasAnalysis.h"
-#include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
+#include "llvm/Analysis/CFG.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/DebugInfo.h"
@@ -1018,18 +1017,6 @@ static void runHelperPasses(Function *Offload, string Id) {
 
 }
 
-static void runStatsPasses(Function *Offload) {
-
-    legacy::FunctionPassManager FPM(Offload->getParent());
-    FPM.add(createBasicAAWrapperPass());
-    FPM.add(llvm::createTypeBasedAAWrapperPass());
-    FPM.add(new pasha::Statistics());
-    FPM.doInitialization();
-    FPM.run(*Offload);
-    FPM.doFinalization();
-
-}
-
 void MicroWorkloadExtract::process(Function &F) {
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
     auto *DT = &getAnalysis<DominatorTreeWrapperPass>(F).getDomTree();
@@ -1092,7 +1079,6 @@ void MicroWorkloadExtract::process(Function &F) {
 
     common::printCFG(F);
     common::writeModule(Mod, (Id) + string(".ll"));
-    runStatsPasses(Offload);
 
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
 }

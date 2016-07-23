@@ -14,6 +14,7 @@ bool Statistics::doInitialization(Module &M) {
     OpcodeCount[#OPCODE] = 0;
 #include "llvm/IR/Instruction.def"
     OpcodeCount["CondBr"] = 0;
+    OpcodeCount["Guard"] = 0;
     return false;
 }
 
@@ -46,6 +47,19 @@ Statistics::generalStats(Function &F) {
                     OpcodeCount["Br"] -= 1;
                     OpcodeCount["CondBr"] += 1;
                 }
+            }
+
+            auto checkCall = [](const Instruction &I, string name) -> bool {
+                if (isa<CallInst>(&I) && dyn_cast<CallInst>(&I)->getCalledFunction() &&
+                    dyn_cast<CallInst>(&I)->getCalledFunction()->getName().startswith(
+                        name))
+                    return true;
+                return false;
+            };
+
+            if (checkCall(I, "__guard_func")) {
+                OpcodeCount["Call"] -= 1;
+                OpcodeCount["Guard"] += 1;
             }
         }
     }
