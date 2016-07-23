@@ -72,7 +72,8 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
                             llvm::SmallVector<llvm::BasicBlock *, 16> &,
                             llvm::SetVector<llvm::Value *> &,
                             llvm::SetVector<llvm::Value *> &,
-                            llvm::DominatorTree *, llvm::LoopInfo *);
+                            llvm::DominatorTree *, llvm::LoopInfo *,
+                            std::string);
 
     void extractHelper(llvm::Function *, llvm::Function *,
                        llvm::SetVector<llvm::Value *> &LiveIn,
@@ -89,19 +90,19 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
     }
 };
 
-struct MicroWorkloadHelper : public llvm::ModulePass {
+struct MicroWorkloadHelper : public llvm::FunctionPass{
     static char ID;
-    llvm::Function *Offload, *Undo;
+    llvm::Function *Undo;
+    std::string Id;
+    MicroWorkloadHelper(std::string I)
+        : llvm::FunctionPass(ID), Undo(nullptr), Id(I) {}
 
-    MicroWorkloadHelper(llvm::Function *F, llvm::Function *U)
-        : llvm::ModulePass(ID), Offload(F), Undo(U) {}
-
-    virtual bool runOnModule(llvm::Module &M) override;
+    virtual bool runOnFunction(llvm::Function& F) override;
     virtual bool doInitialization(llvm::Module &M) override;
     virtual bool doFinalization(llvm::Module &M) override;
 
-    void addUndoLog();
-    void replaceGuards();
+    void addUndoLog(llvm::Function *);
+    void replaceGuards(llvm::Function *);
 
     virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
         AU.addRequired<llvm::AAResultsWrapperPass>();

@@ -648,7 +648,7 @@ static StructType *getLiveOutStructType(SetVector<Value *> &LiveOut,
 Function *MicroWorkloadExtract::extract(
     PostDominatorTree *PDT, Module *Mod,
     SmallVector<BasicBlock *, 16> &RevTopoChop, SetVector<Value *> &LiveIn,
-    SetVector<Value *> &LiveOut, DominatorTree *DT, LoopInfo *LI) {
+    SetVector<Value *> &LiveOut, DominatorTree *DT, LoopInfo *LI, string Id) {
 
     auto *StartBB = RevTopoChop.back();
     auto *LastBB = RevTopoChop.front();
@@ -826,19 +826,16 @@ Function *MicroWorkloadExtract::extract(
     for (auto Val : LiveIn)
         ParamTy.push_back(Val->getType());
 
-    // if(LiveOut.size()) {
-    // Create a packed struct return type
     auto *StructTy = getLiveOutStructType(LiveOut, Mod);
     auto *StructPtrTy = PointerType::getUnqual(StructTy);
     ParamTy.push_back(StructPtrTy);
-    //}
 
     FunctionType *StFuncType = FunctionType::get(Int1Ty, ParamTy, false);
 
     // Create the trace function
     Function *StaticFunc =
         Function::Create(StFuncType, GlobalValue::ExternalLinkage,
-                         "__offload_func_" + Mod->getName(), Mod);
+                         "__offload_func_" + Id, Mod);
 
     // Create an external function which is used to
     // model all guard checks. First arg is the condition, second is whether
@@ -906,7 +903,6 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     auto ReachableFromLast = fSliceDFS(LastBB, BackEdges);
     auto &Ctx = F.getContext();
     auto *Mod = F.getParent();
-    auto *VoidTy = Type::getVoidTy(Ctx);
     auto *Int64Ty = Type::getInt64Ty(Ctx);
     auto *Int32Ty = Type::getInt32Ty(Ctx);
     auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
@@ -958,8 +954,8 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     // Fail Path -- Begin
     ArrayType *LogArrTy = ArrayType::get(IntegerType::get(Ctx, 8), 0);
     // FIXME : These need to become internal to each new module
-    auto *ULog = Mod->getOrInsertGlobal("__undo_log", LogArrTy);
-    auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores",
+    auto *ULog = Mod->getOrInsertGlobal("__undo_log_"+Id, LogArrTy);
+    auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores_"+Id,
                                             IntegerType::getInt32Ty(Ctx));
     Type *ParamTy[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx)};
     auto *UndoTy = FunctionType::get(Type::getVoidTy(Ctx), ParamTy, false);
@@ -1052,13 +1048,21 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
 }
 
 
-static void runHelperPasses(Function *Offload, Function *Undo,
-                            Module *Generated) {
-    legacy::PassManager PM;
-    PM.add(createBasicAAWrapperPass());
-    PM.add(llvm::createTypeBasedAAWrapperPass());
-    PM.add(new MicroWorkloadHelper(Offload, Undo));
-    PM.run(*Generated);
+static void runHelperPasses(Function *Offload, string Id) {
+
+    legacy::FunctionPassManager FPM(Offload->getParent());
+    FPM.add(createBasicAAWrapperPass());
+    FPM.add(llvm::createTypeBasedAAWrapperPass());
+    FPM.add(new MicroWorkloadHelper(Id));
+    FPM.doInitialization();
+    FPM.run(*Offload);
+    FPM.doFinalization();
+
+    // legacy::PassManager PM;
+    // PM.add(createBasicAAWrapperPass());
+    // PM.add(llvm::createTypeBasedAAWrapperPass());
+    // PM.add(new MicroWorkloadHelper(Offload, Undo));
+    // PM.run(*Generated);
 }
 
 void MicroWorkloadExtract::process(Function &F) {
@@ -1097,7 +1101,7 @@ void MicroWorkloadExtract::process(Function &F) {
     } else {
         assert(Sequences.size() == 1 && "Only 1 sequence for trace and slice (chop)");
         auto &P = Sequences.front();
-
+        Id = P.Id;
         switch(ExtractAs) {
             case ExtractType::slice:
                 Blocks = getSliceBlocks(P, BlockMap);
@@ -1116,16 +1120,17 @@ void MicroWorkloadExtract::process(Function &F) {
 
     // Extract the blocks and create a new function
     SetVector<Value *> LiveOut, LiveIn;
-    Function *Offload = extract(PostDomTree, Mod, BlockV, LiveIn, LiveOut, DT, LI);
+    Function *Offload = extract(PostDomTree, Mod, BlockV, LiveIn, LiveOut, DT, LI, Id);
 
     // Creating a definition of the Undo function here and
     // then creating the body inside the pass causes LLVM to
     // crash thus nullptr is passed. CLEANME
-    runHelperPasses(Offload, nullptr, Mod);
+    runHelperPasses(Offload, Id);
     instrument(F, BlockV, Offload->getFunctionType(), LiveIn, LiveOut, DT, Id);
 
     common::printCFG(F);
     common::writeModule(Mod, (Id) + string(".ll"));
+    common::writeModule(F.getParent(), string("other.ll"));
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
 }
 
