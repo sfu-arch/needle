@@ -49,9 +49,9 @@ cl::opt<std::string>
               cl::Required);
 
 cl::opt<ExtractType> ExtractAs(cl::desc("Choose extract type, trace / chop"),
-                               cl::values(clEnumVal(mwe::trace, "Extract as trace"),
-                                          clEnumVal(mwe::slice, "Extract as slice (chop)"),
-                                          clEnumVal(mwe::merge, "Extract as merge (chop)"),
+                               cl::values(clEnumVal(ExtractType::trace, "Extract as trace"),
+                                          clEnumVal(ExtractType::slice, "Extract as slice (chop)"),
+                                          clEnumVal(ExtractType::merge, "Extract as merge (chop)"),
                                           clEnumValEnd),
                                cl::Required);
 
@@ -152,7 +152,7 @@ int main(int argc, char **argv, const char **env) {
     pm.add(new LoopInfoWrapperPass());
     pm.add(llvm::createPostDomTree());
     pm.add(new DominatorTreeWrapperPass());
-    pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq, ExtractAs,
+    pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq, 
                                          ExtractedModules));
     // The verifier pass does not work for some apps (gcc, h264)
     // after linking the original module with the generated one

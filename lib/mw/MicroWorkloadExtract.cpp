@@ -73,6 +73,21 @@ void MicroWorkloadExtract::readSequences() {
     SeqFile.close();
 }
 
+MicroWorkloadExtract::MicroWorkloadExtract(std::string S, int N, 
+                     std::vector<std::unique_ptr<llvm::Module>> &EM)
+    : llvm::ModulePass(ID), SeqFilePath(S), NumSeq(N), 
+    ExtractedModules(EM) {
+        switch(ExtractAs) {
+            case trace:
+                extractAsChop = false;
+                break;
+            case slice:
+            case merge:
+                extractAsChop = true;
+                break;
+        }
+    }
+
 bool MicroWorkloadExtract::doInitialization(Module &M) {
     readSequences();
     return false;
@@ -1083,9 +1098,14 @@ void MicroWorkloadExtract::process(Function &F) {
         assert(Sequences.size() == 1 && "Only 1 sequence for trace and slice (chop)");
         auto &P = Sequences.front();
 
-        Blocks = extractAsChop ? getSliceBlocks(P, BlockMap)
-                   : getTraceBlocks(P, BlockMap);
-
+        switch(ExtractAs) {
+            case ExtractType::slice:
+                Blocks = getSliceBlocks(P, BlockMap);
+                break;
+            case ExtractType::trace:
+                Blocks = getTraceBlocks(P, BlockMap);
+                break;
+        }
     }
 
     ExtractedModules.push_back(llvm::make_unique<Module>("mwe-module", getGlobalContext()));

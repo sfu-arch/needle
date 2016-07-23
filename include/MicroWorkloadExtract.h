@@ -58,10 +58,8 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
     bool extractAsChop;
     std::vector<std::unique_ptr<llvm::Module>> &ExtractedModules;
 
-    MicroWorkloadExtract(std::string S, int N, int C,
-                         std::vector<std::unique_ptr<llvm::Module>> &EM)
-        : llvm::ModulePass(ID), SeqFilePath(S), NumSeq(N), extractAsChop(C),
-          ExtractedModules(EM) {}
+    MicroWorkloadExtract(std::string S, int N, 
+                     std::vector<std::unique_ptr<llvm::Module>> &EM);
 
     virtual bool runOnModule(llvm::Module &M) override;
     virtual bool doInitialization(llvm::Module &M) override;
