@@ -154,10 +154,6 @@ int main(int argc, char **argv, const char **env) {
     pm.add(new DominatorTreeWrapperPass());
     pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq, 
                                          ExtractedModules));
-    // The verifier pass does not work for some apps (gcc, h264)
-    // after linking the original module with the generated one
-    // and the undo module. Instead we write out the generated
-    // module from the pass itself and discard the original.
     pm.add(createVerifierPass());
     pm.run(*module);
 
@@ -174,7 +170,7 @@ int main(int argc, char **argv, const char **env) {
     L.linkInModule(std::move(HelperMod));
 
     for (auto &M : ExtractedModules) {
-        errs() << "Linking " << M->getName() << "\n";
+        //errs() << "Linking " << M->getName() << "\n";
         bool ret = L.linkInModule(move(M));
         assert(ret == false && "Error in linkInModule");
     }

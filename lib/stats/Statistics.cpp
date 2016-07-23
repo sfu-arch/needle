@@ -10,22 +10,45 @@ using namespace std;
 using namespace pasha;
 
 bool Statistics::doInitialization(Module &M) {
+#define HANDLE_INST(N, OPCODE, CLASS)                                          \
+    OpcodeCount[#OPCODE] = 0;
+#include "llvm/IR/Instruction.def"
+    OpcodeCount["CondBr"] = 0;
     return false;
 }
 
-static void
-criticalPathLength(Function &F) {
-    
+void
+Statistics::criticalPathLength(Function &F) {
+     
 }
 
-static void 
-conditionOpStats(Function &F) {
+void 
+Statistics::generalStats(Function &F) {
+    for(auto &BB : F) {
+        for(auto &I : BB) {
 
-}
+            if(auto *SI = dyn_cast<StoreInst>(&I)) {
+                if (SI->getMetadata("LO") != nullptr) {
+                    continue;
+                }
+            }
+            
+            switch(I.getOpcode()) {
+#define HANDLE_INST(N, OPCODE, CLASS)           \
+                case N:                         \
+                    OpcodeCount[#OPCODE] += 1;  \
+                    break;              
+#include "llvm/IR/Instruction.def"
+            }
 
-static void 
-generalStats(Function &F) {
-
+            if(auto *BI = dyn_cast<BranchInst>(&I)) {
+                if(BI->isConditional()) {
+                    OpcodeCount["Br"] -= 1;
+                    OpcodeCount["CondBr"] += 1;
+                }
+            }
+        }
+    }
 }
 
 // Statistics :
@@ -35,12 +58,18 @@ generalStats(Function &F) {
 
 bool Statistics::runOnFunction(Function &F) {
     criticalPathLength(F);
-    conditionOpStats(F);
     generalStats(F);
     return false;
 }
 
 bool Statistics::doFinalization(Module& M) {
+    uint64_t TotalCount = 0;
+    for(auto KV : OpcodeCount) {
+        errs() << KV.first << " " 
+               << KV.second << "\n";
+        TotalCount += KV.second;
+    }    
+    errs() << "TotalCount " << TotalCount << "\n";
     return false;
 }
 

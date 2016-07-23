@@ -18,6 +18,8 @@ namespace pasha {
 struct Statistics : public FunctionPass {
     static char ID;
 
+    std::map<std::string, uint64_t> OpcodeCount;
+
     Statistics() : FunctionPass(ID) {}
 
     virtual bool doInitialization(Module &M) override;
@@ -25,6 +27,9 @@ struct Statistics : public FunctionPass {
     virtual bool doFinalization(Module &M) override;
 
     virtual bool runOnFunction(Function &F) override;
+
+    void generalStats(Function&);
+    void criticalPathLength(Function&);
 
     void getAnalysisUsage(AnalysisUsage &AU) const override {}
 };

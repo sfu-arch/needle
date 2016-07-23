@@ -55,27 +55,22 @@ void DFGPrinter::visitBasicBlock(BasicBlock &BB) {
                 auto id = stoi(S->getString().str());
                 nodes[V] = id;
                 return true;
-            } // has metadata label
-            else
+            } else {
                 return false;
+            }
         } else if (isa<Instruction>(V)) {
             if (auto *N = dyn_cast<Instruction>(V)->getMetadata("UID")) {
                 auto *S = dyn_cast<MDString>(N->getOperand(0));
                 auto id = stoi(S->getString().str());
                 nodes[V] = id;
-
-#if 0
-                if(isa<LoadInst>(V)){
-                    errs() << "load inst metadata: " << id << "\n";
-                } else if(isa<StoreInst>(V)) {
-                    errs() << "store inst metadata: " << id << "\n";
-                }
-#endif
                 return true;
-            } // has metadata label
-            else
+            } 
+            else {
                 return false;
+            }
         }
+        llvm_unreachable("unexpected");
+        return false;
     };
 
     auto nodeFormat = [](uint64_t id, string label, string color,

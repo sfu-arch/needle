@@ -1,6 +1,7 @@
 #define DEBUG_TYPE "pasha_mwe"
 #include "MicroWorkloadExtract.h"
 #include "Common.h"
+#include "Statistics.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
@@ -63,13 +64,13 @@ void MicroWorkloadExtract::readSequences() {
 
         move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
         Sequences.push_back(P);
-        errs() << *P.Seq.begin() << " " << *P.Seq.rbegin() << "\n";
+        //errs() << *P.Seq.begin() << " " << *P.Seq.rbegin() << "\n";
         Count++;
         
         if(ExtractAs == trace || ExtractAs == slice)
             break;
     }
-    errs() << "read " << Count << " block sequences\n";
+    //errs() << "read " << Count << " block sequences\n";
     SeqFile.close();
 }
 
@@ -139,13 +140,6 @@ static DenseSet<BasicBlock *>
 getSliceChop(BasicBlock *StartBB, BasicBlock *LastBB,
         DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
 
-    // DEBUG(errs() << "BackEdges : \n");
-    // for (auto &BE : BackEdges) {
-    //     DEBUG(errs() << BE.first->getName() << "->" << BE.second->getName()
-    //                  << "\n");
-    // }
-    // DEBUG(errs() << "------------------------------\n");
-
     DenseSet<BasicBlock *> FSlice = fSliceDFS(StartBB, BackEdges);
     DenseSet<BasicBlock *> BSlice = bSliceDFS(LastBB, BackEdges);
 
@@ -153,24 +147,6 @@ getSliceChop(BasicBlock *StartBB, BasicBlock *LastBB,
     for (auto &FB : FSlice)
         if (BSlice.count(FB))
             Chop.insert(FB);
-
-    // DEBUG(errs() << "Forward : " << StartBB->getName() << "\n");
-    // for (auto &F : FSlice) {
-    //     DEBUG(errs() << F->getName() << "\n");
-    // }
-    // DEBUG(errs() << "------------------------------\n");
-
-    // DEBUG(errs() << "Backward : " << LastBB->getName() << "\n");
-    // for (auto &B : BSlice) {
-    //     DEBUG(errs() << B->getName() << "\n");
-    // }
-    // DEBUG(errs() << "------------------------------\n");
-
-    // DEBUG(errs() << "Chop : \n");
-    // for (auto &C : Chop) {
-    //     DEBUG(errs() << C->getName() << "\n");
-    // }
-    // DEBUG(errs() << "------------------------------\n");
 
     return Chop;
 }
@@ -368,21 +344,6 @@ void MicroWorkloadExtract::extractHelper(
     // copies if their use exists in the outlined region.
 
     vector<ConstantExpr *> AllCExpr(UpdateCExpr.begin(), UpdateCExpr.end());
-    // for(auto &CE : UpdateCExpr) {
-    //     vector<ConstantExpr*> More;
-    //     for (auto U = CE->user_begin(),
-    //             UE = CE->user_end(); U != UE; U++) {
-    //         if(auto UCE = dyn_cast<ConstantExpr>(*U)) {
-    //             assert(VMap.count(CE) && "Mapping for ConstantExpr");
-    //             auto NCE = handleCExpr(UCE, CE, VMap[CE]);
-    //             VMap[UCE] = NCE;
-    //             More.push_back(UCE);
-    //         }
-    //     }
-    //     AllCExpr.insert(AllCExpr.end(), More.begin(), More.end());
-    //     UpdateCExpr.clear();
-    //     copy(More.begin(), More.end(), back_inserter(UpdateCExpr));
-    // }
 
     while (!UpdateCExpr.empty()) {
         auto CE = UpdateCExpr.front();
@@ -524,9 +485,6 @@ void MicroWorkloadExtract::extractHelper(
 
             // Is this a backedge? Remove the incoming value
             // Is this predicated on a block outside the chop? Remove
-            // assert(BackEdges.count(make_pair(Blk, Phi->getParent())) == 0 &&
-            //"Backedge Phi's should not exists -- should be promoted "
-            //"to LiveIn");
 
             if (find(RevTopoChop.begin(), RevTopoChop.end(), Blk) ==
                 RevTopoChop.end()) {
@@ -576,7 +534,7 @@ void MicroWorkloadExtract::extractHelper(
     Idx[0] = Constant::getNullValue(Type::getInt32Ty(Context));
     for (auto &L : LiveOut) {
         Value *LO = VMap[L];
-        errs() << "LO : " << *L << "\n";
+        //errs() << "LO : " << *L << "\n";
         assert(LO && "Live Out not remapped");
         auto *Block = cast<Instruction>(LO)->getParent();
         Idx[1] = ConstantInt::get(Type::getInt32Ty(Context), OutIndex);
@@ -697,11 +655,11 @@ Function *MicroWorkloadExtract::extract(
         }
     }
 
-    errs() << "RevTopoChop : ";
-    for (auto &B : RevTopoChop) {
-        errs() << B->getName() << " ";
-    }
-    errs() << "\n";
+    // errs() << "RevTopoChop : ";
+    // for (auto &B : RevTopoChop) {
+    //     errs() << B->getName() << " ";
+    // }
+    // errs() << "\n";
 
     auto notInChop = [&RevTopoChop](const Instruction *I) -> bool {
         return find(RevTopoChop.begin(), RevTopoChop.end(), I->getParent()) ==
@@ -799,15 +757,15 @@ Function *MicroWorkloadExtract::extract(
         assert(false && "Unexpected num successors -- lowerswitch?");
     }
 
-    errs() << "LiveIns :\n";
-    for (auto *V : LiveIn) {
-        errs() << *V << "\n";
-    }
+    // errs() << "LiveIns :\n";
+    // for (auto *V : LiveIn) {
+    //     errs() << *V << "\n";
+    // }
 
-    errs() << "LiveOut :\n";
-    for (auto *V : LiveOut) {
-        errs() << *V << "\n";
-    }
+    // errs() << "LiveOut :\n";
+    // for (auto *V : LiveOut) {
+    //     errs() << *V << "\n";
+    // }
 
     auto DataLayoutStr = Mod->getDataLayout();
     auto TargetTripleStr = StartBB->getParent()->getParent()->getTargetTriple();
@@ -1037,10 +995,10 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
             BasicBlock *UserBB = UserInst->getParent();
             if (UserBB != Orig->getParent() &&
                 !(UserBB == Merge && isa<PHINode>(UserInst))) {
-                errs() << "Rewriting : " << *UserInst << "\n";
+                //errs() << "Rewriting : " << *UserInst << "\n";
                 SSAU.RewriteUseAfterInsertions(U);
             } else {
-                errs() << "Not Rewriting : " << *UserInst << "\n";
+                //errs() << "Not Rewriting : " << *UserInst << "\n";
             }
         }
     }
@@ -1058,11 +1016,18 @@ static void runHelperPasses(Function *Offload, string Id) {
     FPM.run(*Offload);
     FPM.doFinalization();
 
-    // legacy::PassManager PM;
-    // PM.add(createBasicAAWrapperPass());
-    // PM.add(llvm::createTypeBasedAAWrapperPass());
-    // PM.add(new MicroWorkloadHelper(Offload, Undo));
-    // PM.run(*Generated);
+}
+
+static void runStatsPasses(Function *Offload) {
+
+    legacy::FunctionPassManager FPM(Offload->getParent());
+    FPM.add(createBasicAAWrapperPass());
+    FPM.add(llvm::createTypeBasedAAWrapperPass());
+    FPM.add(new pasha::Statistics());
+    FPM.doInitialization();
+    FPM.run(*Offload);
+    FPM.doFinalization();
+
 }
 
 void MicroWorkloadExtract::process(Function &F) {
@@ -1091,7 +1056,7 @@ void MicroWorkloadExtract::process(Function &F) {
                 for(auto BN : P.Seq) 
                     MergeBlocks.insert(BlockMap[BN]);
             } else {
-                errs() << "Skipping path " << P.Id << "\n";
+                //errs() << "Skipping path " << P.Id << "\n";
             }
         }
         
@@ -1112,7 +1077,7 @@ void MicroWorkloadExtract::process(Function &F) {
         }
     }
 
-    ExtractedModules.push_back(llvm::make_unique<Module>("mwe-module", getGlobalContext()));
+    ExtractedModules.push_back(llvm::make_unique<Module>("mwe", getGlobalContext()));
     Module *Mod = ExtractedModules.back().get();
     Mod->setDataLayout(F.getParent()->getDataLayout());
 
@@ -1122,15 +1087,13 @@ void MicroWorkloadExtract::process(Function &F) {
     SetVector<Value *> LiveOut, LiveIn;
     Function *Offload = extract(PostDomTree, Mod, BlockV, LiveIn, LiveOut, DT, LI, Id);
 
-    // Creating a definition of the Undo function here and
-    // then creating the body inside the pass causes LLVM to
-    // crash thus nullptr is passed. CLEANME
     runHelperPasses(Offload, Id);
     instrument(F, BlockV, Offload->getFunctionType(), LiveIn, LiveOut, DT, Id);
 
     common::printCFG(F);
     common::writeModule(Mod, (Id) + string(".ll"));
-    common::writeModule(F.getParent(), string("other.ll"));
+    runStatsPasses(Offload);
+
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
 }
 
