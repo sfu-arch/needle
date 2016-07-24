@@ -20,7 +20,6 @@ struct Statistics : public FunctionPass {
 
     std::map<std::string, uint64_t> OpcodeCount;
     std::map<std::string, uint64_t> OpcodeWt;
-    std::vector<std::pair<llvm::BasicBlock*, uint64_t>> LongestPath;
 
     Statistics() : FunctionPass(ID) {}
 
@@ -30,7 +29,8 @@ struct Statistics : public FunctionPass {
     virtual void releaseMemory() override;
 
     void generalStats(Function&);
-    void criticalPathLength(Function&);
+    std::vector<std::pair<llvm::BasicBlock*, uint64_t>> 
+                    criticalPath(Function&);
     uint64_t getBlockSize(BasicBlock *);
 
     void getAnalysisUsage(AnalysisUsage &AU) const override {}

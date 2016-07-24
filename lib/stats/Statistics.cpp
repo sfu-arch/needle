@@ -53,9 +53,12 @@ Statistics::getBlockSize(BasicBlock *BB) {
 /// to sink (return true). The given function should be a 
 /// DAG. Uses the algorithm described in Wikipedia 
 /// https://en.wikipedia.org/wiki/Longest_path_problem
-void
-Statistics::criticalPathLength(Function &F) {
+std::vector<std::pair<llvm::BasicBlock*, uint64_t>> 
+Statistics::criticalPath(Function &F) {
     
+    std::vector<std::pair<llvm::BasicBlock*, uint64_t>> 
+        LongestPath; 
+
     vector<BasicBlock*> TopoBlocks;
     for (auto I = scc_begin(&F),
         IE = scc_end(&F); I != IE; ++I) {    
@@ -125,11 +128,12 @@ Statistics::criticalPathLength(Function &F) {
         errs() << KV.first->getName() << " ";
     }
     errs() << "\n";
+
+    return LongestPath;
 }
 
 void 
 Statistics::releaseMemory() {
-    LongestPath.clear();
     OpcodeCount.clear();
 }
 
@@ -183,8 +187,8 @@ Statistics::generalStats(Function &F) {
 
 
 bool Statistics::runOnFunction(Function &F) {
-    criticalPathLength(F);
     generalStats(F);
+    auto LongestPath = criticalPath(F);
     return false;
 }
 
