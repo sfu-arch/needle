@@ -19,14 +19,14 @@ struct Statistics : public FunctionPass {
     static char ID;
 
     std::map<std::string, uint64_t> OpcodeCount;
+    std::vector<std::pair<llvm::BasicBlock*, uint64_t>> LongestPath;
 
     Statistics() : FunctionPass(ID) {}
 
     virtual bool doInitialization(Module &M) override;
-
     virtual bool doFinalization(Module &M) override;
-
     virtual bool runOnFunction(Function &F) override;
+    virtual void releaseMemory() override;
 
     void generalStats(Function&);
     void criticalPathLength(Function&);
