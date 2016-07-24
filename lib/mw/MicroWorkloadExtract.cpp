@@ -90,10 +90,17 @@ MicroWorkloadExtract::MicroWorkloadExtract(std::string S, int N,
 
 bool MicroWorkloadExtract::doInitialization(Module &M) {
     readSequences();
+    Data.clear();
     return false;
 }
 
-bool MicroWorkloadExtract::doFinalization(Module &M) { return false; }
+bool MicroWorkloadExtract::doFinalization(Module &M) { 
+    ofstream Outfile("mwe.stats.txt", ios::out);
+    for(auto KV: Data) {
+        Outfile << KV.first << " " << KV.second << "\n";
+    }
+    return false; 
+}
 
 static bool isBlockInPath(const string &S, const Path &P) {
     return find(P.Seq.begin(), P.Seq.end(), S) != P.Seq.end();
@@ -765,6 +772,9 @@ Function *MicroWorkloadExtract::extract(
     // for (auto *V : LiveOut) {
     //     errs() << *V << "\n";
     // }
+    Data["num-live-in"] = LiveIn.size();
+    Data["num-live-out"] = LiveOut.size();
+    Data["num-globals"] = Globals.size();
 
     auto DataLayoutStr = Mod->getDataLayout();
     auto TargetTripleStr = StartBB->getParent()->getParent()->getTargetTriple();
@@ -1063,6 +1073,8 @@ void MicroWorkloadExtract::process(Function &F) {
                 break;
         }
     }
+
+    Data["num-extract-blocks"] = Blocks.size();
 
     ExtractedModules.push_back(llvm::make_unique<Module>("mwe", getGlobalContext()));
     Module *Mod = ExtractedModules.back().get();

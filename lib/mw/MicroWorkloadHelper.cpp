@@ -119,6 +119,8 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
             }
         }
     }
+        
+    Data["undo-log-size"] = Stores.size();
 
     // Create the Undo Log as a global variable
     ArrayType *LogArrTy =
@@ -250,7 +252,13 @@ bool MicroWorkloadHelper::runOnFunction(Function &F) {
     return false;
 }
 
-bool MicroWorkloadHelper::doInitialization(Module &M) { return false; }
-bool MicroWorkloadHelper::doFinalization(Module &M) { return false; }
+bool MicroWorkloadHelper::doInitialization(Module &M) { Data.clear(); return false; }
+bool MicroWorkloadHelper::doFinalization(Module &M) { 
+    ofstream Outfile("undo.stats.txt", ios::out);
+    for(auto KV: Data) {
+        Outfile << KV.first << " " << KV.second << "\n";
+    }
+    return false; 
+}
 
 char MicroWorkloadHelper::ID = 0;

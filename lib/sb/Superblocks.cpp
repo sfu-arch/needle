@@ -138,8 +138,8 @@ void Superblocks::construct(
     for(auto BB : SBlock) {
         LoopBlocks.push_back(BB);
         InsCount += (BB)->size();
-        auto T = (BB)->getTerminator()->getNumSuccessors() - 1 ;
-        ConditionCount += T > 0 ? T : 0;
+        int32_t T = (BB)->getTerminator()->getNumSuccessors();
+        ConditionCount += T - 1 > 0 ? T : 0;
         for(auto &I : *BB) {
             if(isa<LoadInst>(&I) || isa<StoreInst>(&I))
                 MemCount++; 
@@ -202,8 +202,8 @@ Superblocks::hyperblock(Loop* L, LoopInfo& LI) {
             BB != BE; BB++) {
         LoopBlocks.push_back(*BB);
         InsCount += (*BB)->size();
-        auto T = (*BB)->getTerminator()->getNumSuccessors() - 1 ;
-        ConditionCount += T > 0 ? T : 0;
+        int32_t T = (*BB)->getTerminator()->getNumSuccessors();
+        ConditionCount += T - 1 > 0 ? T : 0;
         for(auto &I : **BB) {
             if(isa<LoadInst>(&I) || isa<StoreInst>(&I))
                 MemCount++; 

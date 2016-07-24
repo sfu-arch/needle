@@ -5,6 +5,7 @@
 #include <string>
 #include "llvm/ADT/SCCIterator.h"
 #include <deque>
+#include <fstream>
 
 using namespace llvm;
 using namespace std;
@@ -24,6 +25,7 @@ bool checkCall(const Instruction &I, string name) {
 /// to be initialized here. Additional Opcode counters may
 /// also need to be initialized here.
 bool Statistics::doInitialization(Module &M) {
+    Data.clear();
 
 #define HANDLE_INST(N, OPCODE, CLASS)    \
     OpcodeCount[#OPCODE] = 0;
@@ -114,6 +116,7 @@ Statistics::criticalPath(Function &F) {
         }
     }
 
+    Data["crit-path-ops"] = Max;
     LongestPath.push_back({Last, Max});
    
     deque<BasicBlock*> Worklist;  
@@ -137,6 +140,8 @@ Statistics::criticalPath(Function &F) {
         }
     }
     reverse(LongestPath.begin(), LongestPath.end());
+
+    Data["crit-path-blocks"] = LongestPath.size();
 
     errs() << "LongestPath\n";
     for(auto &KV : LongestPath) {
@@ -217,6 +222,8 @@ Statistics::branchToMemoryDependency(Function& F) {
             }
         }
     }
+
+    Data["branch-mem-dep"] = NumFound;
 }
 
 /// For every branch in the function, find out if
@@ -265,7 +272,7 @@ Statistics::memoryToBranchDependency(Function& F) {
         }
         Found = false;
     }
-
+    Data["mem-branch-dep"] = NumFound;
 }
 
 bool Statistics::runOnFunction(Function &F) {
@@ -277,13 +284,17 @@ bool Statistics::runOnFunction(Function &F) {
 }
 
 bool Statistics::doFinalization(Module& M) {
-    // uint64_t TotalCount = 0;
-    // for(auto KV : OpcodeCount) {
-    //     errs() << KV.first << " " 
-    //            << KV.second << "\n";
-    //     TotalCount += KV.second;
-    // }    
-    // errs() << "TotalCount " << TotalCount << "\n";
+    ofstream Outfile("function.stats.txt", ios::out);
+    uint64_t TotalCount = 0;
+    for(auto KV : OpcodeCount) {
+        Outfile << KV.first << " " 
+               << KV.second << "\n";
+        TotalCount += KV.second;
+    }    
+    Outfile << "TotalOpsCount " << TotalCount << "\n";
+    for(auto KV: Data) {
+        Outfile << KV.first << " " << KV.second << "\n";
+    }
     return false;
 }
 
