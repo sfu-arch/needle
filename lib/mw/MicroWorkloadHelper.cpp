@@ -243,6 +243,7 @@ bool MicroWorkloadHelper::runOnFunction(Function &F) {
     }
 
     runStatsPasses(&F);
+    common::writeModule( F.getParent(), F.getName().str() +string(".ll") );
     replaceGuards(&F);
     addUndoLog(&F);
     writeIfConversionDot(F);

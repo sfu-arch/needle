@@ -10,6 +10,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include "json11.hpp"
 
 using namespace llvm;
 
@@ -20,6 +21,8 @@ struct Statistics : public FunctionPass {
 
     std::map<std::string, uint64_t> OpcodeCount;
     std::map<std::string, uint64_t> OpcodeWt;
+
+    std::map<std::string, uint64_t> Data;
 
     Statistics() : FunctionPass(ID) {}
 
@@ -32,6 +35,8 @@ struct Statistics : public FunctionPass {
     std::vector<std::pair<llvm::BasicBlock*, uint64_t>> 
                     criticalPath(Function&);
     uint64_t getBlockSize(BasicBlock *);
+    void memoryToBranchDependency(Function&);
+    void branchToMemoryDependency(Function&);
 
     void getAnalysisUsage(AnalysisUsage &AU) const override {}
 };

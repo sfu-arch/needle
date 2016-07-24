@@ -3,15 +3,28 @@
 #include "Statistics.h"
 #include <cassert>
 #include <string>
-#include "json11.hpp"
 #include "llvm/ADT/SCCIterator.h"
 #include <deque>
 
 using namespace llvm;
 using namespace std;
 using namespace pasha;
+using namespace json11;
 
+static 
+bool checkCall(const Instruction &I, string name) {
+    if (isa<CallInst>(&I) && dyn_cast<CallInst>(&I)->getCalledFunction() &&
+        dyn_cast<CallInst>(&I)->getCalledFunction()->getName().startswith(name))
+        return true;
+    return false;
+}
+
+/// Initializes the Opcode count
+/// map and the Opcode weight map. New data fields need
+/// to be initialized here. Additional Opcode counters may
+/// also need to be initialized here.
 bool Statistics::doInitialization(Module &M) {
+
 #define HANDLE_INST(N, OPCODE, CLASS)    \
     OpcodeCount[#OPCODE] = 0;
 #include "llvm/IR/Instruction.def"
@@ -24,6 +37,8 @@ bool Statistics::doInitialization(Module &M) {
 
     /// Opcode weights can be overriden here to 
     /// account for longer latency FP ops, MEM ops etc.
+    
+
 
     return false;
 }
@@ -143,6 +158,7 @@ Statistics::releaseMemory() {
 /// from unconditional branches.
 void 
 Statistics::generalStats(Function &F) {
+
     for(auto &BB : F) {
         for(auto &I : BB) {
 
@@ -169,14 +185,7 @@ Statistics::generalStats(Function &F) {
                 }
             }
 
-            auto checkCall = [](const Instruction &I, string name) -> bool {
-                if (isa<CallInst>(&I) && dyn_cast<CallInst>(&I)->getCalledFunction() &&
-                    dyn_cast<CallInst>(&I)->getCalledFunction()->getName().startswith(
-                        name))
-                    return true;
-                return false;
-            };
-
+            
             if (checkCall(I, "__guard_func")) {
                 OpcodeCount["Call"] -= 1;
                 OpcodeCount["Guard"] += 1;
@@ -185,10 +194,85 @@ Statistics::generalStats(Function &F) {
     }
 }
 
+/// Detect if a Load or Store instruction is control
+/// dependent. Starting from the BasicBlock of the 
+/// instruction, find a predecessor. If the predecessor
+/// is unique then it is not control dependent. If the
+/// search reaches the entry block then it is not control
+/// dependent.
+void
+Statistics::branchToMemoryDependency(Function& F) {
+    uint64_t NumFound = 0;
+    for(auto &BB : F) {
+        for(auto &I : BB) {
+            if(isa<LoadInst>(&I) || isa<StoreInst>(&I)) {
+                auto *P = &BB; 
+                while(P && P != &F.getEntryBlock()) {
+                    P = BB.getUniquePredecessor(); 
+                }
+
+                if(P != &F.getEntryBlock()) {
+                    NumFound++;    
+                }
+            }
+        }
+    }
+}
+
+/// For every branch in the function, find out if
+/// the backward slice uses a load or store. Also
+/// find the memory operations which are control
+/// dependent on a branch.
+void
+Statistics::memoryToBranchDependency(Function& F) {
+    vector<User *> Slices;
+    for(auto &BB : F) {
+        for(auto &I : BB) {
+            BranchInst *BI = dyn_cast<BranchInst>(&I);
+            if(BI && BI->isConditional()) {
+                Slices.push_back(BI);
+            } else if (checkCall(I, "__guard_func")) {
+                auto *CI = dyn_cast<CallInst>(&I);
+                auto *IC = dyn_cast<ICmpInst>(CI->getArgOperand(0));
+                assert(IC && "The first arg of guard should be ICmp");
+                Slices.push_back(IC); 
+            }
+        }
+    }
+
+    uint64_t NumFound = 0;
+    for(auto *BI : Slices) {
+        deque<User*> Worklist;    
+        bool Found = false;
+        Worklist.push_back(BI);
+        while(!Worklist.empty() && !Found ) {
+            auto *U = Worklist.front();
+            Worklist.pop_front();
+            for(auto OI = U->op_begin(), OE = U->op_end();
+                    OI != OE; OI++) {
+                if(dyn_cast<LoadInst>(OI)) {
+                    Found = true;
+                    NumFound++;
+                    break;
+                } else if (auto *UI = dyn_cast<User>(OI)) {
+                    Worklist.push_back(UI);
+                }
+            } 
+        }
+    
+        if(Found) {
+            errs() << *BI << " is derived from load\n"; 
+        }
+        Found = false;
+    }
+
+}
 
 bool Statistics::runOnFunction(Function &F) {
     generalStats(F);
     auto LongestPath = criticalPath(F);
+    branchToMemoryDependency(F);
+    memoryToBranchDependency(F);
     return false;
 }
 

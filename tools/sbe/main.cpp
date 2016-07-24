@@ -105,6 +105,7 @@ int main(int argc, char **argv, const char **env) {
     pm.add(new epp::Namer());
     // pm.add(new pasha::LoopConverter());
     pm.add(new LoopInfoWrapperPass());
+    pm.add(new DominatorTreeWrapperPass());
     pm.add(new sb::Superblocks(SeqFilePath));
     pm.add(createVerifierPass());
     pm.run(*module);

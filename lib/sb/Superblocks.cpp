@@ -1,6 +1,11 @@
 #define DEBUG_TYPE "pasha_superblock"
 #include "Superblocks.h"
 #include "Common.h"
+#include "Statistics.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/BasicAliasAnalysis.h"
+#include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
@@ -14,6 +19,7 @@
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Transforms/Utils/CodeExtractor.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include <boost/algorithm/string.hpp>
@@ -73,7 +79,13 @@ bool Superblocks::doInitialization(Module &M) {
     return false;
 }
 
-bool Superblocks::doFinalization(Module &M) { return false; }
+bool Superblocks::doFinalization(Module &M) { 
+    ofstream OutFile("superblocks.stat.txt", ios::out);
+    for(auto KV: Data) {
+        OutFile << KV.first << " " << KV.second << "\n";
+    }
+    return false; 
+}
 
 void Superblocks::construct(
     BasicBlock *Begin,
@@ -116,7 +128,28 @@ void Superblocks::construct(
         }
     } while (Next);
 
+    if(SBlock.size() == 1) return;
+
     Superblocks.push_back(SBlock);
+
+    uint64_t InsCount = 0, MemCount = 0;
+    uint64_t ConditionCount = 0;
+    vector<BasicBlock*> LoopBlocks;
+    for(auto BB : SBlock) {
+        LoopBlocks.push_back(BB);
+        InsCount += (BB)->size();
+        auto T = (BB)->getTerminator()->getNumSuccessors() - 1 ;
+        ConditionCount += T > 0 ? T : 0;
+        for(auto &I : *BB) {
+            if(isa<LoadInst>(&I) || isa<StoreInst>(&I))
+                MemCount++; 
+        }
+    }
+    
+    Data["superblock-ins-"+to_string((uint64_t)Begin)] = InsCount; 
+    Data["superblock-bbcount-"+to_string((uint64_t)Begin)] = LoopBlocks.size(); 
+    Data["superblock-cond-"+to_string((uint64_t)Begin)] = ConditionCount; 
+    Data["superblock-memcount-"+to_string((uint64_t)Begin)] = MemCount; 
 }
 void printPathSrc(SmallVector<llvm::BasicBlock *, 8> &blocks) {
     unsigned line = 0;
@@ -142,6 +175,47 @@ void printPathSrc(SmallVector<llvm::BasicBlock *, 8> &blocks) {
     errs() << "-----------------------\n";
 }
 
+
+
+/// Compute the resource requirement of the Hyperblock which includes
+/// the entire set of blocks of the innermost loop. Hyperblocks are 
+/// constructed for loop which have been executed at least once. 
+/// This is checked by looking at the edge profile for number of times 
+/// and edge from the header to any successor is present.
+void 
+Superblocks::hyperblock(Loop* L, LoopInfo& LI) {
+    auto *Header = L->getHeader(); 
+    bool Found = false;
+    for(auto SB = succ_begin(Header), SE = succ_end(Header); 
+            SB != SE; SB++) {
+        if(EdgeProfile.count({Header, *SB}))
+            Found = true;
+    }
+
+    /// Don't do anything if this loop was never actually executed
+    if(!Found) return;
+  
+    uint64_t InsCount = 0, MemCount = 0;
+    uint64_t ConditionCount = 0;
+    vector<BasicBlock*> LoopBlocks;
+    for(auto BB = L->block_begin(), BE = L->block_end();
+            BB != BE; BB++) {
+        LoopBlocks.push_back(*BB);
+        InsCount += (*BB)->size();
+        auto T = (*BB)->getTerminator()->getNumSuccessors() - 1 ;
+        ConditionCount += T > 0 ? T : 0;
+        for(auto &I : **BB) {
+            if(isa<LoadInst>(&I) || isa<StoreInst>(&I))
+                MemCount++; 
+        }
+    }
+    
+    Data["hyperblock-ins-"+to_string((uint64_t)Header)] = InsCount; 
+    Data["hyperblock-bbcount-"+to_string((uint64_t)Header)] = LoopBlocks.size(); 
+    Data["hyperblock-cond-"+to_string((uint64_t)Header)] = ConditionCount; 
+    Data["hyperblock-memcount-"+to_string((uint64_t)Header)] = MemCount; 
+}
+
 void Superblocks::process(Function &F) {
     map<string, BasicBlock *> BlockMap;
     for (auto &BB : F)
@@ -157,6 +231,7 @@ void Superblocks::process(Function &F) {
     for (auto &L : InnerLoops) {
         assert(L->getHeader()->getParent() == &F);
         construct(L->getHeader(), Superblocks, BackEdges);
+        hyperblock(L, LI);
     }
 
     std::ofstream edgefile("edgeprofile.txt", ios::out);
