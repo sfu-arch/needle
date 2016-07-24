@@ -12,12 +12,41 @@ using namespace std;
 using namespace pasha;
 
 bool Statistics::doInitialization(Module &M) {
-#define HANDLE_INST(N, OPCODE, CLASS)                                          \
+#define HANDLE_INST(N, OPCODE, CLASS)    \
     OpcodeCount[#OPCODE] = 0;
 #include "llvm/IR/Instruction.def"
     OpcodeCount["CondBr"] = 0;
     OpcodeCount["Guard"] = 0;
+
+#define HANDLE_INST(N, OPCODE, CLASS)    \
+    OpcodeWt[#OPCODE] = 1;
+#include "llvm/IR/Instruction.def"
+
+    /// Opcode weights can be overriden here to 
+    /// account for longer latency FP ops, MEM ops etc.
+
     return false;
+}
+
+static
+string getOpcodeStr(unsigned int N) {
+    switch (N) {
+#define HANDLE_INST(N, OPCODE, CLASS)                                          \
+    case N:                                                                    \
+        return string(#OPCODE);
+#include "llvm/IR/Instruction.def"
+    default:
+        llvm_unreachable("Unknown Instruction");
+    }
+}
+
+uint64_t 
+Statistics::getBlockSize(BasicBlock *BB) {
+    uint64_t Wt = 0;
+    for(auto &I : *BB) {
+        Wt += OpcodeWt[getOpcodeStr(I.getOpcode())];
+    }    
+    return Wt;
 }
 
 /// Compute the critical (longest) path from source (entry)
@@ -39,10 +68,10 @@ Statistics::criticalPathLength(Function &F) {
     assert(TopoBlocks.front() == &F.getEntryBlock() &&
             "Expect first block to be entry block");
             
-
     map<BasicBlock*, uint64_t> Distance;
-    for(auto &BB : TopoBlocks) {
-        Distance[BB] = BB->size();  
+    for(auto BB : TopoBlocks) {
+        Distance[BB] = getBlockSize(BB);  
+        //Distance[BB] = BB->size();  
         for(auto PB = pred_begin(BB), PE = pred_end(BB); 
                 PB != PE; PB++) {
             assert(Distance.count(*PB) && 
@@ -54,13 +83,12 @@ Statistics::criticalPathLength(Function &F) {
     /// Decode the longest path by picking the predecessor with
     /// with the largest weight starting from the max value that
     /// has been computed.
-    //
     uint64_t Max = 0;
     BasicBlock* Last = nullptr;
-    errs() << "Distance\n";
+    //errs() << "Distance\n";
     for(auto &BB : TopoBlocks) {
-        errs() << BB->getName() << " ";
-        errs() << Distance[BB] << "\n";
+        //errs() << BB->getName() << " ";
+        //errs() << Distance[BB] << "\n";
         auto Dist = Distance[BB];
         if(Max < Dist) {
             Max = Dist;
@@ -96,6 +124,7 @@ Statistics::criticalPathLength(Function &F) {
     for(auto &KV : LongestPath) {
         errs() << KV.first->getName() << " ";
     }
+    errs() << "\n";
 }
 
 void 
