@@ -1017,13 +1017,19 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
 
 static void runHelperPasses(Function *Offload, string Id) {
 
-    legacy::FunctionPassManager FPM(Offload->getParent());
-    FPM.add(createBasicAAWrapperPass());
-    FPM.add(llvm::createTypeBasedAAWrapperPass());
-    FPM.add(new MicroWorkloadHelper(Id));
-    FPM.doInitialization();
-    FPM.run(*Offload);
-    FPM.doFinalization();
+    legacy::PassManager PM;
+    PM.add(createBasicAAWrapperPass());
+    PM.add(llvm::createTypeBasedAAWrapperPass());
+    PM.add(new MicroWorkloadHelper(Id));
+    PM.run(*Offload->getParent());
+
+    // legacy::FunctionPassManager FPM(Offload->getParent());
+    // FPM.add(createBasicAAWrapperPass());
+    // FPM.add(llvm::createTypeBasedAAWrapperPass());
+    // FPM.add(new MicroWorkloadHelper(Id));
+    // FPM.doInitialization();
+    // FPM.run(*Offload);
+    // FPM.doFinalization();
 
 }
 

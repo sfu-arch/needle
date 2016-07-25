@@ -237,7 +237,10 @@ void writeIfConversionDot(Function &F) {
 }
 
 bool MicroWorkloadHelper::runOnFunction(Function &F) {
-    common::optimizeModule(F.getParent());
+    
+    if(F.isDeclaration())
+        return false;
+
     if (SimulateDFG) {
         common::labelUID(F);
         common::instrumentDFG(F);
@@ -252,7 +255,12 @@ bool MicroWorkloadHelper::runOnFunction(Function &F) {
     return false;
 }
 
-bool MicroWorkloadHelper::doInitialization(Module &M) { Data.clear(); return false; }
+bool MicroWorkloadHelper::doInitialization(Module &M) { 
+    common::optimizeModule(&M);
+    Data.clear(); 
+    return false; 
+}
+
 bool MicroWorkloadHelper::doFinalization(Module &M) { 
     ofstream Outfile("undo.stats.txt", ios::out);
     for(auto KV: Data) {
