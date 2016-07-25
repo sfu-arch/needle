@@ -236,22 +236,24 @@ void writeIfConversionDot(Function &F) {
     Out.close();
 }
 
-bool MicroWorkloadHelper::runOnFunction(Function &F) {
-    
-    if(F.isDeclaration())
-        return false;
+bool MicroWorkloadHelper::runOnModule(Module &M) {
+   
+    for(auto &F : M) {
+        if(F.isDeclaration())
+            return false;
 
-    if (SimulateDFG) {
-        common::labelUID(F);
-        common::instrumentDFG(F);
-        common::printDFG(F);
+        if (SimulateDFG) {
+            common::labelUID(F);
+            common::instrumentDFG(F);
+            common::printDFG(F);
+        }
+
+        runStatsPasses(&F);
+        common::writeModule( F.getParent(), F.getName().str() +string(".ll") );
+        replaceGuards(&F);
+        addUndoLog(&F);
+        writeIfConversionDot(F);
     }
-
-    runStatsPasses(&F);
-    common::writeModule( F.getParent(), F.getName().str() +string(".ll") );
-    replaceGuards(&F);
-    addUndoLog(&F);
-    writeIfConversionDot(F);
     return false;
 }
 
