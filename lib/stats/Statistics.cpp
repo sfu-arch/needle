@@ -10,7 +10,6 @@
 using namespace llvm;
 using namespace std;
 using namespace pasha;
-using namespace json11;
 
 static 
 bool checkCall(const Instruction &I, string name) {
@@ -152,11 +151,6 @@ Statistics::criticalPath(Function &F) {
     return LongestPath;
 }
 
-void 
-Statistics::releaseMemory() {
-    OpcodeCount.clear();
-}
-
 /// Count per instruction statistics. Ignores store instructions
 /// marked as live out with metadata checks. Also checks for 
 /// guard intrinsics as well as separating out conditional branches
@@ -213,7 +207,7 @@ Statistics::branchToMemoryDependency(Function& F) {
             if(isa<LoadInst>(&I) || isa<StoreInst>(&I)) {
                 auto *P = &BB; 
                 while(P && P != &F.getEntryBlock()) {
-                    P = BB.getUniquePredecessor(); 
+                    P = P->getUniquePredecessor(); 
                 }
 
                 if(P != &F.getEntryBlock()) {
@@ -240,9 +234,10 @@ Statistics::memoryToBranchDependency(Function& F) {
                 Slices.push_back(BI);
             } else if (checkCall(I, "__guard_func")) {
                 auto *CI = dyn_cast<CallInst>(&I);
-                auto *IC = dyn_cast<ICmpInst>(CI->getArgOperand(0));
-                assert(IC && "The first arg of guard should be ICmp");
-                Slices.push_back(IC); 
+                //auto *IC = dyn_cast<ICmpInst>(CI->getArgOperand(0));
+                //assert(IC && "The first arg of guard should be ICmp");
+                if(auto UI = dyn_cast<Instruction>(CI->getArgOperand(0)))
+                    Slices.push_back(UI); 
             }
         }
     }
@@ -278,8 +273,11 @@ Statistics::memoryToBranchDependency(Function& F) {
 bool Statistics::runOnFunction(Function &F) {
     generalStats(F);
     auto LongestPath = criticalPath(F);
-    branchToMemoryDependency(F);
+    errs() << "Done crit path\n";
     memoryToBranchDependency(F);
+    errs() << "done mem2branch\n";
+    branchToMemoryDependency(F);
+    errs() << "done branch2mem\n";
     return false;
 }
 

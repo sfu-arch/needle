@@ -29,7 +29,6 @@ struct Statistics : public FunctionPass {
     virtual bool doInitialization(Module &M) override;
     virtual bool doFinalization(Module &M) override;
     virtual bool runOnFunction(Function &F) override;
-    virtual void releaseMemory() override;
 
     void generalStats(Function&);
     std::vector<std::pair<llvm::BasicBlock*, uint64_t>> 
