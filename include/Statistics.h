@@ -10,7 +10,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
-#include "json11.hpp"
+#include "llvm/Analysis/ScalarEvolution.h"
 
 using namespace llvm;
 
@@ -38,6 +38,26 @@ struct Statistics : public FunctionPass {
     void branchToMemoryDependency(Function&);
 
     void getAnalysisUsage(AnalysisUsage &AU) const override {}
+};
+
+struct BranchTaxonomy : public FunctionPass {
+    static char ID;
+
+    std::map<std::string, uint64_t> Data;
+
+    BranchTaxonomy() : FunctionPass(ID) {}
+
+    virtual bool doInitialization(Module &M) override;
+    virtual bool doFinalization(Module &M) override;
+    virtual bool runOnFunction(Function &F) override;
+
+    void loopBounds(Function&);
+    void functionDAG(Function&);
+
+    void getAnalysisUsage(AnalysisUsage &AU) const override {
+        AU.addRequired<LoopInfoWrapperPass>();
+        AU.addRequired<ScalarEvolutionWrapperPass>();
+    }
 };
 
 }

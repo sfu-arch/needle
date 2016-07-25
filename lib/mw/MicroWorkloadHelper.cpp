@@ -37,8 +37,6 @@ extern cl::opt<bool> SimulateDFG;
 static void runStatsPasses(Function *Offload) {
 
     legacy::FunctionPassManager FPM(Offload->getParent());
-    //FPM.add(createBasicAAWrapperPass());
-    //FPM.add(llvm::createTypeBasedAAWrapperPass());
     FPM.add(new pasha::Statistics());
     FPM.doInitialization();
     FPM.run(*Offload);
@@ -249,7 +247,7 @@ bool MicroWorkloadHelper::runOnModule(Module &M) {
 
         if (SimulateDFG) {
             common::labelUID(F);
-            common::instrumentDFG(F);
+            //common::instrumentDFG(F);
             common::printDFG(F);
         }
 

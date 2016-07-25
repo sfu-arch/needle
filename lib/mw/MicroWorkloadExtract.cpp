@@ -26,6 +26,7 @@
 #include "llvm/Transforms/Utils/SSAUpdater.h"
 #include <boost/algorithm/string.hpp>
 #include <cxxabi.h>
+#include "Statistics.h"
 
 #include <algorithm>
 #include <deque>
@@ -1023,17 +1024,20 @@ static void runHelperPasses(Function *Offload, string Id) {
     PM.add(new MicroWorkloadHelper(Id));
     PM.run(*Offload->getParent());
 
-    // legacy::FunctionPassManager FPM(Offload->getParent());
-    // FPM.add(createBasicAAWrapperPass());
-    // FPM.add(llvm::createTypeBasedAAWrapperPass());
-    // FPM.add(new MicroWorkloadHelper(Id));
-    // FPM.doInitialization();
-    // FPM.run(*Offload);
-    // FPM.doFinalization();
+}
 
+static void runBranchTaxonomyPass(Function& F) {
+    legacy::FunctionPassManager FPM(F.getParent());
+    FPM.add(new pasha::BranchTaxonomy());
+    FPM.doInitialization();
+    FPM.run(F);
+    FPM.doFinalization();
 }
 
 void MicroWorkloadExtract::process(Function &F) {
+    
+    runBranchTaxonomyPass(F);
+
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
     auto *DT = &getAnalysis<DominatorTreeWrapperPass>(F).getDomTree();
     auto *LI = &getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();

@@ -273,11 +273,8 @@ Statistics::memoryToBranchDependency(Function& F) {
 bool Statistics::runOnFunction(Function &F) {
     generalStats(F);
     auto LongestPath = criticalPath(F);
-    errs() << "Done crit path\n";
     memoryToBranchDependency(F);
-    errs() << "done mem2branch\n";
     branchToMemoryDependency(F);
-    errs() << "done branch2mem\n";
     return false;
 }
 
@@ -293,6 +290,7 @@ bool Statistics::doFinalization(Module& M) {
     for(auto KV: Data) {
         Outfile << KV.first << " " << KV.second << "\n";
     }
+    Outfile.close();
     return false;
 }
 
