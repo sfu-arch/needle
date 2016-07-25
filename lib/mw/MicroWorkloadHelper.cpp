@@ -37,8 +37,8 @@ extern cl::opt<bool> SimulateDFG;
 static void runStatsPasses(Function *Offload) {
 
     legacy::FunctionPassManager FPM(Offload->getParent());
-    FPM.add(createBasicAAWrapperPass());
-    FPM.add(llvm::createTypeBasedAAWrapperPass());
+    //FPM.add(createBasicAAWrapperPass());
+    //FPM.add(llvm::createTypeBasedAAWrapperPass());
     FPM.add(new pasha::Statistics());
     FPM.doInitialization();
     FPM.run(*Offload);
@@ -237,10 +237,15 @@ void writeIfConversionDot(Function &F) {
 }
 
 bool MicroWorkloadHelper::runOnModule(Module &M) {
-   
+    // This needs to change if there are more 
+    // than one offload function in the module we create.
     for(auto &F : M) {
         if(F.isDeclaration())
             return false;
+
+        // TODO : Get the name of the function, if it starts with __offload_func, 
+        // the get the id from the last part of the name. Use this id for the 
+        // undo log buffer and the num store variable.
 
         if (SimulateDFG) {
             common::labelUID(F);
