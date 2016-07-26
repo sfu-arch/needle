@@ -40,16 +40,16 @@ struct Statistics : public FunctionPass {
     void getAnalysisUsage(AnalysisUsage &AU) const override {}
 };
 
-struct BranchTaxonomy : public FunctionPass {
+struct BranchTaxonomy : public ModulePass {
     static char ID;
-
+    std::string FName;
     std::map<std::string, uint64_t> Data;
 
-    BranchTaxonomy() : FunctionPass(ID) {}
+    BranchTaxonomy(std::string N) : FName(N), ModulePass(ID) {}
 
     virtual bool doInitialization(Module &M) override;
     virtual bool doFinalization(Module &M) override;
-    virtual bool runOnFunction(Function &F) override;
+    virtual bool runOnModule(Module &M) override;
 
     void loopBounds(Function&);
     void functionDAG(Function&);

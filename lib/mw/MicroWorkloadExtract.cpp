@@ -1027,11 +1027,19 @@ static void runHelperPasses(Function *Offload, string Id) {
 }
 
 static void runBranchTaxonomyPass(Function& F) {
-    legacy::FunctionPassManager FPM(F.getParent());
-    FPM.add(new pasha::BranchTaxonomy());
-    FPM.doInitialization();
-    FPM.run(F);
-    FPM.doFinalization();
+    legacy::PassManager PM;
+    PM.add(new ScalarEvolutionWrapperPass());
+    PM.add(new LoopInfoWrapperPass());
+    PM.add(new pasha::BranchTaxonomy(F.getName().str()));
+    PM.run(*F.getParent());
+
+
+
+    //legacy::FunctionPassManager FPM(F.getParent());
+    //FPM.add(new pasha::BranchTaxonomy());
+    //FPM.doInitialization();
+    //FPM.run(F);
+    //FPM.doFinalization();
 }
 
 void MicroWorkloadExtract::process(Function &F) {
