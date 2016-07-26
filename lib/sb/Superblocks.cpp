@@ -146,10 +146,10 @@ void Superblocks::construct(
         }
     }
     
-    Data["superblock-ins-"+to_string((uint64_t)Begin)] = InsCount; 
-    Data["superblock-bbcount-"+to_string((uint64_t)Begin)] = LoopBlocks.size(); 
-    Data["superblock-cond-"+to_string((uint64_t)Begin)] = ConditionCount; 
-    Data["superblock-memcount-"+to_string((uint64_t)Begin)] = MemCount; 
+    Data["superblock-"+to_string((uint64_t)Begin)+"-ins"     ] = InsCount; 
+    Data["superblock-"+to_string((uint64_t)Begin)+"-bbcount" ] = LoopBlocks.size(); 
+    Data["superblock-"+to_string((uint64_t)Begin)+"-cond"    ] = ConditionCount; 
+    Data["superblock-"+to_string((uint64_t)Begin)+"-memcount"] = MemCount; 
 }
 void printPathSrc(SmallVector<llvm::BasicBlock *, 8> &blocks) {
     unsigned line = 0;
@@ -172,7 +172,7 @@ void printPathSrc(SmallVector<llvm::BasicBlock *, 8> &blocks) {
             }
         }
     }
-    errs() << "-----------------------\n";
+    //errs() << "-----------------------\n";
 }
 
 
@@ -210,10 +210,10 @@ Superblocks::hyperblock(Loop* L, LoopInfo& LI) {
         }
     }
     
-    Data["hyperblock-ins-"+to_string((uint64_t)Header)] = InsCount; 
-    Data["hyperblock-bbcount-"+to_string((uint64_t)Header)] = LoopBlocks.size(); 
-    Data["hyperblock-cond-"+to_string((uint64_t)Header)] = ConditionCount; 
-    Data["hyperblock-memcount-"+to_string((uint64_t)Header)] = MemCount; 
+    Data["hyperblock-"+to_string((uint64_t)Header)+"-ins"     ] = InsCount; 
+    Data["hyperblock-"+to_string((uint64_t)Header)+"-bbcount" ] = LoopBlocks.size(); 
+    Data["hyperblock-"+to_string((uint64_t)Header)+"-cond"    ] = ConditionCount; 
+    Data["hyperblock-"+to_string((uint64_t)Header)+"-memcount"] = MemCount; 
 }
 
 void Superblocks::process(Function &F) {
@@ -253,7 +253,7 @@ void Superblocks::process(Function &F) {
         }
         outfile << "\n";
         DEBUG(errs() << "\n\n");
-        errs() << Counter - 1 << "\n";
+        //errs() << Counter - 1 << "\n";
         printPathSrc(SV);
     }
 }

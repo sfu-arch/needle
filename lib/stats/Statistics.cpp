@@ -60,6 +60,11 @@ uint64_t
 Statistics::getBlockSize(BasicBlock *BB) {
     uint64_t Wt = 0;
     for(auto &I : *BB) {
+        if(auto *SI = dyn_cast<StoreInst>(&I)) {
+            if (SI->getMetadata("LO") != nullptr) {
+                continue;
+            }
+        }
         Wt += OpcodeWt[getOpcodeStr(I.getOpcode())];
     }    
     return Wt;
@@ -115,7 +120,7 @@ Statistics::criticalPath(Function &F) {
         }
     }
 
-    Data["crit-path-ops"] = Max;
+    //Data["crit-path-ops"] = Max;
     LongestPath.push_back({Last, Max});
    
     deque<BasicBlock*> Worklist;  
@@ -140,6 +145,11 @@ Statistics::criticalPath(Function &F) {
     }
     reverse(LongestPath.begin(), LongestPath.end());
 
+    uint64_t CritPathSize = 0;
+    for(auto &KV : LongestPath) {
+        CritPathSize += getBlockSize(KV.first);
+    }
+    Data["crit-path-ops"] = CritPathSize;
     Data["crit-path-blocks"] = LongestPath.size();
 
     errs() << "LongestPath\n";
