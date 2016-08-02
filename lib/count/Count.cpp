@@ -10,6 +10,7 @@
 
 #include <cassert>
 #include <map>
+#include <set>
 #include <string>
 
 using namespace llvm;
@@ -26,6 +27,8 @@ struct Count : public ModulePass {
     uint64_t Counter = 0;
     uint64_t BBCounter = 0;
 
+    set<pair<Value*, Value*>>EdgeMap;
+
     bool doInitialization(Module &M) {
         // assert(FunctionList.size() == 1 &&
         //"Can only patch one function at a time");
@@ -37,12 +40,13 @@ struct Count : public ModulePass {
     }
 
     bool doFinalization(Module &M) {
-        errs() << "TotalOps:" << Counter << "\n";
-        errs() << "TotalBlocks:" << BBCounter << "\n";
-        errs() << "TotalUniqueTypes:" << CountMap.size() << "\n";
+        errs() << "TotalOps: " << Counter << "\n";
+        errs() << "TotalBlocks: " << BBCounter << "\n";
+        errs() << "TotalUniqueTypes: " << CountMap.size() << "\n";
         for (auto KV : CountMap) {
-            errs() << opcodeToStr(KV.first) << "\t" << KV.second << "\n";
+            errs() << opcodeToStr(KV.first) << " " << KV.second << "\n";
         }
+        errs() << "Edges: " << EdgeMap.size() << "\n";
         return false;
     }
 
@@ -58,6 +62,13 @@ struct Count : public ModulePass {
                 for (auto &I : BB) {
                     CountMap[opcodeBucket(I.getOpcode())] += 1;
                     Counter++;
+
+                    for(auto ob = I.op_begin(), oe = I.op_end();
+                            ob != oe; ob++) {
+                        EdgeMap.insert({ob->get(), &I});
+                    }
+
+
                     if (auto *SI = dyn_cast<StoreInst>(&I)) {
                         if (auto *BI = dyn_cast<BitCastInst>(
                                 SI->getPointerOperand())) {

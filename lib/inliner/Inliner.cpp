@@ -28,8 +28,7 @@ InlineCost PeruseInliner::getInlineCost(CallSite CS) {
 
 bool PeruseInliner::runOnSCC(CallGraphSCC &SCC) {
     bool Changed = false;
-    while ((Changed = Inliner::runOnSCC(SCC)))
-        ;
+    while ((Changed = Inliner::runOnSCC(SCC)));
     return Changed;
 }
 

@@ -1094,6 +1094,16 @@ void MicroWorkloadExtract::process(Function &F) {
 
     Data["num-extract-blocks"] = Blocks.size();
 
+    // Get the number of phi nodes originally
+    uint32_t PhiBefore = 0;
+    for(auto &BB : Blocks) {
+        for(auto &I : *BB) {
+            if(isa<PHINode>(&I)) 
+                PhiBefore++;
+        }
+    }
+    
+
     ExtractedModules.push_back(llvm::make_unique<Module>("mwe", getGlobalContext()));
     Module *Mod = ExtractedModules.back().get();
     Mod->setDataLayout(F.getParent()->getDataLayout());
@@ -1106,6 +1116,17 @@ void MicroWorkloadExtract::process(Function &F) {
 
     runHelperPasses(Offload, Id);
     instrument(F, BlockV, Offload->getFunctionType(), LiveIn, LiveOut, DT, Id);
+
+    // Get the number of phi nodes after 
+    uint32_t PhiAfter = 0;
+    for(auto &BB : *Offload) {
+        for(auto &I : BB) {
+            if(isa<PHINode>(&I)) 
+                PhiAfter++;
+        }
+    }
+
+    Data["phi-simplified"] = PhiBefore - PhiAfter;
 
     common::printCFG(F);
     common::writeModule(Mod, (Id) + string(".ll"));
