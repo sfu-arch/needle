@@ -33,7 +33,6 @@
 #include "Common.h"
 #include "MicroWorkloadExtract.h"
 #include "Namer.h"
-#include "Namer.h"
 #include "Simplify.h"
 
 using namespace std;
@@ -92,8 +91,8 @@ cl::opt<bool> SimulateDFG("simdfg",
                                    "instrumentation to binary for Pintool"),
                           cl::value_desc("boolean"), cl::init(false));
 
-cl::opt<bool> ConvertGlobalToLiveIn("c",
-                cl::desc("Convert references to Globals in the extracted function to live in pointers"), cl::value_desc("boolean"), cl::init(false));
+cl::opt<bool> ConvertGlobalsToPointers("global-to-pointer",
+                cl::desc("Convert globals in the extracted function to live in pointers"), cl::value_desc("boolean"), cl::init(false));
 
 cl::opt<bool> DumpStats("dump-stats", cl::desc("Pasha stats"),
         cl::value_desc("boolean"), cl::init(false));

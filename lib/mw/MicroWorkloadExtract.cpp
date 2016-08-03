@@ -39,7 +39,7 @@ extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
 extern cl::opt<bool> SimulateDFG;
-extern cl::opt<bool> ConvertGlobalToLiveIn;
+extern cl::opt<bool> ConvertGlobalsToPointers;
 extern cl::opt<ExtractType> ExtractAs;
 
 void MicroWorkloadExtract::readSequences() {
@@ -287,6 +287,20 @@ void MicroWorkloadExtract::extractHelper(
     for (auto Val : LiveIn) {
         Value *RewriteVal = &*AI++;
         rewriteUses(Val, RewriteVal);
+    }
+
+    if(ConvertGlobalsToPointers) {
+        for(auto G : Globals) {
+            Value *RewriteVal = &*AI++;
+            for(auto UB = G->user_begin(), UE = G->user_end(); 
+                    UB != UE; UB++) {
+                if(auto *UI = dyn_cast<Instruction>(*UB)) {
+                    if(UI->getParent()->getParent() ==  StaticFunc) {
+                        UI->replaceUsesOfWith(G, RewriteVal);
+                    }
+                }
+            }
+        }
     }
 
     for (auto IT = RevTopoChop.rbegin(), IE = RevTopoChop.rend(); IT != IE;
@@ -613,7 +627,8 @@ static StructType *getLiveOutStructType(SetVector<Value *> &LiveOut,
 Function *MicroWorkloadExtract::extract(
     PostDominatorTree *PDT, Module *Mod,
     SmallVector<BasicBlock *, 16> &RevTopoChop, SetVector<Value *> &LiveIn,
-    SetVector<Value *> &LiveOut, DominatorTree *DT, LoopInfo *LI, string Id) {
+    SetVector<Value *> &LiveOut, SetVector<Value *> &Globals, 
+    DominatorTree *DT, LoopInfo *LI, string Id) {
 
     auto *StartBB = RevTopoChop.back();
     auto *LastBB = RevTopoChop.front();
@@ -623,7 +638,7 @@ Function *MicroWorkloadExtract::extract(
 
     assert(verifyChop(RevTopoChop) && "Invalid Region!");
 
-    SetVector<Value *> Globals;
+    //SetVector<Value *> Globals;
 
     auto handlePhiIn = [&LiveIn, &RevTopoChop, &Globals,
                         &StartBB](PHINode *Phi) {
@@ -794,6 +809,13 @@ Function *MicroWorkloadExtract::extract(
     for (auto Val : LiveIn)
         ParamTy.push_back(Val->getType());
 
+    /// Add Globals as arguments if param is set
+    if(ConvertGlobalsToPointers){
+        for(auto &G : Globals) {
+            ParamTy.push_back(G->getType());
+        }
+    }
+
     auto *StructTy = getLiveOutStructType(LiveOut, Mod);
     auto *StructPtrTy = PointerType::getUnqual(StructTy);
     ParamTy.push_back(StructPtrTy);
@@ -857,8 +879,8 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
 
 static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                        FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
-                       SetVector<Value *> &LiveOut, DominatorTree *DT,
-                       string &Id) {
+                       SetVector<Value *> &LiveOut, SetVector<Value*> &Globals,
+                       DominatorTree *DT, string &Id) {
     if (Blocks.size() == 1) {
         auto *B = Blocks.front();
         auto *R = B->splitBasicBlock(B->getTerminator(), "unit.split");
@@ -909,7 +931,29 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     vector<Value *> Params;
     for (auto &V : LiveIn)
         Params.push_back(V);
+
     Params.push_back(StPtr);
+
+    /// Fix for Legup issue :
+    /// They build a block ram for each global present as a reference in the
+    /// function being offloaded. So this creates functionally incorrect 
+    /// code for the ARM hybrid where the FPGA fabric only references its own
+    /// global block ram instead of the one shared with the CPU.
+    if(ConvertGlobalsToPointers) {
+        for(auto &G : Globals) {
+            Params.push_back(G);
+            // for(auto UB = G->user_begin(), UE = G->user_end(); 
+            //         UB != UE; UB++) {
+            //     if(auto *UI = dyn_cast<Instruction>(*UB)) {
+            //         if(UI->getParent()->getParent() ==  Offload) {
+            //             UI->replaceUsesOfWith(G)
+            //         }
+            //     }
+            // }
+        } 
+    }
+
+    /// Create the call to the offloaded function
     auto *CI = CallInst::Create(Offload, Params, "", StartBB);
     BranchInst::Create(Success, Fail, CI, StartBB);
 
@@ -1111,11 +1155,11 @@ void MicroWorkloadExtract::process(Function &F) {
     SmallVector<BasicBlock*, 16> BlockV(Blocks.begin(), Blocks.end());
 
     // Extract the blocks and create a new function
-    SetVector<Value *> LiveOut, LiveIn;
-    Function *Offload = extract(PostDomTree, Mod, BlockV, LiveIn, LiveOut, DT, LI, Id);
+    SetVector<Value *> LiveOut, LiveIn, Globals;
+    Function *Offload = extract(PostDomTree, Mod, BlockV, LiveIn, LiveOut, Globals, DT, LI, Id);
 
     runHelperPasses(Offload, Id);
-    instrument(F, BlockV, Offload->getFunctionType(), LiveIn, LiveOut, DT, Id);
+    instrument(F, BlockV, Offload->getFunctionType(), LiveIn, LiveOut, Globals, DT, Id);
 
     // Get the number of phi nodes after 
     uint32_t PhiAfter = 0;

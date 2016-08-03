@@ -74,6 +74,7 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
                             llvm::SmallVector<llvm::BasicBlock *, 16> &,
                             llvm::SetVector<llvm::Value *> &,
                             llvm::SetVector<llvm::Value *> &,
+                            llvm::SetVector<llvm::Value *> &,
                             llvm::DominatorTree *, llvm::LoopInfo *,
                             std::string);
 
