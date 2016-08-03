@@ -932,7 +932,6 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     for (auto &V : LiveIn)
         Params.push_back(V);
 
-    Params.push_back(StPtr);
 
     /// Fix for Legup issue :
     /// They build a block ram for each global present as a reference in the
@@ -942,17 +941,10 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     if(ConvertGlobalsToPointers) {
         for(auto &G : Globals) {
             Params.push_back(G);
-            // for(auto UB = G->user_begin(), UE = G->user_end(); 
-            //         UB != UE; UB++) {
-            //     if(auto *UI = dyn_cast<Instruction>(*UB)) {
-            //         if(UI->getParent()->getParent() ==  Offload) {
-            //             UI->replaceUsesOfWith(G)
-            //         }
-            //     }
-            // }
         } 
     }
 
+    Params.push_back(StPtr);
     /// Create the call to the offloaded function
     auto *CI = CallInst::Create(Offload, Params, "", StartBB);
     BranchInst::Create(Success, Fail, CI, StartBB);
