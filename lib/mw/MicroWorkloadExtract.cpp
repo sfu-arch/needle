@@ -1075,11 +1075,12 @@ static
 void liveInAA(SetVector<Value*>& LiveIn, 
                 AAResults& AA, 
                 map<std::string, uint64_t>& Data) {
-    SetVector<Value*>  Pointers;
+    SmallVector<Value*, 8>  Pointers;
     copy_if(LiveIn.begin(), LiveIn.end(), 
+            back_inserter(Pointers),
             [](Value *V) {
                 return V->getType()->isPointerTy();
-            }, back_inserter(Pointers));
+            });
     
     Data["num-livein-ptr"] = Pointers.size();
 
@@ -1177,17 +1178,9 @@ void MicroWorkloadExtract::process(Function &F) {
     Function *Offload = extract(PostDomTree, Mod, BlockV, LiveIn, LiveOut, Globals, DT, LI, Id);
 
     auto &AA = getAnalysis<AAResultsWrapperPass>(F).getAAResults();
-    liveInAA(LiveIn, AA);
+    liveInAA(LiveIn, AA, Data);
 
     runHelperPasses(Offload, Id);
-    instrument(F, BlockV, Offload->getFunctionType(), LiveIn, LiveOut, Globals, DT, Id);
-
-    // Get the number of phi nodes after 
-    uint32_t PhiAfter = 0;
-    for(auto &BB : *Offload) {
-        for(auto &I : BB) {
-            if(isa<PHINode>(&I)) 
-                PhiAfter++;
     instrument(F, BlockV, Offload->getFunctionType(), LiveIn, LiveOut, Globals, DT, Id);
 
     // Get the number of phi nodes after 
