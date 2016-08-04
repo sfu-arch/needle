@@ -273,7 +273,7 @@ Statistics::memoryToBranchDependency(Function& F) {
         }
     
         if(Found) {
-            errs() << *BI << " is derived from load\n"; 
+            //errs() << *BI << " is derived from load\n"; 
         }
         Found = false;
     }

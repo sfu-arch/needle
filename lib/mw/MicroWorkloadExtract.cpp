@@ -50,8 +50,13 @@ void MicroWorkloadExtract::readSequences() {
     int64_t Count = 0;
     for (; getline(SeqFile, Line);) {
         Path P;
-        std::vector<std::string> Tokens;
-        boost::split(Tokens, Line, boost::is_any_of("\t "));
+        //std::vector<std::string> Tokens;
+        //boost::split(Tokens, Line, boost::is_any_of("\t "));
+
+        SmallVector<StringRef, 16> Tokens;
+        StringRef Temp(Line);
+        Temp.split(Tokens, ' ');
+
         P.Id = Tokens[0];
 
         P.Freq = stoull(Tokens[1]);
@@ -1083,6 +1088,10 @@ void liveInAA(SetVector<Value*>& LiveIn,
             });
     
     Data["num-livein-ptr"] = Pointers.size();
+    Data["num-must-alias"] = 0;
+    Data["num-no-alias"] = 0;
+    Data["num-may-alias"] = 0;
+    Data["num-partial-alias"] = 0;
 
     for(auto PB = Pointers.begin(), PE = Pointers.end();
             PB != PE; PB++) {
@@ -1157,14 +1166,17 @@ void MicroWorkloadExtract::process(Function &F) {
 
     Data["num-extract-blocks"] = Blocks.size();
 
+    errs() << "Blocks:\n";
     // Get the number of phi nodes originally
     uint32_t PhiBefore = 0;
     for(auto &BB : Blocks) {
+        errs() << BB->getName() << " ";
         for(auto &I : *BB) {
             if(isa<PHINode>(&I)) 
                 PhiBefore++;
         }
     }
+    errs() << "\n";
     
 
     ExtractedModules.push_back(llvm::make_unique<Module>("mwe", getGlobalContext()));

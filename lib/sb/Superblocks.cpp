@@ -47,8 +47,11 @@ void Superblocks::readSequences() {
     string Line;
     for (; getline(SeqFile, Line);) {
         Path P;
-        std::vector<std::string> Tokens;
-        boost::split(Tokens, Line, boost::is_any_of("\t "));
+        //std::vector<std::string> Tokens;
+        //boost::split(Tokens, Line, boost::is_any_of("\t "));
+        SmallVector<StringRef, 16> Tokens;
+        StringRef Temp(Line);
+        Temp.split(Tokens, ' ');
         P.Id = Tokens[0];
 
         P.Freq = stoull(Tokens[1]);
