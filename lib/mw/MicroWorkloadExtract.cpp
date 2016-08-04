@@ -1069,13 +1069,39 @@ static void runBranchTaxonomyPass(Function& F) {
     PM.add(new pasha::BranchTaxonomy(F.getName().str()));
     PM.run(*F.getParent());
 
+}
 
+static
+void liveInAA(SetVector<Value*>& LiveIn, 
+                AAResults& AA, 
+                map<std::string, uint64_t>& Data) {
+    SetVector<Value*>  Pointers;
+    copy_if(LiveIn.begin(), LiveIn.end(), 
+            [](Value *V) {
+                return V->getType()->isPointerTy();
+            }, back_inserter(Pointers));
+    
+    Data["num-livein-ptr"] = Pointers.size();
 
-    //legacy::FunctionPassManager FPM(F.getParent());
-    //FPM.add(new pasha::BranchTaxonomy());
-    //FPM.doInitialization();
-    //FPM.run(F);
-    //FPM.doFinalization();
+    for(auto PB = Pointers.begin(), PE = Pointers.end();
+            PB != PE; PB++) {
+        for(auto NP = next(PB); NP != PE; NP++) {
+            switch(AA.alias(*PB, *NP)) {
+                case AliasResult::MustAlias:
+                    Data["num-must-alias"]++;
+                    break;
+                case AliasResult::NoAlias:
+                    Data["num-no-alias"]++;
+                    break;
+                case AliasResult::MayAlias:
+                    Data["num-may-alias"]++;
+                    break;
+                case AliasResult::PartialAlias:
+                    Data["num-partial-alias"]++;
+                    break;
+            }
+        }
+    }
 }
 
 void MicroWorkloadExtract::process(Function &F) {
@@ -1150,7 +1176,18 @@ void MicroWorkloadExtract::process(Function &F) {
     SetVector<Value *> LiveOut, LiveIn, Globals;
     Function *Offload = extract(PostDomTree, Mod, BlockV, LiveIn, LiveOut, Globals, DT, LI, Id);
 
+    auto &AA = getAnalysis<AAResultsWrapperPass>(F).getAAResults();
+    liveInAA(LiveIn, AA);
+
     runHelperPasses(Offload, Id);
+    instrument(F, BlockV, Offload->getFunctionType(), LiveIn, LiveOut, Globals, DT, Id);
+
+    // Get the number of phi nodes after 
+    uint32_t PhiAfter = 0;
+    for(auto &BB : *Offload) {
+        for(auto &I : BB) {
+            if(isa<PHINode>(&I)) 
+                PhiAfter++;
     instrument(F, BlockV, Offload->getFunctionType(), LiveIn, LiveOut, Globals, DT, Id);
 
     // Get the number of phi nodes after 
