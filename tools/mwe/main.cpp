@@ -2,7 +2,11 @@
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
+#include "llvm/Analysis/ScopedNoAliasAA.h"
+#include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/IR/Dominators.h"
+#include "llvm/Analysis/CFLAliasAnalysis.h"
+#include "llvm/Analysis/ScalarEvolutionAliasAnalysis.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
@@ -144,6 +148,10 @@ int main(int argc, char **argv, const char **env) {
     pm.add(createLoopSimplifyPass());
     pm.add(createBasicAAWrapperPass());
     pm.add(createTypeBasedAAWrapperPass());
+    pm.add(createGlobalsAAWrapperPass());
+    pm.add(createSCEVAAWrapperPass());
+    pm.add(createScopedNoAliasAAWrapperPass());
+    pm.add(createCFLAAWrapperPass());
     pm.add(new llvm::CallGraphWrapperPass());
     pm.add(new epp::PeruseInliner());
     pm.add(new pasha::Simplify(FunctionList[0]));
