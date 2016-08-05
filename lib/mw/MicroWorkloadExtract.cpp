@@ -10,6 +10,10 @@
 #include "llvm/Analysis/CFG.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
+#include "llvm/Analysis/CFLAliasAnalysis.h"
+#include "llvm/Analysis/ScopedNoAliasAA.h"
+#include "llvm/Analysis/GlobalsModRef.h"
+#include "llvm/Analysis/ScalarEvolutionAliasAnalysis.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Dominators.h"
@@ -1062,6 +1066,10 @@ static void runHelperPasses(Function *Offload, string Id) {
     legacy::PassManager PM;
     PM.add(createBasicAAWrapperPass());
     PM.add(llvm::createTypeBasedAAWrapperPass());
+    PM.add(createGlobalsAAWrapperPass());
+    PM.add(createSCEVAAWrapperPass());
+    PM.add(createScopedNoAliasAAWrapperPass());
+    PM.add(createCFLAAWrapperPass());
     PM.add(new MicroWorkloadHelper(Id));
     PM.run(*Offload->getParent());
 
