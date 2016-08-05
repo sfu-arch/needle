@@ -1,6 +1,4 @@
 add_subdirectory(epp)
-#add_subdirectory(epp-rt)
-#add_subdirectory(grok)
 add_subdirectory(mw)
 add_subdirectory(inliner)
 add_subdirectory(namer)
