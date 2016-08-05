@@ -46,17 +46,17 @@ add_definitions( ${LLVM_DEFINITIONS} )
 
 # Find and include boost 
 
-set(Boost_USE_STATIC_LIBS OFF) 
-set(Boost_USE_MULTITHREADED ON)  
-set(Boost_USE_STATIC_RUNTIME OFF) 
-find_package(Boost 1.55.0 COMPONENTS graph regex) 
-
-if(Boost_FOUND)
-    include_directories(${Boost_INCLUDE_DIRS}) 
-    #target_link_libraries(pasha ${Boost_LIBRARIES})
-else()
-    message( FATAL_ERROR "Pasha needs Boost 1.55 or higher, CMake will exit.")
-endif()
+# set(Boost_USE_STATIC_LIBS OFF) 
+# set(Boost_USE_MULTITHREADED ON)  
+# set(Boost_USE_STATIC_RUNTIME OFF) 
+# find_package(Boost 1.55.0 COMPONENTS graph regex) 
+# 
+# if(Boost_FOUND)
+#     include_directories(${Boost_INCLUDE_DIRS}) 
+#     #target_link_libraries(pasha ${Boost_LIBRARIES})
+# else()
+#     message( FATAL_ERROR "Pasha needs Boost 1.55 or higher, CMake will exit.")
+# endif()
 
 # Find clang 
 
