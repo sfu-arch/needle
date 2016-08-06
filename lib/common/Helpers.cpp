@@ -69,7 +69,8 @@ void DFGPrinter::visitBasicBlock(BasicBlock &BB) {
                 return false;
             }
         }
-        llvm_unreachable("unexpected");
+        // Removed the unreachable check since Args and Constants will
+        // end up here and thats ok.
         return false;
     };
 

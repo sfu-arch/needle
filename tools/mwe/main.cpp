@@ -10,6 +10,7 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Linker/Linker.h"
@@ -36,6 +37,7 @@
 #include "AllInliner.h"
 #include "Common.h"
 #include "MicroWorkloadExtract.h"
+#include "AliasEdgeWriter.h"
 #include "Namer.h"
 #include "Simplify.h"
 
@@ -111,6 +113,20 @@ bool isTargetFunction(const Function &f,
     return false;
 }
 
+void 
+runAliasEdgeWriter(Module *M) {
+    legacy::PassManager PM;
+    PM.add(createBasicAAWrapperPass());
+    PM.add(llvm::createTypeBasedAAWrapperPass());
+    PM.add(createGlobalsAAWrapperPass());
+    PM.add(createSCEVAAWrapperPass());
+    PM.add(createScopedNoAliasAAWrapperPass());
+    PM.add(createCFLAAWrapperPass());
+    PM.add(new aew::AliasEdgeWriter());
+    PM.run(*M);
+    
+}
+
 int main(int argc, char **argv, const char **env) {
     // This boilerplate provides convenient stack traces and clean LLVM exit
     // handling. It also initializes the built in support for convenient
@@ -181,6 +197,8 @@ int main(int argc, char **argv, const char **env) {
         bool ret = L.linkInModule(move(M));
         assert(ret == false && "Error in linkInModule");
     }
+
+    runAliasEdgeWriter(Composite.get()); 
 
     common::writeModule(Composite.get(), "full.ll");
     common::generateBinary(*Composite, outFile, optLevel, libPaths, libraries);

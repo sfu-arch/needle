@@ -44,13 +44,13 @@ struct PeruseInliner : public Inliner {
 
     using llvm::Pass::doInitialization;
     bool doInitialization(CallGraph &CG) override {
-        InlineStats.open("inline.txt", std::ios::out);
+        //InlineStats.open("inline.txt", std::ios::out);
         return false;
     }
 
     using llvm::Pass::doFinalization;
     bool doFinalization(CallGraph &CG) override {
-        InlineStats.close();
+        //InlineStats.close();
         return false;
     }
 };

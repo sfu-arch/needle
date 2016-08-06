@@ -14,12 +14,12 @@ InlineCost PeruseInliner::getInlineCost(CallSite CS) {
         isTargetFunction(*(CS.getInstruction()->getParent()->getParent()),
                          FunctionList) &&
         llvm::isInlineViable(*Callee)) {
-        InlineStats
-            << "Parent: "
-            << CS.getInstruction()->getParent()->getParent()->getName().str()
-            << "\n";
-        InlineStats << "This: " << CS.getCalledFunction()->getName().str()
-                    << "\n";
+        //InlineStats
+            //<< "Parent: "
+            //<< CS.getInstruction()->getParent()->getParent()->getName().str()
+            //<< "\n";
+        //InlineStats << "This: " << CS.getCalledFunction()->getName().str()
+                    //<< "\n";
         return InlineCost::getAlways();
     }
 

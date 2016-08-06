@@ -248,8 +248,8 @@ bool MicroWorkloadHelper::runOnModule(Module &M) {
         if (SimulateDFG) {
             common::labelUID(F);
             common::writeModule( F.getParent(), string("single.")+F.getName().str() +string(".ll") );
-            common::instrumentDFG(F);
             common::printDFG(F);
+            //common::instrumentDFG(F);
         }
 
         runStatsPasses(&F);

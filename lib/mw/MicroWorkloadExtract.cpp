@@ -1124,7 +1124,7 @@ void liveInAA(SetVector<Value*>& LiveIn,
 
 void MicroWorkloadExtract::process(Function &F) {
     
-    runBranchTaxonomyPass(F);
+    //runBranchTaxonomyPass(F);
 
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
     auto *DT = &getAnalysis<DominatorTreeWrapperPass>(F).getDomTree();
@@ -1174,17 +1174,17 @@ void MicroWorkloadExtract::process(Function &F) {
 
     Data["num-extract-blocks"] = Blocks.size();
 
-    errs() << "Blocks:\n";
+    //errs() << "Blocks:\n";
     // Get the number of phi nodes originally
     uint32_t PhiBefore = 0;
     for(auto &BB : Blocks) {
-        errs() << BB->getName() << " ";
+        //errs() << BB->getName() << " ";
         for(auto &I : *BB) {
             if(isa<PHINode>(&I)) 
                 PhiBefore++;
         }
     }
-    errs() << "\n";
+    //errs() << "\n";
     
 
     ExtractedModules.push_back(llvm::make_unique<Module>("mwe", getGlobalContext()));
@@ -1197,8 +1197,8 @@ void MicroWorkloadExtract::process(Function &F) {
     SetVector<Value *> LiveOut, LiveIn, Globals;
     Function *Offload = extract(PostDomTree, Mod, BlockV, LiveIn, LiveOut, Globals, DT, LI, Id);
 
-    auto &AA = getAnalysis<AAResultsWrapperPass>(F).getAAResults();
-    liveInAA(LiveIn, AA, Data);
+    //auto &AA = getAnalysis<AAResultsWrapperPass>(F).getAAResults();
+    //liveInAA(LiveIn, AA, Data);
 
     runHelperPasses(Offload, Id);
     instrument(F, BlockV, Offload->getFunctionType(), LiveIn, LiveOut, Globals, DT, Id);
