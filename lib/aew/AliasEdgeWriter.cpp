@@ -112,7 +112,7 @@ AliasEdgeWriter::writeEdges(CallInst* CI, Function* OF) {
                 continue;
             }
 
-            switch(AA.alias(*MB, *NB)) {
+            switch(AA.alias(MemoryLocation::get(*MB), MemoryLocation::get(*NB))) {
                 case AliasResult::NoAlias:
                     Data["num-no-alias"]++;
                     break;
