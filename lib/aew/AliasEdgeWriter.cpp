@@ -67,6 +67,7 @@ AliasEdgeWriter::writeEdges(CallInst* CI, Function* OF) {
     SmallVector<pair<uint32_t, uint32_t>, 16> AliasEdges;
     SmallVector<pair<uint32_t, uint32_t>, 16> MayAliasEdges;
     auto &AA = getAnalysis<AAResultsWrapperPass>(*OF).getAAResults();
+    auto &AA2 = getAnalysis<AAResultsWrapperPass>(*CI->getFunction()).getAAResults();
 
     auto getUID = [](Instruction *I) -> uint32_t {
         auto *N = I->getMetadata("UID");
@@ -139,7 +140,7 @@ AliasEdgeWriter::writeEdges(CallInst* CI, Function* OF) {
                         Data["num-may-alias-naive"]++;
                         auto *P = getPtrWrapper(*MB);
                         auto *Q = getPtrWrapper(*NB);
-                        switch(AA.alias(P, Q)) {
+                        switch(AA2.alias(P, Q)) {
                             case AliasResult::NoAlias:
                                 Data["num-ipaa-no-alias"]++;
                                 break;
