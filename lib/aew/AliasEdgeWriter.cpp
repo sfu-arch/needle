@@ -65,6 +65,7 @@ AliasEdgeWriter::writeEdges(CallInst* CI, Function* OF) {
     }
     
     SmallVector<pair<uint32_t, uint32_t>, 16> AliasEdges;
+    SmallVector<pair<uint32_t, uint32_t>, 16> MayAliasEdges;
     auto &AA = getAnalysis<AAResultsWrapperPass>(*OF).getAAResults();
 
     auto getUID = [](Instruction *I) -> uint32_t {
@@ -153,11 +154,11 @@ AliasEdgeWriter::writeEdges(CallInst* CI, Function* OF) {
                             case AliasResult::MayAlias:
                                 Data["num-ipaa-may-alias"]++;
                                 AliasEdges.push_back({getUID(*MB), getUID(*NB)});
+                                MayAliasEdges.push_back({getUID(*MB), getUID(*NB)});
                                 break;
                         }
+                        break;
                      }
-                    //AliasEdges.push_back({getUID(*MB), getUID(*NB)});
-                    //break;
             }
         } 
     }
@@ -167,6 +168,12 @@ AliasEdgeWriter::writeEdges(CallInst* CI, Function* OF) {
         EdgeFile << P.first << " " << P.second << "\n";
     }
     EdgeFile.close();
+
+    ofstream MayEdgeFile((OF->getName()+".may.txt").str(), ios::out);
+    for(auto P : MayAliasEdges) {
+        MayEdgeFile << P.first << " " << P.second << "\n";
+    }
+    MayEdgeFile.close();
 }
 
 
