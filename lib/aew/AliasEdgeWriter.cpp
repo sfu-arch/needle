@@ -74,14 +74,19 @@ AliasEdgeWriter::writeEdges(CallInst* CI, Function* OF) {
 
     
     function<Value*(Value *)> getPtr;
-    getPtr = [&getPtr, &ArgParamMap](Value *V) -> Value * {
+
+    auto getPtrWrapper = [&getPtr] (Value *V) -> Value* {
         if(auto *LI = dyn_cast<LoadInst>(V)) {
             auto *Ptr = LI->getPointerOperand(); 
-            getPtr(Ptr);
+            return getPtr(Ptr);
         } else if(auto *SI = dyn_cast<StoreInst>(V)) {
             auto *Ptr = SI->getPointerOperand(); 
-            getPtr(Ptr);
-        } else if(auto *GEP = dyn_cast<GetElementPtrInst>(V)) {
+            return getPtr(Ptr);
+        }
+    };
+
+    getPtr = [&getPtr, &ArgParamMap](Value *V) -> Value * {
+        if(auto *GEP = dyn_cast<GetElementPtrInst>(V)) {
             auto *Ptr = GEP->getPointerOperand();
             getPtr(Ptr);
         } else if(auto *Arg = dyn_cast<Argument>(V)) {
