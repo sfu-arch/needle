@@ -1100,10 +1100,12 @@ void liveInAA(SetVector<Value*>& LiveIn,
     Data["num-no-alias"] = 0;
     Data["num-may-alias"] = 0;
     Data["num-partial-alias"] = 0;
+    Data["num-ld-ld-pairs"] = 0;
 
     for(auto PB = Pointers.begin(), PE = Pointers.end();
             PB != PE; PB++) {
         for(auto NP = next(PB); NP != PE; NP++) {
+
             switch(AA.alias(*PB, *NP)) {
                 case AliasResult::MustAlias:
                     Data["num-must-alias"]++;

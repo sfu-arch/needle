@@ -89,23 +89,28 @@ AliasEdgeWriter::writeEdges(CallInst* CI, Function* OF) {
         if(auto *GEP = dyn_cast<GetElementPtrInst>(V)) {
             auto *Ptr = GEP->getPointerOperand();
             getPtr(Ptr);
-        } else if(auto *Arg = dyn_cast<Argument>(V)) {
+        } else if(isa<Argument>(V)) {
             getPtr(ArgParamMap[V]);
         }
         return V;
     };
 
-
+    Data["num-aa-pairs"] = 0;
     Data["num-no-alias"] = 0;
     Data["num-must-alias"] = 0;
     Data["num-partial-alias"] = 0;
     Data["num-may-alias-naive"] = 0;
+    Data["num-ld-ld-pairs"] = 0;
 
     for(auto MB = MemOps.begin(), ME = MemOps.end(); MB != ME; MB++) {
         for(auto NB = next(MB); NB != ME; NB++) {
 
-            if(isa<LoadInst>(*MB) && isa<LoadInst>(*NB))
+            Data["num-aa-pairs"]++;
+
+            if(isa<LoadInst>(*MB) && isa<LoadInst>(*NB)) {
+                Data["num-ld-ld-pairs"]++;
                 continue;
+            }
 
             switch(AA.alias(*MB, *NB)) {
                 case AliasResult::NoAlias:
@@ -121,6 +126,7 @@ AliasEdgeWriter::writeEdges(CallInst* CI, Function* OF) {
                     break;
                 case AliasResult::MayAlias: 
                     // Add smarter AA here
+                    //errs() << *MB << " may " << *NB << "\n";
                     Data["num-may-alias-naive"]++;
                     AliasEdges.push_back({getUID(*MB), getUID(*NB)});
                     break;
