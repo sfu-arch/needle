@@ -56,7 +56,13 @@ AliasEdgeWriter::writeEdges(CallInst* CI, Function* OF) {
         errs() << *M << "\n";
     }
 
-
+    // Setup Arg-Param Map for use with IPAA
+    ValueToValueMapTy ArgParamMap;
+    uint32_t Idx = 0;
+    for(auto &A : OF->args()) {
+        ArgParamMap[&A] = CI->getArgOperand(Idx++);
+    }
+    
     SmallVector<pair<uint32_t, uint32_t>, 16> AliasEdges;
     auto &AA = getAnalysis<AAResultsWrapperPass>(*OF).getAAResults();
 
@@ -64,6 +70,24 @@ AliasEdgeWriter::writeEdges(CallInst* CI, Function* OF) {
         auto *N = I->getMetadata("UID");
         auto *S = dyn_cast<MDString>(N->getOperand(0));
         return stoi(S->getString().str());
+    };
+
+    
+    function<Value*(Value *)> getPtr;
+    getPtr = [&getPtr, &ArgParamMap](Value *V) -> Value * {
+        if(auto *LI = dyn_cast<LoadInst>(V)) {
+            auto *Ptr = LI->getPointerOperand(); 
+            getPtr(Ptr);
+        } else if(auto *SI = dyn_cast<StoreInst>(V)) {
+            auto *Ptr = SI->getPointerOperand(); 
+            getPtr(Ptr);
+        } else if(auto *GEP = dyn_cast<GetElementPtrInst>(V)) {
+            auto *Ptr = GEP->getPointerOperand();
+            getPtr(Ptr);
+        } else if(auto *Arg = dyn_cast<Argument>(V)) {
+            getPtr(ArgParamMap[V]);
+        }
+        return V;
     };
 
 
