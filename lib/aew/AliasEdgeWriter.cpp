@@ -57,6 +57,7 @@ AliasEdgeWriter::writeEdges(CallInst* CI, Function* OF) {
     }
 
     // Setup Arg-Param Map for use with IPAA
+    // What if I set this up for all functions and their callsites
     ValueToValueMapTy ArgParamMap;
     uint32_t Idx = 0;
     for(auto &A : OF->args()) {
@@ -89,9 +90,14 @@ AliasEdgeWriter::writeEdges(CallInst* CI, Function* OF) {
         if(auto *GEP = dyn_cast<GetElementPtrInst>(V)) {
             auto *Ptr = GEP->getPointerOperand();
             getPtr(Ptr);
-        } else if(isa<Argument>(V)) {
-            getPtr(ArgParamMap[V]);
+        } else if(auto *A = dyn_cast<Argument>(V)) {
+            // Since we only mapped the offload callsite
+            // and its args this ensures that we bound the 
+            // recursion depth with respect to the callgraph
+            if(ArgParamMap.count(A))
+                getPtr(ArgParamMap[V]);
         }
+        assert(V && "Don't return null");
         return V;
     };
 
@@ -101,6 +107,10 @@ AliasEdgeWriter::writeEdges(CallInst* CI, Function* OF) {
     Data["num-partial-alias"] = 0;
     Data["num-may-alias-naive"] = 0;
     Data["num-ld-ld-pairs"] = 0;
+    Data["num-ipaa-no-alias"] = 0;
+    Data["num-ipaa-must-alias"] = 0;
+    Data["num-ipaa-may-alias"] = 0;
+    Data["num-ipaa-partial-alias"] = 0;
 
     for(auto MB = MemOps.begin(), ME = MemOps.end(); MB != ME; MB++) {
         for(auto NB = next(MB); NB != ME; NB++) {
@@ -124,12 +134,30 @@ AliasEdgeWriter::writeEdges(CallInst* CI, Function* OF) {
                     Data["num-partial-alias"]++;
                     AliasEdges.push_back({getUID(*MB), getUID(*NB)});
                     break;
-                case AliasResult::MayAlias: 
-                    // Add smarter AA here
-                    //errs() << *MB << " may " << *NB << "\n";
-                    Data["num-may-alias-naive"]++;
-                    AliasEdges.push_back({getUID(*MB), getUID(*NB)});
-                    break;
+                case AliasResult::MayAlias:  {
+                        Data["num-may-alias-naive"]++;
+                        auto *P = getPtrWrapper(*MB);
+                        auto *Q = getPtrWrapper(*NB);
+                        switch(AA.alias(P, Q)) {
+                            case AliasResult::NoAlias:
+                                Data["num-ipaa-no-alias"]++;
+                                break;
+                            case AliasResult::MustAlias:
+                                Data["num-ipaa-must-alias"]++;
+                                AliasEdges.push_back({getUID(*MB), getUID(*NB)});
+                                break;
+                            case AliasResult::PartialAlias:
+                                Data["num-ipaa-partial-alias"]++;
+                                AliasEdges.push_back({getUID(*MB), getUID(*NB)});
+                                break;
+                            case AliasResult::MayAlias:
+                                Data["num-ipaa-may-alias"]++;
+                                AliasEdges.push_back({getUID(*MB), getUID(*NB)});
+                                break;
+                        }
+                     }
+                    //AliasEdges.push_back({getUID(*MB), getUID(*NB)});
+                    //break;
             }
         } 
     }
