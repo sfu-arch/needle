@@ -38,7 +38,7 @@ def dump_stats():
     global data
     with open('mead.graph.stats.txt', 'w') as f:
         for k,v in data.iteritems():
-            f.write(' '.join([k,str(v)]))
+            f.write(' '.join([k,str(v),'\n']))
 
 
 if __name__ == "__main__":
