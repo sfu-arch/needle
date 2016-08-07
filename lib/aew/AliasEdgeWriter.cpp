@@ -155,6 +155,7 @@ AliasEdgeWriter::writeEdges(CallInst* CI, Function* OF) {
                         } else {
                             Data["num-ipaa-may-alias"]++;
                             AliasEdges.push_back({getUID(*MB), getUID(*NB)});
+                            MayAliasEdges.push_back({getUID(*MB), getUID(*NB)});
                         }
                         break;
                      }
