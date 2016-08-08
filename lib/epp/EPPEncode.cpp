@@ -88,6 +88,9 @@ void EPPEncode::encode(Function &F) {
             // This is the only place we need to check for overflow.
             bool Ov = false;
             pathCount = pathCount.sadd_ov(numPaths[S], Ov);
+            if(Ov) {
+                llvm_unreachable("Integer Overflow");
+            }
             assert(!Ov && "Integer Overflow");
         }
         numPaths.insert({B, pathCount});
