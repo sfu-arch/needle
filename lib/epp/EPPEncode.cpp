@@ -89,9 +89,8 @@ void EPPEncode::encode(Function &F) {
             bool Ov = false;
             pathCount = pathCount.sadd_ov(numPaths[S], Ov);
             if(Ov) {
-                llvm_unreachable("Integer Overflow");
+                report_fatal_error("Integer Overflow");
             }
-            assert(!Ov && "Integer Overflow");
         }
         numPaths.insert({B, pathCount});
     }
