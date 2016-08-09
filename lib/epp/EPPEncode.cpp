@@ -96,8 +96,11 @@ void EPPEncode::encode(Function &F) {
     }
 
 #ifdef RT32
-    assert(numPaths[Entry].getLimitedValue() < ~0ULL &&
-           "Numpaths greater than 2^64, recompile in 64-bit mode");
+    if(numPaths[Entry].getLimitedValue() < ~0ULL) {
+        report_fatal_error("Numpaths greater than 2^64, recompile in 64-bit mode");
+    }
+    //assert(numPaths[Entry].getLimitedValue() < ~0ULL &&
+           //"Numpaths greater than 2^64, recompile in 64-bit mode");
 #endif
 
     errs() << "NumPaths : " << numPaths[Entry] << "\n";
