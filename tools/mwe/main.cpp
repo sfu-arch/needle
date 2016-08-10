@@ -198,7 +198,7 @@ int main(int argc, char **argv, const char **env) {
         assert(ret == false && "Error in linkInModule");
     }
 
-    runAliasEdgeWriter(Composite.get()); 
+    //runAliasEdgeWriter(Composite.get()); 
 
     common::writeModule(Composite.get(), "full.ll");
     common::generateBinary(*Composite, outFile, optLevel, libPaths, libraries);
