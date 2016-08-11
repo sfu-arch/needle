@@ -282,14 +282,12 @@ Statistics::memoryToBranchDependency(Function& F) {
 
 bool Statistics::runOnFunction(Function &F) {
     generalStats(F);
-    auto LongestPath = criticalPath(F);
-    memoryToBranchDependency(F);
-    branchToMemoryDependency(F);
-    return false;
-}
-
-bool Statistics::doFinalization(Module& M) {
-    ofstream Outfile("function.stats.txt", ios::out);
+    // auto LongestPath = criticalPath(F);
+    // memoryToBranchDependency(F);
+    // branchToMemoryDependency(F);
+    //
+    
+    ofstream Outfile((F.getName() + ".stats.txt").str(), ios::out);
     uint64_t TotalCount = 0;
     for(auto KV : OpcodeCount) {
         Outfile << KV.first << " " 
@@ -304,5 +302,9 @@ bool Statistics::doFinalization(Module& M) {
     return false;
 }
 
+bool Statistics::doFinalization(Module& M) {
+    return false;
+}
+
 char Statistics::ID = 0;
-static RegisterPass<Statistics> X("", "PASHA - Statistics");
+static RegisterPass<Statistics> X("", "Helpers - Statistics");

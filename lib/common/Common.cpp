@@ -220,6 +220,14 @@ getBackEdges(Function &F) {
     return getBackEdges(&F.getEntryBlock());
 }
 
+void runBranchTaxonomyPass(Function& F) {
+    legacy::PassManager PM;
+    PM.add(new ScalarEvolutionWrapperPass());
+    PM.add(new LoopInfoWrapperPass());
+    PM.add(new helpers::BranchTaxonomy(F.getName().str()));
+    PM.run(*F.getParent());
+
+}
 void optimizeModule(Module *Mod) {
     PassManagerBuilder PMB;
     PMB.OptLevel = 2;
@@ -356,6 +364,16 @@ void labelUID(Function &F) {
     FPM.doInitialization();
     FPM.run(F);
     FPM.doFinalization();
+}
+
+void runStatsPasses(Function &F) {
+
+    legacy::FunctionPassManager FPM(F.getParent());
+    FPM.add(new helpers::Statistics());
+    FPM.doInitialization();
+    FPM.run(F);
+    FPM.doFinalization();
+
 }
 
 void labelUID(Module &M) {

@@ -21,7 +21,6 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/BasicAliasAnalysis.h"
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
-#include "Statistics.h"
 
 #include "Common.h"
 #include "AliasEdgeWriter.h"

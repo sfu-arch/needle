@@ -1,7 +1,6 @@
 #define DEBUG_TYPE "pasha_superblock"
 #include "Superblocks.h"
 #include "Common.h"
-#include "Statistics.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/BasicAliasAnalysis.h"

@@ -30,7 +30,6 @@
 #include "llvm/Transforms/Utils/SSAUpdater.h"
 //#include <boost/algorithm/string.hpp>
 #include <cxxabi.h>
-#include "Statistics.h"
 
 #include <algorithm>
 #include <deque>
@@ -1075,14 +1074,6 @@ static void runHelperPasses(Function *Offload, string Id) {
 
 }
 
-static void runBranchTaxonomyPass(Function& F) {
-    legacy::PassManager PM;
-    PM.add(new ScalarEvolutionWrapperPass());
-    PM.add(new LoopInfoWrapperPass());
-    PM.add(new pasha::BranchTaxonomy(F.getName().str()));
-    PM.run(*F.getParent());
-
-}
 
 static
 void liveInAA(SetVector<Value*>& LiveIn, 
@@ -1125,8 +1116,9 @@ void liveInAA(SetVector<Value*>& LiveIn,
 }
 
 void MicroWorkloadExtract::process(Function &F) {
-    
-    //runBranchTaxonomyPass(F);
+   
+    common::runStatsPasses(F);
+    //common::runBranchTaxonomyPass(F);
 
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
     auto *DT = &getAnalysis<DominatorTreeWrapperPass>(F).getDomTree();

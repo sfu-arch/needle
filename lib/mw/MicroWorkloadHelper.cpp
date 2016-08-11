@@ -23,7 +23,6 @@
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 //#include <boost/algorithm/string.hpp>
 #include <cxxabi.h>
-#include "Statistics.h"
 
 #include "Common.h"
 
@@ -34,15 +33,6 @@ using namespace std;
 
 extern cl::opt<bool> SimulateDFG;
 
-static void runStatsPasses(Function *Offload) {
-
-    legacy::FunctionPassManager FPM(Offload->getParent());
-    FPM.add(new pasha::Statistics());
-    FPM.doInitialization();
-    FPM.run(*Offload);
-    FPM.doFinalization();
-
-}
 
 static bool replaceGuardsHelper(Function &F, BasicBlock *RetBlock) {
     for (auto &BB : F) {
@@ -252,7 +242,7 @@ bool MicroWorkloadHelper::runOnModule(Module &M) {
             common::instrumentDFG(F);
         }
 
-        runStatsPasses(&F);
+        common::runStatsPasses(F);
         common::writeModule( F.getParent(), F.getName().str() +string(".ll") );
         replaceGuards(&F);
         addUndoLog(&F);
