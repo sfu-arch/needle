@@ -25,6 +25,7 @@ def main(dfgfile, aafile):
     global pp
     dfg = nx.DiGraph(nx.drawing.nx_agraph.read_dot(dfgfile))
     assert nx.algorithms.is_directed_acyclic_graph(dfg) 
+    data['num-dataflow-edges'] = nx.number_of_edges(dfg)
     aa = set() 
     with open(aafile, 'r') as f:
         for l in f:
