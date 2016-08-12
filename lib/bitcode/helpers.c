@@ -46,6 +46,9 @@ __mwe_dtor() {
 void
 __mwe_ctor() {
     fp = fopen("mwe.dump.bin", "wb");
+    printf("MWE CTOR: ");
+    if(fp)
+        printf("Opened File\n");
 }
 
 void
