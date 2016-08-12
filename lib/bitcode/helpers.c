@@ -1,6 +1,11 @@
 #include <stdint.h>
 #include <stdio.h>
 
+uint64_t __mwe_success_count = 0;
+uint64_t __mwe_fail_count = 0;
+
+FILE * fp = 0;
+
 uint32_t
 __prev_store_exists(char* begin, char* loc) {
     char *curr = loc - 16;
@@ -31,13 +36,33 @@ __undo_mem(char* buffer, uint32_t num_locs) {
 }
 
 void
+__mwe_dtor() {
+   printf("mwe-num-success %lu\n", __mwe_success_count);
+   printf("mwe-num-fail %lu\n", __mwe_fail_count);
+   fclose(fp);
+}
+
+
+void
+__mwe_ctor() {
+    fp = fopen("mwe.dump.bin", "wb");
+}
+
+void
+__dump_val(char* ptr, size_t sz) {
+    fwrite(ptr, sizeof(char), sz, fp);
+}
+
+void
 __success() {
-    printf("success\n"); 
+    printf("mwe-success\n");
+    __mwe_success_count++;
 }
 
 void
 __fail() {
-    printf("fail\n"); 
+    printf("mwe-fail\n");
+    __mwe_fail_count++;
 }
 
 void 

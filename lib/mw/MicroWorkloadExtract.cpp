@@ -571,11 +571,24 @@ void MicroWorkloadExtract::extractHelper(
         GetElementPtrInst *StructGEP = GetElementPtrInst::Create(
             cast<PointerType>(StructPtr->getType())->getElementType(),
             &*StructPtr, Idx, "", Block->getTerminator());
+        
+
         auto *SI = new StoreInst(LO, StructGEP, Block->getTerminator());
         MDNode *N = MDNode::get(Context, MDString::get(Context, "true"));
         SI->setMetadata("LO", N);
         OutIndex++;
     }
+
+    /// Add live out value logging
+    auto Mod = StaticFunc->getParent();
+    auto DL = Mod->getDataLayout();
+    uint64_t Size = DL.getTypeStoreSize(cast<PointerType>(StructPtr->getType())->getElementType());
+ 
+    auto LastBlock = *RevTopoChop.begin(); 
+    auto *VoidTy = Type::getVoidTy(Context);
+    CallInst::Create(Mod->getOrInsertFunction(
+                         "__dump_val", FunctionType::get(VoidTy, {Type::getInt8PtrTy(Context), Type::getInt64Ty(Context)}, false)),
+                     {}, "", LastBlock->getTerminator());
 }
 
 static void getTopoChopHelper(
@@ -903,8 +916,12 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     auto *Mod = F.getParent();
     auto *Int64Ty = Type::getInt64Ty(Ctx);
     auto *Int32Ty = Type::getInt32Ty(Ctx);
+    auto *VoidTy = Type::getVoidTy(Ctx);
     auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
 
+    CallInst::Create(Mod->getOrInsertFunction(
+                         "__success", FunctionType::get(VoidTy, {}, false)),
+                     {}, "", Success);
 #ifdef PASHA_DEBUG
     if (SimulateDFG)
         CallInst::Create(Mod->getOrInsertFunction(
@@ -981,6 +998,9 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     vector<Value *> Args = {UGEP, NSLoad};
     CallInst::Create(Undo, Args, "", Fail);
 
+    CallInst::Create(Mod->getOrInsertFunction(
+                         "__fail", FunctionType::get(VoidTy, {}, false)),
+                     {}, "", Fail);
 #ifdef PASHA_DEBUG
     if (SimulateDFG)
         CallInst::Create(Mod->getOrInsertFunction(
@@ -1057,6 +1077,17 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         }
     }
     // Success Path - End
+    //
+
+    
+    auto *MweDtor =
+        Mod->getOrInsertFunction("__mwe_dtor", VoidTy, nullptr);
+    appendToGlobalDtors(*Mod, llvm::cast<Function>(MweDtor), 0);
+
+    auto *MweCtor =
+        Mod->getOrInsertFunction("__mwe_ctor", VoidTy, nullptr);
+    appendToGlobalCtors(*Mod, llvm::cast<Function>(MweCtor), 0);
+    
 }
 
 
