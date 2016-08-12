@@ -580,15 +580,21 @@ void MicroWorkloadExtract::extractHelper(
     }
 
     /// Add live out value logging
+    errs() << "Adding Dump Value\n";
     auto Mod = StaticFunc->getParent();
     auto DL = Mod->getDataLayout();
     uint64_t Size = DL.getTypeStoreSize(cast<PointerType>(StructPtr->getType())->getElementType());
- 
+
     auto LastBlock = *RevTopoChop.begin(); 
+    auto *StructBI =
+        new BitCastInst(&*StructPtr, PointerType::getInt8Ty(Context), "", LastBlock->getTerminator());
+    auto *Sz = ConstantInt::get(Type::getInt64Ty(Context), Size);
+ 
     auto *VoidTy = Type::getVoidTy(Context);
+    Value *Params[] = {StructBI, Sz};    
     CallInst::Create(Mod->getOrInsertFunction(
                          "__dump_val", FunctionType::get(VoidTy, {Type::getInt8PtrTy(Context), Type::getInt64Ty(Context)}, false)),
-                     {}, "", LastBlock->getTerminator());
+                     Params, "", LastBlock->getTerminator());
 }
 
 static void getTopoChopHelper(
@@ -1239,7 +1245,7 @@ void MicroWorkloadExtract::process(Function &F) {
 
     Data["phi-simplified"] = PhiBefore - PhiAfter;
 
-    common::printCFG(F);
+    //common::printCFG(F);
     common::writeModule(Mod, (Id) + string(".ll"));
 
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
