@@ -103,6 +103,9 @@ cl::opt<bool> ConvertGlobalsToPointers("global-to-pointer",
 cl::opt<bool> DumpStats("dump-stats", cl::desc("Pasha stats"),
         cl::value_desc("boolean"), cl::init(false));
 
+cl::opt<bool> AAEdges("aa-edges", cl::desc("Generate edges to enforce AA"),
+        cl::value_desc("boolean"), cl::init(false));
+
 bool isTargetFunction(const Function &f,
                       const cl::list<std::string> &FunctionList) {
     if (f.isDeclaration())
@@ -198,7 +201,9 @@ int main(int argc, char **argv, const char **env) {
         assert(ret == false && "Error in linkInModule");
     }
 
-    runAliasEdgeWriter(Composite.get()); 
+    if(AAEdges){
+        runAliasEdgeWriter(Composite.get()); 
+    }
 
     common::writeModule(Composite.get(), "full.ll");
     common::generateBinary(*Composite, outFile, optLevel, libPaths, libraries);

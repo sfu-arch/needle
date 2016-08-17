@@ -239,7 +239,7 @@ bool MicroWorkloadHelper::runOnModule(Module &M) {
             common::labelUID(F);
             common::writeModule( F.getParent(), string("single.")+F.getName().str() +string(".ll") );
             common::printDFG(F);
-            //common::instrumentDFG(F);
+            common::instrumentDFG(F);
         }
 
         common::runStatsPasses(F);

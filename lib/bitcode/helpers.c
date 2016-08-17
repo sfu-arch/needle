@@ -29,7 +29,7 @@ __undo_mem(char* buffer, uint32_t num_locs) {
         } else {
             if(!__prev_store_exists(buffer, &buffer[i])) {
                 *((uint64_t *)addr) = val;
-                /*printf("%p <- %lu", (void *)addr, val);*/
+                /*printf("%p <- %lu\n", (void *)addr, val);*/
             }
         }
     }
@@ -46,9 +46,8 @@ __mwe_dtor() {
 void
 __mwe_ctor() {
     fp = fopen("mwe.dump.bin", "wb");
-    printf("MWE CTOR: ");
-    if(fp)
-        printf("Opened File\n");
+    if(!fp)
+        printf("MWE Ctor : Could not open file\n");
 }
 
 void
@@ -58,13 +57,13 @@ __dump_val(char* ptr, size_t sz) {
 
 void
 __success() {
-    printf("mwe-success\n");
+    /*printf("mwe-success\n");*/
     __mwe_success_count++;
 }
 
 void
 __fail() {
-    printf("mwe-fail\n");
+    /*printf("mwe-fail\n");*/
     __mwe_fail_count++;
 }
 

@@ -580,21 +580,23 @@ void MicroWorkloadExtract::extractHelper(
     }
 
     /// Add live out value logging
-    errs() << "Adding Dump Value\n";
-    auto Mod = StaticFunc->getParent();
-    auto DL = Mod->getDataLayout();
-    uint64_t Size = DL.getTypeStoreSize(cast<PointerType>(StructPtr->getType())->getElementType());
+    /// It is only logged if the path succeeds
+    //auto Mod = StaticFunc->getParent();
+    //auto DL = Mod->getDataLayout();
+    //uint64_t Size = DL.getTypeStoreSize(cast<PointerType>(StructPtr->getType())->getElementType());
+    //errs() << "Dumping Struct of Size : " << Size << " bytes\n";
 
-    auto LastBlock = *RevTopoChop.begin(); 
-    auto *StructBI =
-        new BitCastInst(&*StructPtr, PointerType::getInt8Ty(Context), "", LastBlock->getTerminator());
-    auto *Sz = ConstantInt::get(Type::getInt64Ty(Context), Size);
+    //auto LastBlock = dyn_cast<BasicBlock>(VMap[*RevTopoChop.begin()]);
+    //auto *StructBI =
+        //new BitCastInst(&*StructPtr, PointerType::getInt8PtrTy(Context), "", LastBlock->getTerminator());
+    //auto *Sz = ConstantInt::get(Type::getInt64Ty(Context), Size);
  
-    auto *VoidTy = Type::getVoidTy(Context);
-    Value *Params[] = {StructBI, Sz};    
-    CallInst::Create(Mod->getOrInsertFunction(
-                         "__dump_val", FunctionType::get(VoidTy, {Type::getInt8PtrTy(Context), Type::getInt64Ty(Context)}, false)),
-                     Params, "", LastBlock->getTerminator());
+    //auto *VoidTy = Type::getVoidTy(Context);
+    //Value *Params[] = {StructBI, Sz};    
+    //auto *DumpFn = Mod->getOrInsertFunction("__dump_val", 
+            //FunctionType::get(VoidTy, {Type::getInt8PtrTy(Context), Type::getInt64Ty(Context)}, false));
+    //assert(DumpFn && "Could not insert dump function");
+    //CallInst::Create(DumpFn, Params, "", LastBlock->getTerminator());
 }
 
 static void getTopoChopHelper(
