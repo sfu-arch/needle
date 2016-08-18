@@ -51,7 +51,6 @@ struct Path {
 struct MicroWorkloadExtract : public llvm::ModulePass {
     static char ID;
     std::string SeqFilePath;
-    int NumSeq;
     std::vector<Path> Sequences;
     llvm::PostDominatorTree *PostDomTree;
     llvm::AliasAnalysis *AA;
@@ -60,7 +59,7 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
 
     std::map<std::string, uint64_t> Data;
 
-    MicroWorkloadExtract(std::string S, int N, 
+    MicroWorkloadExtract(std::string S, 
                      std::vector<std::unique_ptr<llvm::Module>> &EM);
 
     virtual bool runOnModule(llvm::Module &M) override;

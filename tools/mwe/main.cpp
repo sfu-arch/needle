@@ -69,8 +69,8 @@ cl::opt<string> SeqFilePath("seq",
                             cl::init("epp-sequences.txt"));
 
 // This option is not used anymore
-cl::opt<int> NumSeq("num", cl::desc("Number of sequences to analyse"),
-                    cl::value_desc("positive integer"), cl::init(1));
+//cl::opt<int> NumSeq("num", cl::desc("Number of sequences to analyse"),
+                    //cl::value_desc("positive integer"), cl::init(1));
 
 cl::list<std::string> FunctionList("fn", cl::value_desc("String"),
                                    cl::desc("List of functions to instrument"),
@@ -98,13 +98,17 @@ cl::opt<bool> SimulateDFG("simdfg",
                           cl::value_desc("boolean"), cl::init(false));
 
 cl::opt<bool> ConvertGlobalsToPointers("global-to-pointer",
-                cl::desc("Convert globals in the extracted function to live in pointers"), cl::value_desc("boolean"), cl::init(false));
+                cl::desc("Convert globals in the extracted function to live in pointers"), 
+                cl::value_desc("boolean"), cl::init(false));
 
 cl::opt<bool> DumpStats("dump-stats", cl::desc("Pasha stats"),
         cl::value_desc("boolean"), cl::init(false));
 
 cl::opt<bool> AAEdges("aa-edges", cl::desc("Generate edges to enforce AA"),
         cl::value_desc("boolean"), cl::init(false));
+
+cl::opt<bool> EnableLogging("log", cl::desc("Enable value logging (In/Out/Memory)"), 
+        cl::value_desc("boolead"), cl::init(false));
 
 bool isTargetFunction(const Function &f,
                       const cl::list<std::string> &FunctionList) {
@@ -178,8 +182,7 @@ int main(int argc, char **argv, const char **env) {
     pm.add(new LoopInfoWrapperPass());
     pm.add(llvm::createPostDomTree());
     pm.add(new DominatorTreeWrapperPass());
-    pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, NumSeq, 
-                                         ExtractedModules));
+    pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, ExtractedModules));
     pm.add(createVerifierPass());
     pm.run(*module);
 

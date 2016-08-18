@@ -39,6 +39,7 @@ using namespace mwe;
 using namespace std;
 
 extern cl::list<std::string> FunctionList;
+extern cl::opt<bool> EnableLogging;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
 extern cl::opt<bool> SimulateDFG;
@@ -53,8 +54,6 @@ void MicroWorkloadExtract::readSequences() {
     int64_t Count = 0;
     for (; getline(SeqFile, Line);) {
         Path P;
-        //std::vector<std::string> Tokens;
-        //boost::split(Tokens, Line, boost::is_any_of("\t "));
 
         SmallVector<StringRef, 16> Tokens;
         StringRef Temp(Line);
@@ -82,10 +81,9 @@ void MicroWorkloadExtract::readSequences() {
     SeqFile.close();
 }
 
-MicroWorkloadExtract::MicroWorkloadExtract(std::string S, int N, 
+MicroWorkloadExtract::MicroWorkloadExtract(std::string S, 
                      std::vector<std::unique_ptr<llvm::Module>> &EM)
-    : llvm::ModulePass(ID), SeqFilePath(S), NumSeq(N), 
-    ExtractedModules(EM) {
+    : llvm::ModulePass(ID), SeqFilePath(S), ExtractedModules(EM) {
         switch(ExtractAs) {
             case trace:
                 extractAsChop = false;
@@ -581,22 +579,24 @@ void MicroWorkloadExtract::extractHelper(
 
     /// Add live out value logging
     /// It is only logged if the path succeeds
-    //auto Mod = StaticFunc->getParent();
-    //auto DL = Mod->getDataLayout();
-    //uint64_t Size = DL.getTypeStoreSize(cast<PointerType>(StructPtr->getType())->getElementType());
-    //errs() << "Dumping Struct of Size : " << Size << " bytes\n";
+    if(EnableLogging) {
+        auto Mod = StaticFunc->getParent();
+        auto DL = Mod->getDataLayout();
+        uint64_t Size = DL.getTypeStoreSize(cast<PointerType>(StructPtr->getType())->getElementType());
+        errs() << "Dumping Struct of Size : " << Size << " bytes\n";
 
-    //auto LastBlock = dyn_cast<BasicBlock>(VMap[*RevTopoChop.begin()]);
-    //auto *StructBI =
-        //new BitCastInst(&*StructPtr, PointerType::getInt8PtrTy(Context), "", LastBlock->getTerminator());
-    //auto *Sz = ConstantInt::get(Type::getInt64Ty(Context), Size);
- 
-    //auto *VoidTy = Type::getVoidTy(Context);
-    //Value *Params[] = {StructBI, Sz};    
-    //auto *DumpFn = Mod->getOrInsertFunction("__dump_val", 
-            //FunctionType::get(VoidTy, {Type::getInt8PtrTy(Context), Type::getInt64Ty(Context)}, false));
-    //assert(DumpFn && "Could not insert dump function");
-    //CallInst::Create(DumpFn, Params, "", LastBlock->getTerminator());
+        auto LastBlock = dyn_cast<BasicBlock>(VMap[*RevTopoChop.begin()]);
+        auto *StructBI =
+            new BitCastInst(&*StructPtr, PointerType::getInt8PtrTy(Context), "", LastBlock->getTerminator());
+        auto *Sz = ConstantInt::get(Type::getInt64Ty(Context), Size);
+     
+        auto *VoidTy = Type::getVoidTy(Context);
+        Value *Params[] = {StructBI, Sz};    
+        auto *DumpFn = Mod->getOrInsertFunction("__dump_val", 
+                FunctionType::get(VoidTy, {Type::getInt8PtrTy(Context), Type::getInt64Ty(Context)}, false));
+        assert(DumpFn && "Could not insert dump function");
+        CallInst::Create(DumpFn, Params, "", LastBlock->getTerminator());
+    }
 }
 
 static void getTopoChopHelper(
@@ -1087,14 +1087,16 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     // Success Path - End
     //
 
-    
-    auto *MweDtor =
-        Mod->getOrInsertFunction("__mwe_dtor", VoidTy, nullptr);
-    appendToGlobalDtors(*Mod, llvm::cast<Function>(MweDtor), 0);
+   
+    if(EnableLogging) {
+        auto *MweDtor =
+            Mod->getOrInsertFunction("__mwe_dtor", VoidTy, nullptr);
+        appendToGlobalDtors(*Mod, llvm::cast<Function>(MweDtor), 0);
 
-    auto *MweCtor =
-        Mod->getOrInsertFunction("__mwe_ctor", VoidTy, nullptr);
-    appendToGlobalCtors(*Mod, llvm::cast<Function>(MweCtor), 0);
+        auto *MweCtor =
+            Mod->getOrInsertFunction("__mwe_ctor", VoidTy, nullptr);
+        appendToGlobalCtors(*Mod, llvm::cast<Function>(MweCtor), 0);
+    }
     
 }
 
