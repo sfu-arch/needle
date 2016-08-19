@@ -358,7 +358,6 @@ void MicroWorkloadExtract::extractHelper(
         }
     };
 
-    // vector<ConstantExpr*> UpdateCExpr;
     deque<ConstantExpr *> UpdateCExpr;
 
     for (auto &GV : Globals) {
@@ -437,7 +436,7 @@ void MicroWorkloadExtract::extractHelper(
         assert(!isa<ReturnInst>(T) && "Should not occur");
         assert(!isa<UnreachableInst>(T) && "Should not occur");
 
-        if (auto *SI = dyn_cast<SwitchInst>(T)) {
+        if (isa<SwitchInst>(T)) {
             assert(false &&
                    "Switch instruction not handled, "
                    "use LowerSwitchPass to convert switch to if-else.");
@@ -673,7 +672,8 @@ static void valueLogging(Function *F) {
     /// for invocations that fail, struct fields may have garbage values.
     /// Assume last argument is live out struct for offloaded functions
     auto LiveOutStructPtr = --F->arg_end();
-    uint64_t Size = DL.getTypeStoreSize(cast<PointerType>(LiveOutStructPtr->getType())->getElementType());
+    auto *LiveOutStructTy = cast<PointerType>(LiveOutStructPtr->getType())->getElementType();
+    uint64_t Size = DL.getTypeStoreSize(LiveOutStructTy);
     auto *LiveOutStructBI =
         new BitCastInst(&*LiveOutStructPtr, PointerType::getInt8PtrTy(Ctx), "dump_cast", 
                 &*F->getEntryBlock().getFirstInsertionPt());
@@ -686,6 +686,32 @@ static void valueLogging(Function *F) {
     CallInst::Create(DumpFn, Params, "", RetTrue->getTerminator());
     if(RetFalse)
         CallInst::Create(DumpFn, Params, "", RetFalse->getTerminator());
+
+
+    /// Generate a C declaration for the struct being dumped
+    /// TODO : Rewrite this to use X-Macros
+    auto writeStructDef = [&DL](StructType* ST, StringRef Name, 
+            raw_ostream& Out) {
+        stringstream Def, Sizes;
+        Sizes << ("uint32_t __" + Name.str() + "_sz[] = {");
+        Def << ("struct " + Name.str() + " {\n") ;
+        for(uint32_t I = 0; I < ST->getNumElements(); I++) {
+           auto Sz =  DL.getTypeStoreSizeInBits(ST->getElementType(I));
+           Def << ("    uint" +
+                       to_string(Sz) +
+                       "_t el"+to_string(I)+";\n");
+           if(I != 0)
+               Sizes << ",";
+           Sizes << Sz; 
+        }
+        Sizes << "};\n";
+        Def << ("};\n"); 
+        Out << Sizes.str();
+        Out << Def.str();
+    };
+
+    writeStructDef(StructTy, "livein", errs());
+    writeStructDef(cast<StructType>(LiveOutStructTy), "liveout", errs());
 }
 
 static void getTopoChopHelper(
