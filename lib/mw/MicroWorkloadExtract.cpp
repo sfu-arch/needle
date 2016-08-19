@@ -109,6 +109,16 @@ bool MicroWorkloadExtract::doFinalization(Module &M) {
     return false; 
 }
 
+static StructType *getStructType(SetVector<Value *> &LiveOut,
+                                        Module *Mod) {
+    SmallVector<Type *, 16> LiveOutTypes(LiveOut.size());
+    transform(LiveOut.begin(), LiveOut.end(), LiveOutTypes.begin(),
+              [](const Value *V) -> Type * { return V->getType(); });
+    // Create a packed struct return type
+    return StructType::get(Mod->getContext(), LiveOutTypes, true);
+}
+
+
 static bool isBlockInPath(const string &S, const Path &P) {
     return find(P.Seq.begin(), P.Seq.end(), S) != P.Seq.end();
 }
@@ -584,7 +594,7 @@ void MicroWorkloadExtract::extractHelper(
 /// 1. Live in logging happens immediately upon function entry
 /// 2. Live out logging happens in 2 places, 
 ///     a. success : actual values are dumped out
-///     b. fail : zeros
+///     b. fail : partial
 /// This approach is to ensure consistency per invocation
 static void valueLogging(Function *F) {
     if(!EnableLogging)
@@ -593,22 +603,20 @@ static void valueLogging(Function *F) {
     auto Mod = F->getParent();
     auto DL  = Mod->getDataLayout();
     auto &Ctx = F->getContext();
+    auto *VoidTy = Type::getVoidTy(Ctx);
 
-    // Assume last argument is live out struct for offloaded functions
-    auto StructPtr = --F->arg_end();
-
-    uint64_t Size = DL.getTypeStoreSize(cast<PointerType>(StructPtr->getType())->getElementType());
    
     BasicBlock *RetTrue = nullptr, *RetFalse = nullptr;
     ConstantInt *True = ConstantInt::getTrue(Ctx), *False = ConstantInt::getFalse(Ctx);
 
+    /// RetFalse will remain nullptr where the outlined function does not
+    /// have any guards which are converted to conditional branches to a 
+    /// block which returns false.
     for(auto &BB : *F) {
         if(auto *RI = dyn_cast<ReturnInst>(BB.getTerminator())) {
             if(True == RI->getReturnValue()) {
-                errs() << "Found Success Block\n";
                 RetTrue = &BB;
             } else if (False == RI->getReturnValue()) {
-                errs() << "Found Fail Block\n";
                 RetTrue = &BB;
             } else {
                 llvm_unreachable("Offload functions should "
@@ -617,16 +625,67 @@ static void valueLogging(Function *F) {
         }
     }
 
-    auto *StructBI =
-        new BitCastInst(&*StructPtr, PointerType::getInt8PtrTy(Ctx), "", RetTrue->getTerminator());
+    /// Live in value logging
+    /// First gather all the live in values into a struct
+    /// a. Create a struct inside the function 
+    auto InsertionPt = F->getEntryBlock().getFirstInsertionPt();
+    SetVector<Value*> LiveInArgs; 
+    for(auto AB = F->arg_begin(), AE = prev(F->arg_end()); 
+            AB != AE; AB++) {
+        LiveInArgs.insert(&*AB);
+    }
+    auto *StructTy = getStructType(LiveInArgs, Mod); 
+    auto *LIS = new AllocaInst(StructTy, "", &*InsertionPt);
+
+    /// b. Stick the live in values into this struct
+    int32_t Index = 0;
+    Value *Idx[2];
+    Idx[0] = Constant::getNullValue(Type::getInt32Ty(Ctx));
+    StoreInst *SI = nullptr;
+    for (auto &L : LiveInArgs) {
+        Idx[1] = ConstantInt::get(Type::getInt32Ty(Ctx), Index);
+        GetElementPtrInst *StructGEP = GetElementPtrInst::Create(
+            cast<PointerType>(LIS->getType())->getElementType(),
+            &*LIS, Idx, "");
+        StructGEP->insertAfter(LIS);
+        SI = new StoreInst(L, StructGEP);
+        SI->insertAfter(StructGEP);
+        Index++;
+    }
+
+    /// c. Write out this struct
+    auto *LiveInStructBI =
+        new BitCastInst(LIS, PointerType::getInt8PtrTy(Ctx), "dump_cast");
+    LiveInStructBI->insertAfter(SI);
+    uint64_t LiveInSize = DL.getTypeStoreSize(cast<PointerType>(LIS->getType())->getElementType());
+    auto *LiveInSz = ConstantInt::get(Type::getInt64Ty(Ctx), LiveInSize);
+    Value *LiveInParams[] = {LiveInStructBI, LiveInSz};
+    auto *LiveInDumpFn = Mod->getOrInsertFunction("__log_in", 
+            FunctionType::get(VoidTy, {Type::getInt8PtrTy(Ctx), Type::getInt64Ty(Ctx)}, false));
+    assert(LiveInDumpFn && "Could not insert dump function");
+    CallInst::Create(LiveInDumpFn, LiveInParams, "", RetTrue->getTerminator());
+    if(RetFalse)
+        CallInst::Create(LiveInDumpFn, LiveInParams, "", RetFalse->getTerminator());
+
+
+    /// Live out value logging 
+    /// Will have consistent values for successful invocations of the path
+    /// for invocations that fail, struct fields may have garbage values.
+    /// Assume last argument is live out struct for offloaded functions
+    auto LiveOutStructPtr = --F->arg_end();
+    uint64_t Size = DL.getTypeStoreSize(cast<PointerType>(LiveOutStructPtr->getType())->getElementType());
+    auto *LiveOutStructBI =
+        new BitCastInst(&*LiveOutStructPtr, PointerType::getInt8PtrTy(Ctx), "dump_cast", 
+                &*F->getEntryBlock().getFirstInsertionPt());
     auto *Sz = ConstantInt::get(Type::getInt64Ty(Ctx), Size);
  
-    auto *VoidTy = Type::getVoidTy(Ctx);
-    Value *Params[] = {StructBI, Sz};    
+    Value *Params[] = {LiveOutStructBI, Sz};    
     auto *DumpFn = Mod->getOrInsertFunction("__log_out", 
             FunctionType::get(VoidTy, {Type::getInt8PtrTy(Ctx), Type::getInt64Ty(Ctx)}, false));
     assert(DumpFn && "Could not insert dump function");
     CallInst::Create(DumpFn, Params, "", RetTrue->getTerminator());
+    if(RetFalse)
+        CallInst::Create(DumpFn, Params, "", RetFalse->getTerminator());
 }
 
 static void getTopoChopHelper(
@@ -673,16 +732,6 @@ static bool verifyChop(const SmallVector<BasicBlock *, 16> Chop) {
     }
     return true;
 }
-
-static StructType *getLiveOutStructType(SetVector<Value *> &LiveOut,
-                                        Module *Mod) {
-    SmallVector<Type *, 16> LiveOutTypes(LiveOut.size());
-    transform(LiveOut.begin(), LiveOut.end(), LiveOutTypes.begin(),
-              [](const Value *V) -> Type * { return V->getType(); });
-    // Create a packed struct return type
-    return StructType::get(Mod->getContext(), LiveOutTypes, true);
-}
-
 Function *MicroWorkloadExtract::extract(
     PostDominatorTree *PDT, Module *Mod,
     SmallVector<BasicBlock *, 16> &RevTopoChop, SetVector<Value *> &LiveIn,
@@ -875,7 +924,7 @@ Function *MicroWorkloadExtract::extract(
         }
     }
 
-    auto *StructTy = getLiveOutStructType(LiveOut, Mod);
+    auto *StructTy = getStructType(LiveOut, Mod);
     auto *StructPtrTy = PointerType::getUnqual(StructTy);
     ParamTy.push_back(StructPtrTy);
 
@@ -982,7 +1031,7 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     // Add a struct to the function entry block in order to
     // capture the live outs.
     auto InsertionPt = F.getEntryBlock().getFirstInsertionPt();
-    auto *StructTy = getLiveOutStructType(LiveOut, Mod);
+    auto *StructTy = getStructType(LiveOut, Mod);
     auto *LOS = new AllocaInst(StructTy, "", &*InsertionPt);
     GetElementPtrInst *StPtr =
         GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", &*InsertionPt);
