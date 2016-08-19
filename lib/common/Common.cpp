@@ -461,4 +461,25 @@ vector<BasicBlock *> postOrder(Function &F, LoopInfo *LI) {
 
     return PostOrderBlocks;
 }
+
+
+void printPathSrc(SetVector<llvm::BasicBlock *> &blocks, raw_ostream &out ) {
+    unsigned line = 0;
+    llvm::StringRef file;
+    for (auto *bb : blocks) {
+        for (auto &instruction : *bb) {
+            MDNode *n = instruction.getMetadata("dbg");
+            if (!n) {
+                continue;
+            }
+            DebugLoc Loc(n);
+            if (Loc->getLine() != line || Loc->getFilename() != file) {
+                line = Loc->getLine();
+                file = Loc->getFilename();
+                out << "File " << file.str() << " line " << line << "\n";
+            }
+        }
+    }
+}
+
 }

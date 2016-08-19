@@ -9,6 +9,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/IR/InstVisitor.h"
+#include "llvm/IR/DebugInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "../lib/InstruMem/InstruMem.h"
 
@@ -51,6 +52,7 @@ void labelUID(llvm::Function&);
 void instrumentDFG(llvm::Function&);
 vector<BasicBlock *> postOrder(Function &, LoopInfo *);
 void runStatsPasses(Function &);
+void printPathSrc(SetVector<llvm::BasicBlock *> &, raw_ostream &out = errs());
 }
 
 namespace helpers {

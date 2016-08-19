@@ -577,26 +577,56 @@ void MicroWorkloadExtract::extractHelper(
         OutIndex++;
     }
 
-    /// Add live out value logging
-    /// It is only logged if the path succeeds
-    if(EnableLogging) {
-        auto Mod = StaticFunc->getParent();
-        auto DL = Mod->getDataLayout();
-        uint64_t Size = DL.getTypeStoreSize(cast<PointerType>(StructPtr->getType())->getElementType());
-        errs() << "Dumping Struct of Size : " << Size << " bytes\n";
+}
 
-        auto LastBlock = dyn_cast<BasicBlock>(VMap[*RevTopoChop.begin()]);
-        auto *StructBI =
-            new BitCastInst(&*StructPtr, PointerType::getInt8PtrTy(Context), "", LastBlock->getTerminator());
-        auto *Sz = ConstantInt::get(Type::getInt64Ty(Context), Size);
-     
-        auto *VoidTy = Type::getVoidTy(Context);
-        Value *Params[] = {StructBI, Sz};    
-        auto *DumpFn = Mod->getOrInsertFunction("__dump_val", 
-                FunctionType::get(VoidTy, {Type::getInt8PtrTy(Context), Type::getInt64Ty(Context)}, false));
-        assert(DumpFn && "Could not insert dump function");
-        CallInst::Create(DumpFn, Params, "", LastBlock->getTerminator());
+/// Live Value logging : This should only be run on offloaded functions
+/// it makes assumptions on what things are being returned.
+/// 1. Live in logging happens immediately upon function entry
+/// 2. Live out logging happens in 2 places, 
+///     a. success : actual values are dumped out
+///     b. fail : zeros
+/// This approach is to ensure consistency per invocation
+static void valueLogging(Function *F) {
+    if(!EnableLogging)
+        return;
+
+    auto Mod = F->getParent();
+    auto DL  = Mod->getDataLayout();
+    auto &Ctx = F->getContext();
+
+    // Assume last argument is live out struct for offloaded functions
+    auto StructPtr = --F->arg_end();
+
+    uint64_t Size = DL.getTypeStoreSize(cast<PointerType>(StructPtr->getType())->getElementType());
+   
+    BasicBlock *RetTrue = nullptr, *RetFalse = nullptr;
+    ConstantInt *True = ConstantInt::getTrue(Ctx), *False = ConstantInt::getFalse(Ctx);
+
+    for(auto &BB : *F) {
+        if(auto *RI = dyn_cast<ReturnInst>(BB.getTerminator())) {
+            if(True == RI->getReturnValue()) {
+                errs() << "Found Success Block\n";
+                RetTrue = &BB;
+            } else if (False == RI->getReturnValue()) {
+                errs() << "Found Fail Block\n";
+                RetTrue = &BB;
+            } else {
+                llvm_unreachable("Offload functions should "
+                        "only have true or false return blocks");
+            } 
+        }
     }
+
+    auto *StructBI =
+        new BitCastInst(&*StructPtr, PointerType::getInt8PtrTy(Ctx), "", RetTrue->getTerminator());
+    auto *Sz = ConstantInt::get(Type::getInt64Ty(Ctx), Size);
+ 
+    auto *VoidTy = Type::getVoidTy(Ctx);
+    Value *Params[] = {StructBI, Sz};    
+    auto *DumpFn = Mod->getOrInsertFunction("__log_out", 
+            FunctionType::get(VoidTy, {Type::getInt8PtrTy(Ctx), Type::getInt64Ty(Ctx)}, false));
+    assert(DumpFn && "Could not insert dump function");
+    CallInst::Create(DumpFn, Params, "", RetTrue->getTerminator());
 }
 
 static void getTopoChopHelper(
@@ -1159,7 +1189,6 @@ void liveInAA(SetVector<Value*>& LiveIn,
 void MicroWorkloadExtract::process(Function &F) {
    
     common::runStatsPasses(F);
-    //common::runBranchTaxonomyPass(F);
 
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
     auto *DT = &getAnalysis<DominatorTreeWrapperPass>(F).getDomTree();
@@ -1209,6 +1238,9 @@ void MicroWorkloadExtract::process(Function &F) {
 
     Data["num-extract-blocks"] = Blocks.size();
 
+
+    /// Print out the source lines :
+    common::printPathSrc(Blocks);
     //errs() << "Blocks:\n";
     // Get the number of phi nodes originally
     uint32_t PhiBefore = 0;
@@ -1248,6 +1280,8 @@ void MicroWorkloadExtract::process(Function &F) {
     }
 
     Data["phi-simplified"] = PhiBefore - PhiAfter;
+
+    valueLogging(Offload);
 
     //common::printCFG(F);
     common::writeModule(Mod, (Id) + string(".ll"));

@@ -1,10 +1,12 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 uint64_t __mwe_success_count = 0;
 uint64_t __mwe_fail_count = 0;
 
-FILE * fp = 0;
+FILE * fp_in = 0;
+FILE * fp_out = 0;
 
 uint32_t
 __prev_store_exists(char* begin, char* loc) {
@@ -39,20 +41,31 @@ void
 __mwe_dtor() {
    printf("mwe-num-success %lu\n", __mwe_success_count);
    printf("mwe-num-fail %lu\n", __mwe_fail_count);
-   fclose(fp);
+   fclose(fp_in);
+   fclose(fp_out);
 }
 
 
 void
 __mwe_ctor() {
-    fp = fopen("mwe.dump.bin", "wb");
-    if(!fp)
+    fp_in = fopen("livein.dump.bin", "wb");
+    fp_out = fopen("liveout.dump.bin", "wb");
+    if(!(fp_in && fp_out)) {
         printf("MWE Ctor : Could not open file\n");
+        abort();
+    }
+    __mwe_success_count = 0;
+    __mwe_fail_count = 0;
 }
 
 void
-__dump_val(char* ptr, size_t sz) {
-    fwrite(ptr, sizeof(char), sz, fp);
+__log_in(char* ptr, size_t sz) {
+    fwrite(ptr, sizeof(char), sz, fp_in);
+}
+
+void
+__log_out(char* ptr, size_t sz) {
+    fwrite(ptr, sizeof(char), sz, fp_out);
 }
 
 void

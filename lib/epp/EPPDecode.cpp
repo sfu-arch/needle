@@ -76,28 +76,6 @@ static uint64_t pathCheck(vector<BasicBlock *> &Blocks) {
     return NumIns;
 }
 
-void printPathSrc(vector<llvm::BasicBlock *> &blocks) {
-    unsigned line = 0;
-    llvm::StringRef file;
-    for (auto *bb : blocks) {
-        for (auto &instruction : *bb) {
-            MDNode *n = instruction.getMetadata("dbg");
-            if (!n) {
-                continue;
-            }
-            DebugLoc Loc(n);
-            if (Loc->getLine() != line || Loc->getFilename() != file) {
-                line = Loc->getLine();
-                file = Loc->getFilename();
-                errs() << "File " << file.str() << " line " << line << "\n";
-                // break; // FIXME : This makes it only print once for each BB,
-                // remove to print all
-                // source lines per instruction.
-            }
-        }
-    }
-}
-
 bool EPPDecode::runOnModule(Module &M) {
     ifstream inFile(profile.c_str(), ios::in);
     assert(inFile.is_open() && "Could not open file for reading");
@@ -179,8 +157,12 @@ bool EPPDecode::runOnModule(Module &M) {
         }
         DEBUG(errs() << "Path ID: " << path.id.toString(10, false)
                      << " Freq: " << path.count << "\n");
-        if (printSrcLines)
-            printPathSrc(blocks);
+
+        if (printSrcLines) {
+            // TODO : Cleanup -- change the declaration on line 155 to SetVector
+            SetVector<BasicBlock*> SetBlocks(blocks.begin(), blocks.end());
+            common::printPathSrc(SetBlocks);
+        }
         DEBUG(errs() << "\n");
     }
 
