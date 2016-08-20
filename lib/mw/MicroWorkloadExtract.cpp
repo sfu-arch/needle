@@ -28,7 +28,6 @@
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Transforms/Utils/CodeExtractor.h"
 #include "llvm/Transforms/Utils/SSAUpdater.h"
-//#include <boost/algorithm/string.hpp>
 #include <cxxabi.h>
 
 #include <algorithm>
@@ -641,7 +640,11 @@ static void valueLogging(Function *F) {
         GetElementPtrInst *StructGEP = GetElementPtrInst::Create(
             cast<PointerType>(LIS->getType())->getElementType(), &*LIS, Idx,
             "");
-        StructGEP->insertAfter(LIS);
+        if(!SI) {
+            StructGEP->insertAfter(LIS);
+        } else {
+            StructGEP->insertAfter(SI);
+        }
         SI = new StoreInst(L, StructGEP);
         SI->insertAfter(StructGEP);
         Index++;
@@ -688,28 +691,31 @@ static void valueLogging(Function *F) {
         CallInst::Create(DumpFn, Params, "", RetFalse->getTerminator());
 
     /// Generate a C declaration for the struct being dumped
-    /// TODO : Rewrite this to use X-Macros
-    auto writeStructDef = [&DL](StructType *ST, StringRef Name,
-                                raw_ostream &Out) {
-        stringstream Def, Sizes;
-        Sizes << ("uint32_t __" + Name.str() + "_sz[] = {");
-        Def << ("struct " + Name.str() + " {\n");
-        for (uint32_t I = 0; I < ST->getNumElements(); I++) {
-            auto Sz = DL.getTypeStoreSizeInBits(ST->getElementType(I));
-            Def << ("    uint" + to_string(Sz) + "_t el" + to_string(I) +
-                    ";\n");
-            if (I != 0)
-                Sizes << ",";
-            Sizes << Sz;
+    auto getFormat = [](uint64_t Sz) -> string {
+        switch(Sz) {
+            case 64 : return string("\"%llu\"");
+            default: return string("\"%lu\"");
         }
-        Sizes << "};\n";
-        Def << ("};\n");
-        Out << Sizes.str();
-        Out << Def.str();
+    };
+    auto structDefXMacro = [&DL, &getFormat](StructType *ST, StringRef Name,
+                                raw_ostream &Out) {
+        stringstream Def;
+        Def << ("\n\n#define X_FIELDS_" + Name.str() + " \\\n");
+        for (uint32_t I = 0; I < ST->getNumElements(); I++) {
+            if(I != 0)
+                Def << " \\\n";
+            auto Sz = DL.getTypeStoreSizeInBits(ST->getElementType(I));
+            // TODO : Signed vs Unsigned ?
+            Def << ("    X( uint" + to_string(Sz) + "_t, el" + to_string(I) +
+                    ", " + getFormat(Sz) + ")");
+        }
+        Out << (Def.str() + "\n\n");
     };
 
-    writeStructDef(StructTy, "livein", errs());
-    writeStructDef(cast<StructType>(LiveOutStructTy), "liveout", errs());
+    error_code EC;
+    raw_fd_ostream Out("LogTypes.def", EC, sys::fs::F_None);
+    structDefXMacro(StructTy, "LIVEIN", Out);
+    structDefXMacro(cast<StructType>(LiveOutStructTy), "LIVEOUT", Out);
 }
 
 static void getTopoChopHelper(
