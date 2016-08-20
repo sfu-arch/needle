@@ -220,13 +220,12 @@ getBackEdges(Function &F) {
     return getBackEdges(&F.getEntryBlock());
 }
 
-void runBranchTaxonomyPass(Function& F) {
+void runBranchTaxonomyPass(Function &F) {
     legacy::PassManager PM;
     PM.add(new ScalarEvolutionWrapperPass());
     PM.add(new LoopInfoWrapperPass());
     PM.add(new helpers::BranchTaxonomy(F.getName().str()));
     PM.run(*F.getParent());
-
 }
 void optimizeModule(Module *Mod) {
     PassManagerBuilder PMB;
@@ -373,7 +372,6 @@ void runStatsPasses(Function &F) {
     FPM.doInitialization();
     FPM.run(F);
     FPM.doFinalization();
-
 }
 
 void labelUID(Module &M) {
@@ -462,8 +460,7 @@ vector<BasicBlock *> postOrder(Function &F, LoopInfo *LI) {
     return PostOrderBlocks;
 }
 
-
-void printPathSrc(SetVector<llvm::BasicBlock *> &blocks, raw_ostream &out ) {
+void printPathSrc(SetVector<llvm::BasicBlock *> &blocks, raw_ostream &out) {
     unsigned line = 0;
     llvm::StringRef file;
     for (auto *bb : blocks) {
@@ -481,5 +478,4 @@ void printPathSrc(SetVector<llvm::BasicBlock *> &blocks, raw_ostream &out ) {
         }
     }
 }
-
 }

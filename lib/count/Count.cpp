@@ -27,7 +27,7 @@ struct Count : public ModulePass {
     uint64_t Counter = 0;
     uint64_t BBCounter = 0;
 
-    set<pair<Value*, Value*>>EdgeMap;
+    set<pair<Value *, Value *>> EdgeMap;
 
     bool doInitialization(Module &M) {
         // assert(FunctionList.size() == 1 &&
@@ -63,11 +63,10 @@ struct Count : public ModulePass {
                     CountMap[opcodeBucket(I.getOpcode())] += 1;
                     Counter++;
 
-                    for(auto ob = I.op_begin(), oe = I.op_end();
-                            ob != oe; ob++) {
+                    for (auto ob = I.op_begin(), oe = I.op_end(); ob != oe;
+                         ob++) {
                         EdgeMap.insert({ob->get(), &I});
                     }
-
 
                     if (auto *SI = dyn_cast<StoreInst>(&I)) {
                         if (auto *BI = dyn_cast<BitCastInst>(

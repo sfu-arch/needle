@@ -59,8 +59,8 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
 
     std::map<std::string, uint64_t> Data;
 
-    MicroWorkloadExtract(std::string S, 
-                     std::vector<std::unique_ptr<llvm::Module>> &EM);
+    MicroWorkloadExtract(std::string S,
+                         std::vector<std::unique_ptr<llvm::Module>> &EM);
 
     virtual bool runOnModule(llvm::Module &M) override;
     virtual bool doInitialization(llvm::Module &M) override;
@@ -92,15 +92,13 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
     }
 };
 
-struct MicroWorkloadHelper : public llvm::ModulePass{
+struct MicroWorkloadHelper : public llvm::ModulePass {
     static char ID;
     std::string Id;
     std::map<std::string, uint64_t> Data;
-    MicroWorkloadHelper(std::string I)
-        : llvm::ModulePass(ID), Id(I) {}
+    MicroWorkloadHelper(std::string I) : llvm::ModulePass(ID), Id(I) {}
 
-
-    virtual bool runOnModule(llvm::Module&) override;
+    virtual bool runOnModule(llvm::Module &) override;
     virtual bool doInitialization(llvm::Module &M) override;
     virtual bool doFinalization(llvm::Module &M) override;
 

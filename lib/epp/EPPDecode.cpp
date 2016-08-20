@@ -160,7 +160,7 @@ bool EPPDecode::runOnModule(Module &M) {
 
         if (printSrcLines) {
             // TODO : Cleanup -- change the declaration on line 155 to SetVector
-            SetVector<BasicBlock*> SetBlocks(blocks.begin(), blocks.end());
+            SetVector<BasicBlock *> SetBlocks(blocks.begin(), blocks.end());
             common::printPathSrc(SetBlocks);
         }
         DEBUG(errs() << "\n");

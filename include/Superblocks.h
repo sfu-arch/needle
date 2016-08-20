@@ -65,7 +65,7 @@ struct Superblocks : public llvm::ModulePass {
     void makeEdgeProfile(std::map<std::string, llvm::BasicBlock *> &);
     void readSequences();
     void process(llvm::Function &F);
-    void hyperblock(llvm::Loop*, llvm::LoopInfo&);
+    void hyperblock(llvm::Loop *, llvm::LoopInfo &);
     void
     construct(llvm::BasicBlock *Begin,
               llvm::SmallVector<llvm::SmallVector<llvm::BasicBlock *, 8>, 32>
@@ -75,7 +75,7 @@ struct Superblocks : public llvm::ModulePass {
 
     virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
         AU.addRequired<llvm::LoopInfoWrapperPass>();
-		AU.addRequired<llvm::DominatorTreeWrapperPass>();
+        AU.addRequired<llvm::DominatorTreeWrapperPass>();
         AU.setPreservesAll();
     }
 };

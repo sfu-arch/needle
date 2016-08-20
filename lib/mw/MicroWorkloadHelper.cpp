@@ -2,25 +2,25 @@
 #include "MicroWorkloadExtract.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/BasicAliasAnalysis.h"
 #include "llvm/Analysis/CFG.h"
+#include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Dominators.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Transforms/Utils/CodeExtractor.h"
-#include "llvm/ADT/PostOrderIterator.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/Analysis/BasicAliasAnalysis.h"
-#include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 //#include <boost/algorithm/string.hpp>
 #include <cxxabi.h>
 
@@ -30,9 +30,7 @@ using namespace llvm;
 using namespace mwe;
 using namespace std;
 
-
 extern cl::opt<bool> SimulateDFG;
-
 
 static bool replaceGuardsHelper(Function &F, BasicBlock *RetBlock) {
     for (auto &BB : F) {
@@ -81,7 +79,7 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
     auto &Ctx = Mod->getContext();
     SmallVector<StoreInst *, 16> Stores;
 
-    //auto TopoBlocks = getFunctionRPO(*Offload);
+    // auto TopoBlocks = getFunctionRPO(*Offload);
     auto &AA = getAnalysis<AAResultsWrapperPass>(*Offload).getAAResults();
 
     auto isAliasingStore = [&AA, &Stores](StoreInst *SI) -> bool {
@@ -92,8 +90,8 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
         return false;
     };
 
-    //for (auto &BB : TopoBlocks) {
-    ReversePostOrderTraversal<Function*> RPOT(Offload);
+    // for (auto &BB : TopoBlocks) {
+    ReversePostOrderTraversal<Function *> RPOT(Offload);
     for (auto BB = RPOT.begin(); BB != RPOT.end(); ++BB) {
         for (auto &I : **BB) {
             if (auto *SI = dyn_cast<StoreInst>(&I)) {
@@ -107,7 +105,7 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
             }
         }
     }
-        
+
     Data["undo-log-size"] = Stores.size();
 
     // Create the Undo Log as a global variable
@@ -116,14 +114,14 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
     auto *Initializer = ConstantAggregateZero::get(LogArrTy);
     GlobalVariable *ULog =
         new GlobalVariable(*Mod, LogArrTy, false, GlobalValue::ExternalLinkage,
-                           Initializer, "__undo_log_"+Id);
+                           Initializer, "__undo_log_" + Id);
     ULog->setAlignment(8);
 
     // Save the number of stores as a Global Variable as well
     auto *Int32Ty = IntegerType::getInt32Ty(Ctx);
     auto *NumStores = ConstantInt::get(Int32Ty, Stores.size(), 0);
     new GlobalVariable(*Mod, Int32Ty, false, GlobalValue::ExternalLinkage,
-                       NumStores, "__undo_num_stores_"+Id);
+                       NumStores, "__undo_num_stores_" + Id);
 
     // Instrument the stores :
     // a) Get the value from the load
@@ -225,44 +223,47 @@ void writeIfConversionDot(Function &F) {
 }
 
 bool MicroWorkloadHelper::runOnModule(Module &M) {
-    // This needs to change if there are more 
+    // This needs to change if there are more
     // than one offload function in the module we create.
-    for(auto &F : M) {
-        if(F.isDeclaration())
+    for (auto &F : M) {
+        if (F.isDeclaration())
             return false;
 
-        // TODO : Get the name of the function, if it starts with __offload_func, 
-        // the get the id from the last part of the name. Use this id for the 
+        // TODO : Get the name of the function, if it starts with
+        // __offload_func,
+        // the get the id from the last part of the name. Use this id for the
         // undo log buffer and the num store variable.
 
         if (SimulateDFG) {
             common::labelUID(F);
-            common::writeModule( F.getParent(), string("single.")+F.getName().str() +string(".ll") );
+            common::writeModule(F.getParent(), string("single.") +
+                                                   F.getName().str() +
+                                                   string(".ll"));
             common::printDFG(F);
             common::instrumentDFG(F);
         }
 
         common::runStatsPasses(F);
-        common::writeModule( F.getParent(), F.getName().str() +string(".ll") );
+        common::writeModule(F.getParent(), F.getName().str() + string(".ll"));
         replaceGuards(&F);
         addUndoLog(&F);
-        //writeIfConversionDot(F);
+        // writeIfConversionDot(F);
     }
     return false;
 }
 
-bool MicroWorkloadHelper::doInitialization(Module &M) { 
+bool MicroWorkloadHelper::doInitialization(Module &M) {
     common::optimizeModule(&M);
-    Data.clear(); 
-    return false; 
+    Data.clear();
+    return false;
 }
 
-bool MicroWorkloadHelper::doFinalization(Module &M) { 
+bool MicroWorkloadHelper::doFinalization(Module &M) {
     ofstream Outfile("undo.stats.txt", ios::out);
-    for(auto KV: Data) {
+    for (auto KV : Data) {
         Outfile << KV.first << " " << KV.second << "\n";
     }
-    return false; 
+    return false;
 }
 
 char MicroWorkloadHelper::ID = 0;

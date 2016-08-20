@@ -1,16 +1,16 @@
 #include "llvm/Analysis/BasicAliasAnalysis.h"
+#include "llvm/Analysis/CFLAliasAnalysis.h"
+#include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/Passes.h"
+#include "llvm/Analysis/ScalarEvolutionAliasAnalysis.h"
+#include "llvm/Analysis/ScopedNoAliasAA.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
-#include "llvm/Analysis/ScopedNoAliasAA.h"
-#include "llvm/Analysis/GlobalsModRef.h"
+#include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/Dominators.h"
-#include "llvm/Analysis/CFLAliasAnalysis.h"
-#include "llvm/Analysis/ScalarEvolutionAliasAnalysis.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/Linker/Linker.h"
@@ -33,11 +33,11 @@
 #include <string>
 #include <thread>
 
+#include "AliasEdgeWriter.h"
 #include "AllInliner.h"
 #include "AllInliner.h"
 #include "Common.h"
 #include "MicroWorkloadExtract.h"
-#include "AliasEdgeWriter.h"
 #include "Namer.h"
 #include "Simplify.h"
 
@@ -46,19 +46,19 @@ using namespace llvm;
 using namespace llvm::sys;
 using namespace mwe;
 
-
 // MWE-only options
 
 cl::opt<std::string>
     HelperLib("u", cl::desc("Path to the undo library bitcode module"),
               cl::Required);
 
-cl::opt<ExtractType> ExtractAs(cl::desc("Choose extract type, trace / chop"),
-                               cl::values(clEnumVal(ExtractType::trace, "Extract as trace"),
-                                          clEnumVal(ExtractType::slice, "Extract as slice (chop)"),
-                                          clEnumVal(ExtractType::merge, "Extract as merge (chop)"),
-                                          clEnumValEnd),
-                               cl::Required);
+cl::opt<ExtractType> ExtractAs(
+    cl::desc("Choose extract type, trace / chop"),
+    cl::values(clEnumVal(ExtractType::trace, "Extract as trace"),
+               clEnumVal(ExtractType::slice, "Extract as slice (chop)"),
+               clEnumVal(ExtractType::merge, "Extract as merge (chop)"),
+               clEnumValEnd),
+    cl::Required);
 
 cl::opt<string> InPath(cl::Positional, cl::desc("<Module to analyze>"),
                        cl::value_desc("bitcode filename"), cl::Required);
@@ -69,8 +69,8 @@ cl::opt<string> SeqFilePath("seq",
                             cl::init("epp-sequences.txt"));
 
 // This option is not used anymore
-//cl::opt<int> NumSeq("num", cl::desc("Number of sequences to analyse"),
-                    //cl::value_desc("positive integer"), cl::init(1));
+// cl::opt<int> NumSeq("num", cl::desc("Number of sequences to analyse"),
+// cl::value_desc("positive integer"), cl::init(1));
 
 cl::list<std::string> FunctionList("fn", cl::value_desc("String"),
                                    cl::desc("List of functions to instrument"),
@@ -97,18 +97,20 @@ cl::opt<bool> SimulateDFG("simdfg",
                                    "instrumentation to binary for Pintool"),
                           cl::value_desc("boolean"), cl::init(false));
 
-cl::opt<bool> ConvertGlobalsToPointers("global-to-pointer",
-                cl::desc("Convert globals in the extracted function to live in pointers"), 
-                cl::value_desc("boolean"), cl::init(false));
+cl::opt<bool> ConvertGlobalsToPointers(
+    "global-to-pointer",
+    cl::desc("Convert globals in the extracted function to live in pointers"),
+    cl::value_desc("boolean"), cl::init(false));
 
 cl::opt<bool> DumpStats("dump-stats", cl::desc("Pasha stats"),
-        cl::value_desc("boolean"), cl::init(false));
+                        cl::value_desc("boolean"), cl::init(false));
 
 cl::opt<bool> AAEdges("aa-edges", cl::desc("Generate edges to enforce AA"),
-        cl::value_desc("boolean"), cl::init(false));
+                      cl::value_desc("boolean"), cl::init(false));
 
-cl::opt<bool> EnableLogging("log", cl::desc("Enable value logging (In/Out/Memory)"), 
-        cl::value_desc("boolead"), cl::init(false));
+cl::opt<bool> EnableLogging("log",
+                            cl::desc("Enable value logging (In/Out/Memory)"),
+                            cl::value_desc("boolead"), cl::init(false));
 
 bool isTargetFunction(const Function &f,
                       const cl::list<std::string> &FunctionList) {
@@ -120,8 +122,7 @@ bool isTargetFunction(const Function &f,
     return false;
 }
 
-void 
-runAliasEdgeWriter(Module *M) {
+void runAliasEdgeWriter(Module *M) {
     legacy::PassManager PM;
     PM.add(createBasicAAWrapperPass());
     PM.add(llvm::createTypeBasedAAWrapperPass());
@@ -131,7 +132,6 @@ runAliasEdgeWriter(Module *M) {
     PM.add(createCFLAAWrapperPass());
     PM.add(new aew::AliasEdgeWriter());
     PM.run(*M);
-    
 }
 
 int main(int argc, char **argv, const char **env) {
@@ -151,7 +151,6 @@ int main(int argc, char **argv, const char **env) {
     cl::AddExtraVersionPrinter(
         TargetRegistry::printRegisteredTargetsForVersion);
     cl::ParseCommandLineOptions(argc, argv);
-
 
     // Construct an IR file from the filename passed on the command line.
     SMDiagnostic err;
@@ -199,13 +198,13 @@ int main(int argc, char **argv, const char **env) {
     L.linkInModule(std::move(HelperMod));
 
     for (auto &M : ExtractedModules) {
-        //errs() << "Linking " << M->getName() << "\n";
+        // errs() << "Linking " << M->getName() << "\n";
         bool ret = L.linkInModule(move(M));
         assert(ret == false && "Error in linkInModule");
     }
 
-    if(AAEdges){
-        runAliasEdgeWriter(Composite.get()); 
+    if (AAEdges) {
+        runAliasEdgeWriter(Composite.get());
     }
 
     common::writeModule(Composite.get(), "full.ll");

@@ -1,32 +1,29 @@
 #define DEBUG_TYPE "pasha_statistics"
 
-#include "Statistics.h"
-#include <cassert>
-#include <string>
-#include "llvm/ADT/SCCIterator.h"
-#include <fstream>
 #include "Common.h"
+#include "Statistics.h"
+#include "llvm/ADT/SCCIterator.h"
+#include <cassert>
+#include <fstream>
+#include <string>
 
 using namespace llvm;
 using namespace std;
 using namespace pasha;
 
-bool BranchTaxonomy::doInitialization(Module& M) {
-    return false;
-}
+bool BranchTaxonomy::doInitialization(Module &M) { return false; }
 
-void
-BranchTaxonomy::loopBounds(Function& F) {
+void BranchTaxonomy::loopBounds(Function &F) {
     LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
     ScalarEvolution &SCEV = getAnalysis<ScalarEvolutionWrapperPass>(F).getSE();
-    
+
     uint64_t Bounded = 0, NumLoops = 0;
-    for(auto &L : LI) {
-        SmallVector<BasicBlock*, 4> ExitBlocks;
+    for (auto &L : LI) {
+        SmallVector<BasicBlock *, 4> ExitBlocks;
         L->getExitingBlocks(ExitBlocks);
-        for(auto EB : ExitBlocks) {
+        for (auto EB : ExitBlocks) {
             uint32_t Bounds = SCEV.getSmallConstantTripCount(L, EB);
-            if(Bounds)
+            if (Bounds)
                 Bounded++;
             NumLoops++;
         }
@@ -36,9 +33,8 @@ BranchTaxonomy::loopBounds(Function& F) {
     Data["bounded-loops"] = Bounded;
 }
 
-void
-BranchTaxonomy::functionDAG(Function& F) {
-    ofstream Out("fndag."+F.getName().str() +".dot", ios::out);    
+void BranchTaxonomy::functionDAG(Function &F) {
+    ofstream Out("fndag." + F.getName().str() + ".dot", ios::out);
     auto BackEdges = common::getBackEdges(F);
 
     Out << "digraph \"Function DAG\" {\n";
@@ -48,13 +44,13 @@ BranchTaxonomy::functionDAG(Function& F) {
 
         auto T = BB.getTerminator();
         for (unsigned I = 0; I < T->getNumSuccessors(); I++) {
-            if(BackEdges.count({&BB, T->getSuccessor(I)}) == 0)
+            if (BackEdges.count({&BB, T->getSuccessor(I)}) == 0)
                 Out << ", S" << I << "=\"Node" << T->getSuccessor(I) << "\"";
         }
         Out << "];\n";
 
         for (unsigned I = 0; I < T->getNumSuccessors(); I++) {
-            if(BackEdges.count({&BB, T->getSuccessor(I)}) == 0)
+            if (BackEdges.count({&BB, T->getSuccessor(I)}) == 0)
                 Out << "Node" << &BB << "->Node" << T->getSuccessor(I) << ";\n";
         }
     }
@@ -62,13 +58,12 @@ BranchTaxonomy::functionDAG(Function& F) {
     Out.close();
 }
 
-void
-listCBR(Function& F) {
+void listCBR(Function &F) {
     ofstream Out("cbr.list.txt", ios::out);
-    for(auto &BB : F) {
-        for(auto &I : BB) {
-            if(auto *BI = dyn_cast<BranchInst>(&I)) {
-                if(BI->isConditional()) {
+    for (auto &BB : F) {
+        for (auto &I : BB) {
+            if (auto *BI = dyn_cast<BranchInst>(&I)) {
+                if (BI->isConditional()) {
                     Out << BB.getName().str() << "\n";
                 }
             }
@@ -78,11 +73,10 @@ listCBR(Function& F) {
 }
 
 bool BranchTaxonomy::runOnModule(Module &M) {
-    for(auto &F : M) {
+    for (auto &F : M) {
 
-        if(F.getName().str() != FName)
+        if (F.getName().str() != FName)
             continue;
-
 
         loopBounds(F);
         functionDAG(F);
@@ -91,11 +85,9 @@ bool BranchTaxonomy::runOnModule(Module &M) {
     return false;
 }
 
-
-
-bool BranchTaxonomy::doFinalization(Module& M) {
+bool BranchTaxonomy::doFinalization(Module &M) {
     ofstream Outfile("branch.stats.txt", ios::out);
-    for(auto KV: Data) {
+    for (auto KV : Data) {
         Outfile << KV.first << " " << KV.second << "\n";
     }
     Outfile.close();

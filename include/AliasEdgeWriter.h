@@ -36,24 +36,22 @@
 
 namespace aew {
 
-struct AliasEdgeWriter : public llvm::ModulePass{
+struct AliasEdgeWriter : public llvm::ModulePass {
     static char ID;
     std::map<std::string, uint64_t> Data;
 
-    AliasEdgeWriter()
-        : llvm::ModulePass(ID){}
+    AliasEdgeWriter() : llvm::ModulePass(ID) {}
 
-    virtual bool runOnModule(llvm::Module&) override;
+    virtual bool runOnModule(llvm::Module &) override;
     virtual bool doInitialization(llvm::Module &M) override;
     virtual bool doFinalization(llvm::Module &M) override;
 
-    void writeEdges(llvm::CallInst*, llvm::Function*);
+    void writeEdges(llvm::CallInst *, llvm::Function *);
 
     virtual void getAnalysisUsage(llvm::AnalysisUsage &AU) const override {
         AU.addRequired<llvm::AAResultsWrapperPass>();
     }
 };
-
 }
 
 #endif

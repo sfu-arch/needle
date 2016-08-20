@@ -64,8 +64,7 @@ void DFGPrinter::visitBasicBlock(BasicBlock &BB) {
                 auto id = stoi(S->getString().str());
                 nodes[V] = id;
                 return true;
-            } 
-            else {
+            } else {
                 return false;
             }
         }
@@ -74,25 +73,25 @@ void DFGPrinter::visitBasicBlock(BasicBlock &BB) {
         return false;
     };
 
-    auto escape_quotes = [](const string &before) -> string  {
+    auto escape_quotes = [](const string &before) -> string {
         string after;
         after.reserve(before.length() + 4);
 
         for (string::size_type i = 0; i < before.length(); ++i) {
             switch (before[i]) {
-                case '"':
-                case '\\':
-                    after += '\\';
-                    // Fall through.
-                default:
-                    after += before[i];
+            case '"':
+            case '\\':
+                after += '\\';
+            // Fall through.
+            default:
+                after += before[i];
             }
         }
         return after;
     };
 
     auto nodeFormat = [&escape_quotes](uint64_t id, string label, string color,
-                         string ir) -> string {
+                                       string ir) -> string {
         stringstream sstr;
         auto eir = escape_quotes(ir);
         sstr << id << " [label=\"" << label << "(" << id << ")\", opcode=\""

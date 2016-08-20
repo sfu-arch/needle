@@ -1,26 +1,26 @@
 #define DEBUG_TYPE "pasha_superblock"
 #include "Superblocks.h"
 #include "Common.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/Analysis/BasicAliasAnalysis.h"
-#include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/BasicAliasAnalysis.h"
 #include "llvm/Analysis/CFG.h"
+#include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Dominators.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/FileSystem.h"
-#include "llvm/Transforms/Utils/CodeExtractor.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Cloning.h"
+#include "llvm/Transforms/Utils/CodeExtractor.h"
 //#include <boost/algorithm/string.hpp>
 #include <fstream>
 
@@ -46,8 +46,8 @@ void Superblocks::readSequences() {
     string Line;
     for (; getline(SeqFile, Line);) {
         Path P;
-        //std::vector<std::string> Tokens;
-        //boost::split(Tokens, Line, boost::is_any_of("\t "));
+        // std::vector<std::string> Tokens;
+        // boost::split(Tokens, Line, boost::is_any_of("\t "));
         SmallVector<StringRef, 16> Tokens;
         StringRef Temp(Line);
         Temp.split(Tokens, ' ');
@@ -81,12 +81,12 @@ bool Superblocks::doInitialization(Module &M) {
     return false;
 }
 
-bool Superblocks::doFinalization(Module &M) { 
+bool Superblocks::doFinalization(Module &M) {
     ofstream OutFile("superblocks.stat.txt", ios::out);
-    for(auto KV: Data) {
+    for (auto KV : Data) {
         OutFile << KV.first << " " << KV.second << "\n";
     }
-    return false; 
+    return false;
 }
 
 void Superblocks::construct(
@@ -130,28 +130,30 @@ void Superblocks::construct(
         }
     } while (Next);
 
-    if(SBlock.size() == 1) return;
+    if (SBlock.size() == 1)
+        return;
 
     Superblocks.push_back(SBlock);
 
     uint64_t InsCount = 0, MemCount = 0;
     uint64_t ConditionCount = 0;
-    vector<BasicBlock*> LoopBlocks;
-    for(auto BB : SBlock) {
+    vector<BasicBlock *> LoopBlocks;
+    for (auto BB : SBlock) {
         LoopBlocks.push_back(BB);
         InsCount += (BB)->size();
         int32_t T = (BB)->getTerminator()->getNumSuccessors();
         ConditionCount += T - 1 > 0 ? T : 0;
-        for(auto &I : *BB) {
-            if(isa<LoadInst>(&I) || isa<StoreInst>(&I))
-                MemCount++; 
+        for (auto &I : *BB) {
+            if (isa<LoadInst>(&I) || isa<StoreInst>(&I))
+                MemCount++;
         }
     }
-    
-    Data["superblock-"+to_string((uint64_t)Begin)+"-ins"     ] = InsCount; 
-    Data["superblock-"+to_string((uint64_t)Begin)+"-bbcount" ] = LoopBlocks.size(); 
-    Data["superblock-"+to_string((uint64_t)Begin)+"-cond"    ] = ConditionCount; 
-    Data["superblock-"+to_string((uint64_t)Begin)+"-memcount"] = MemCount; 
+
+    Data["superblock-" + to_string((uint64_t)Begin) + "-ins"] = InsCount;
+    Data["superblock-" + to_string((uint64_t)Begin) + "-bbcount"] =
+        LoopBlocks.size();
+    Data["superblock-" + to_string((uint64_t)Begin) + "-cond"] = ConditionCount;
+    Data["superblock-" + to_string((uint64_t)Begin) + "-memcount"] = MemCount;
 }
 void printPathSrc(SmallVector<llvm::BasicBlock *, 8> &blocks) {
     unsigned line = 0;
@@ -174,48 +176,46 @@ void printPathSrc(SmallVector<llvm::BasicBlock *, 8> &blocks) {
             }
         }
     }
-    //errs() << "-----------------------\n";
+    // errs() << "-----------------------\n";
 }
 
-
-
 /// Compute the resource requirement of the Hyperblock which includes
-/// the entire set of blocks of the innermost loop. Hyperblocks are 
-/// constructed for loop which have been executed at least once. 
-/// This is checked by looking at the edge profile for number of times 
+/// the entire set of blocks of the innermost loop. Hyperblocks are
+/// constructed for loop which have been executed at least once.
+/// This is checked by looking at the edge profile for number of times
 /// and edge from the header to any successor is present.
-void 
-Superblocks::hyperblock(Loop* L, LoopInfo& LI) {
-    auto *Header = L->getHeader(); 
+void Superblocks::hyperblock(Loop *L, LoopInfo &LI) {
+    auto *Header = L->getHeader();
     bool Found = false;
-    for(auto SB = succ_begin(Header), SE = succ_end(Header); 
-            SB != SE; SB++) {
-        if(EdgeProfile.count({Header, *SB}))
+    for (auto SB = succ_begin(Header), SE = succ_end(Header); SB != SE; SB++) {
+        if (EdgeProfile.count({Header, *SB}))
             Found = true;
     }
 
     /// Don't do anything if this loop was never actually executed
-    if(!Found) return;
-  
+    if (!Found)
+        return;
+
     uint64_t InsCount = 0, MemCount = 0;
     uint64_t ConditionCount = 0;
-    vector<BasicBlock*> LoopBlocks;
-    for(auto BB = L->block_begin(), BE = L->block_end();
-            BB != BE; BB++) {
+    vector<BasicBlock *> LoopBlocks;
+    for (auto BB = L->block_begin(), BE = L->block_end(); BB != BE; BB++) {
         LoopBlocks.push_back(*BB);
         InsCount += (*BB)->size();
         int32_t T = (*BB)->getTerminator()->getNumSuccessors();
         ConditionCount += T - 1 > 0 ? T : 0;
-        for(auto &I : **BB) {
-            if(isa<LoadInst>(&I) || isa<StoreInst>(&I))
-                MemCount++; 
+        for (auto &I : **BB) {
+            if (isa<LoadInst>(&I) || isa<StoreInst>(&I))
+                MemCount++;
         }
     }
-    
-    Data["hyperblock-"+to_string((uint64_t)Header)+"-ins"     ] = InsCount; 
-    Data["hyperblock-"+to_string((uint64_t)Header)+"-bbcount" ] = LoopBlocks.size(); 
-    Data["hyperblock-"+to_string((uint64_t)Header)+"-cond"    ] = ConditionCount; 
-    Data["hyperblock-"+to_string((uint64_t)Header)+"-memcount"] = MemCount; 
+
+    Data["hyperblock-" + to_string((uint64_t)Header) + "-ins"] = InsCount;
+    Data["hyperblock-" + to_string((uint64_t)Header) + "-bbcount"] =
+        LoopBlocks.size();
+    Data["hyperblock-" + to_string((uint64_t)Header) + "-cond"] =
+        ConditionCount;
+    Data["hyperblock-" + to_string((uint64_t)Header) + "-memcount"] = MemCount;
 }
 
 void Superblocks::process(Function &F) {
@@ -255,7 +255,7 @@ void Superblocks::process(Function &F) {
         }
         outfile << "\n";
         DEBUG(errs() << "\n\n");
-        //errs() << Counter - 1 << "\n";
+        // errs() << Counter - 1 << "\n";
         printPathSrc(SV);
     }
 }
