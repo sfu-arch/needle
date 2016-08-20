@@ -616,7 +616,7 @@ static void valueLogging(Function *F) {
             if(True == RI->getReturnValue()) {
                 RetTrue = &BB;
             } else if (False == RI->getReturnValue()) {
-                RetTrue = &BB;
+                RetFalse = &BB;
             } else {
                 llvm_unreachable("Offload functions should "
                         "only have true or false return blocks");
@@ -662,9 +662,8 @@ static void valueLogging(Function *F) {
     auto *LiveInDumpFn = Mod->getOrInsertFunction("__log_in", 
             FunctionType::get(VoidTy, {Type::getInt8PtrTy(Ctx), Type::getInt64Ty(Ctx)}, false));
     assert(LiveInDumpFn && "Could not insert dump function");
-    CallInst::Create(LiveInDumpFn, LiveInParams, "", RetTrue->getTerminator());
-    if(RetFalse)
-        CallInst::Create(LiveInDumpFn, LiveInParams, "", RetFalse->getTerminator());
+     
+    CallInst::Create(LiveInDumpFn, LiveInParams, "")->insertAfter(LiveInStructBI); 
 
 
     /// Live out value logging 
