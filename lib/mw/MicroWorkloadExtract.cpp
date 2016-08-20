@@ -690,6 +690,17 @@ static void valueLogging(Function *F) {
     if (RetFalse)
         CallInst::Create(DumpFn, Params, "", RetFalse->getTerminator());
 
+    /// Dump a value which indicates whether the iteration was successful
+ 
+    auto *SuccDumpFn = Mod->getOrInsertFunction(
+        "__log_succ",
+        FunctionType::get(VoidTy, {Type::getInt1Ty(Ctx)}, false));
+    assert(SuccDumpFn && "Could not insert dump function");
+    CallInst::Create(SuccDumpFn, {ConstantInt::getTrue(Ctx)}, "", RetTrue->getTerminator());
+    CallInst::Create(SuccDumpFn, {ConstantInt::getFalse(Ctx)}, "", RetFalse->getTerminator());
+    
+
+
     /// Generate a C declaration for the struct being dumped
     auto getFormat = [](uint64_t Sz) -> string {
         switch(Sz) {
