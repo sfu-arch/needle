@@ -742,6 +742,11 @@ MicroWorkloadExtract::valueLogging(Function *F) {
     structDefXMacro(cast<StructType>(LiveOutStructTy), "LIVEOUT", Out);
 }
 
+/// This function records the value of each memory read from the
+/// offloaded function in Topological order. To reduce the number
+/// of values instrumented alias analysis is used to only grab the 
+/// first unique memory location. (address, value) tuples are written
+/// out to a file. 
 void
 MicroWorkloadExtract::memoryLogging(Function *F) {
     if(!EnableMemoryLogging) 
@@ -780,6 +785,7 @@ MicroWorkloadExtract::memoryLogging(Function *F) {
     for(auto &LI : Loads) {
         auto *Ptr = LI->getPointerOperand(); 
         auto *AddrCast = new PtrToIntInst(Ptr, Int64Ty);
+        // TODO : Needs testing for FP stuff
         auto *ValCast = LI->getType()->isIntegerTy() ?
             CastInst::CreateIntegerCast(LI, Int64Ty, false) :
             new FPToSIInst(LI, Int64Ty);
@@ -802,7 +808,6 @@ MicroWorkloadExtract::memoryLogging(Function *F) {
         Value *Params[] = {FalseSentinel, FalseSentinel};
         CallInst::Create(MLogFn, Params, "", RetFalse->getTerminator());
     }
-
 }
 
 static void getTopoChopHelper(
