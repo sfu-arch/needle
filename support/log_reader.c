@@ -63,7 +63,6 @@ int main(int argc, char *argv[]) {
     off_t fsz = fsize(argv[1]);
     uint64_t iters = fsz / sizeof(struct LIVEIN);
 
-    printf("LiveIn Size: %lu\n", sizeof(struct LIVEIN));
     printf("Num Iters: %lu\n", iters);
 
     struct LIVEIN *inptr = (struct LIVEIN *)malloc(sizeof(struct LIVEIN));

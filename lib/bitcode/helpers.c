@@ -5,10 +5,12 @@
 
 uint64_t __mwe_success_count = 0;
 uint64_t __mwe_fail_count = 0;
+uint64_t __mwe_addr_log_count = 0;
 
 FILE * fp_in   = 0;
 FILE * fp_out  = 0;
 FILE * fp_succ = 0;
+FILE * fp_mlog = 0;
 
 uint32_t
 __prev_store_exists(char* begin, char* loc) {
@@ -46,6 +48,7 @@ __mwe_dtor() {
    fclose(fp_in);
    fclose(fp_out);
    fclose(fp_succ);
+   fclose(fp_mlog);
 }
 
 
@@ -54,7 +57,8 @@ __mwe_ctor() {
     fp_in = fopen("livein.dump.bin", "wb");
     fp_out = fopen("liveout.dump.bin", "wb");
     fp_succ = fopen("succ.dump.bin", "wb");
-    if(!(fp_in && fp_out && fp_succ)) {
+    fp_mlog= fopen("mlog.dump.bin", "w");
+    if(!(fp_in && fp_out && fp_succ && fp_mlog)) {
         printf("MWE Ctor : Could not open file\n");
         abort();
     }
@@ -84,6 +88,11 @@ __success() {
     __mwe_success_count++;
 }
 
+void 
+__mlog(uint64_t addr, uint64_t val) {
+    fprintf(fp_mlog, "%p %lu\n", (void *)addr, val);        
+}
+
 void
 __fail() {
     /*printf("mwe-fail\n");*/
@@ -92,12 +101,12 @@ __fail() {
 
 void 
 __attribute__ ((__noinline__)) 
-    __InstruMem_load(uint64_t id, char* ptr) {
+__InstruMem_load(uint64_t id, char* ptr) {
     asm("");
 }
 
 void 
 __attribute__ ((__noinline__)) 
-    __InstruMem_store(uint64_t id, char* ptr) {
+__InstruMem_store(uint64_t id, char* ptr) {
     asm("");
 }

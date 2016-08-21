@@ -14,6 +14,7 @@
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
+#include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Dominators.h"
@@ -38,7 +39,8 @@ using namespace mwe;
 using namespace std;
 
 extern cl::list<std::string> FunctionList;
-extern cl::opt<bool> EnableLogging;
+extern cl::opt<bool> EnableValueLogging;
+extern cl::opt<bool> EnableMemoryLogging;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
 extern cl::opt<bool> SimulateDFG;
@@ -583,26 +585,13 @@ void MicroWorkloadExtract::extractHelper(
     }
 }
 
-/// Live Value logging : This should only be run on offloaded functions
-/// it makes assumptions on what things are being returned.
-/// 1. Live in logging happens immediately upon function entry
-/// 2. Live out logging happens in 2 places,
-///     a. success : actual values are dumped out
-///     b. fail : partial
-/// This approach is to ensure consistency per invocation
-static void valueLogging(Function *F) {
-    if (!EnableLogging)
-        return;
-
-    auto Mod = F->getParent();
-    auto DL = Mod->getDataLayout();
+static
+pair<BasicBlock*, BasicBlock*>
+getReturnBlocks(Function *F) {
     auto &Ctx = F->getContext();
-    auto *VoidTy = Type::getVoidTy(Ctx);
-
     BasicBlock *RetTrue = nullptr, *RetFalse = nullptr;
     ConstantInt *True = ConstantInt::getTrue(Ctx),
                 *False = ConstantInt::getFalse(Ctx);
-
     /// RetFalse will remain nullptr where the outlined function does not
     /// have any guards which are converted to conditional branches to a
     /// block which returns false.
@@ -618,7 +607,29 @@ static void valueLogging(Function *F) {
             }
         }
     }
+    return {RetTrue, RetFalse};
+}
 
+
+/// Live Value logging : This should only be run on offloaded functions
+/// it makes assumptions on what things are being returned.
+/// 1. Live in logging happens immediately upon function entry
+/// 2. Live out logging happens in 2 places,
+///     a. success : actual values are dumped out
+///     b. fail : partial
+/// This approach is to ensure consistency per invocation
+void 
+MicroWorkloadExtract::valueLogging(Function *F) {
+    if (!EnableValueLogging)
+        return;
+
+    auto Mod = F->getParent();
+    auto DL = Mod->getDataLayout();
+    auto &Ctx = F->getContext();
+    auto *VoidTy = Type::getVoidTy(Ctx);
+
+    BasicBlock *RetTrue = nullptr, *RetFalse = nullptr;
+    tie(RetTrue, RetFalse) = getReturnBlocks(F);
     /// Live in value logging
     /// First gather all the live in values into a struct
     /// a. Create a struct inside the function
@@ -696,8 +707,10 @@ static void valueLogging(Function *F) {
         "__log_succ",
         FunctionType::get(VoidTy, {Type::getInt1Ty(Ctx)}, false));
     assert(SuccDumpFn && "Could not insert dump function");
-    CallInst::Create(SuccDumpFn, {ConstantInt::getTrue(Ctx)}, "", RetTrue->getTerminator());
-    CallInst::Create(SuccDumpFn, {ConstantInt::getFalse(Ctx)}, "", RetFalse->getTerminator());
+    CallInst::Create(SuccDumpFn, {ConstantInt::getTrue(Ctx)}, 
+            "", RetTrue->getTerminator());
+    CallInst::Create(SuccDumpFn, {ConstantInt::getFalse(Ctx)}, 
+            "", RetFalse->getTerminator());
     
 
 
@@ -729,6 +742,69 @@ static void valueLogging(Function *F) {
     structDefXMacro(cast<StructType>(LiveOutStructTy), "LIVEOUT", Out);
 }
 
+void
+MicroWorkloadExtract::memoryLogging(Function *F) {
+    if(!EnableMemoryLogging) 
+        return;
+
+    SetVector<LoadInst *> Loads;
+    auto &AA = getAnalysis<AAResultsWrapperPass>(*F).getAAResults();
+    auto isAliasingLoad = [&AA, &Loads](LoadInst *LI) -> bool {
+        for (auto &L : Loads) {
+            if (AA.isMustAlias(MemoryLocation::get(LI), MemoryLocation::get(L)))
+                return true;
+        }
+        return false;
+    };
+
+    ReversePostOrderTraversal<Function *> RPOT(F);
+    for (auto BB = RPOT.begin(); BB != RPOT.end(); ++BB) {
+        for (auto &I : **BB) {
+            if (auto *LI = dyn_cast<LoadInst>(&I)) {
+                if(!isAliasingLoad(LI)) {
+                    Loads.insert(LI);
+                }
+            }
+        }
+    }
+
+    /// Add the instrumentation for each non-aliasing load 
+    auto *Mod = F->getParent();
+    auto &Ctx = Mod->getContext();
+    auto *VoidTy = Type::getVoidTy(Ctx);
+    auto *Int64Ty = Type::getInt64Ty(Ctx);
+    auto *MLogFn = Mod->getOrInsertFunction(
+        "__mlog",
+        FunctionType::get(VoidTy, {Int64Ty, Int64Ty}, false));
+
+    for(auto &LI : Loads) {
+        auto *Ptr = LI->getPointerOperand(); 
+        auto *AddrCast = new PtrToIntInst(Ptr, Int64Ty);
+        auto *ValCast = LI->getType()->isIntegerTy() ?
+            CastInst::CreateIntegerCast(LI, Int64Ty, false) :
+            new FPToSIInst(LI, Int64Ty);
+        Value *Params[] = {AddrCast, ValCast};         
+        AddrCast->insertAfter(LI);
+        ValCast->insertAfter(AddrCast);
+        CallInst::Create(MLogFn, Params)->insertAfter(ValCast);
+    }
+
+    /// Add final instrumentation to indicate end of iteration
+    /// with success or fail
+     
+    BasicBlock *RetTrue = nullptr, *RetFalse = nullptr;
+    tie(RetTrue, RetFalse) = getReturnBlocks(F);
+    auto *TrueSentinel = ConstantInt::get(Int64Ty, 0xFFFFFFFF, false);
+    auto *FalseSentinel = ConstantInt::get(Int64Ty, 0x0, false);
+    Value *Params[] = {TrueSentinel, TrueSentinel};
+    CallInst::Create(MLogFn, Params, "", RetTrue->getTerminator());
+    if(RetFalse) {
+        Value *Params[] = {FalseSentinel, FalseSentinel};
+        CallInst::Create(MLogFn, Params, "", RetFalse->getTerminator());
+    }
+
+}
+
 static void getTopoChopHelper(
     BasicBlock *BB, DenseSet<BasicBlock *> &Chop, DenseSet<BasicBlock *> &Seen,
     SetVector<BasicBlock *> &Order,
@@ -742,6 +818,7 @@ static void getTopoChopHelper(
     Order.insert(BB);
 }
 
+/// TODO : Rewrite this to use FunctionRPOT instead
 SetVector<BasicBlock *>
 getTopoChop(DenseSet<BasicBlock *> &Chop, BasicBlock *StartBB,
             DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
@@ -1205,7 +1282,7 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     // Success Path - End
     //
 
-    if (EnableLogging) {
+    if (EnableValueLogging || EnableMemoryLogging) {
         auto *MweDtor = Mod->getOrInsertFunction("__mwe_dtor", VoidTy, nullptr);
         appendToGlobalDtors(*Mod, llvm::cast<Function>(MweDtor), 0);
 
@@ -1359,6 +1436,7 @@ void MicroWorkloadExtract::process(Function &F) {
     Data["phi-simplified"] = PhiBefore - PhiAfter;
 
     valueLogging(Offload);
+    memoryLogging(Offload);
 
     // common::printCFG(F);
     common::writeModule(Mod, (Id) + string(".ll"));

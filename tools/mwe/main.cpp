@@ -108,9 +108,13 @@ cl::opt<bool> DumpStats("dump-stats", cl::desc("Pasha stats"),
 cl::opt<bool> AAEdges("aa-edges", cl::desc("Generate edges to enforce AA"),
                       cl::value_desc("boolean"), cl::init(false));
 
-cl::opt<bool> EnableLogging("log",
-                            cl::desc("Enable value logging (In/Out/Memory)"),
-                            cl::value_desc("boolead"), cl::init(false));
+cl::opt<bool> EnableValueLogging("log",
+                            cl::desc("Enable value logging (In/Out)"),
+                            cl::value_desc("boolean"), cl::init(false));
+
+cl::opt<bool> EnableMemoryLogging("mlog",
+                    cl::desc("Enable memory logging"),
+                    cl::value_desc("boolean"), cl::init(false));
 
 bool isTargetFunction(const Function &f,
                       const cl::list<std::string> &FunctionList) {
