@@ -796,7 +796,7 @@ MicroWorkloadExtract::memoryLogging(Function *F) {
     tie(RetTrue, RetFalse) = getReturnBlocks(F);
     auto *TrueSentinel = ConstantInt::get(Int64Ty, 0xFFFFFFFF, false);
     auto *FalseSentinel = ConstantInt::get(Int64Ty, 0x0, false);
-    Value *Params[] = {TrueSentinel, TrueSentinel};
+    Value *Params[] = {TrueSentinel, FalseSentinel};
     CallInst::Create(MLogFn, Params, "", RetTrue->getTerminator());
     if(RetFalse) {
         Value *Params[] = {FalseSentinel, FalseSentinel};

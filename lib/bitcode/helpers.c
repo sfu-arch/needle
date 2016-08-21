@@ -57,7 +57,7 @@ __mwe_ctor() {
     fp_in = fopen("livein.dump.bin", "wb");
     fp_out = fopen("liveout.dump.bin", "wb");
     fp_succ = fopen("succ.dump.bin", "wb");
-    fp_mlog= fopen("mlog.dump.bin", "w");
+    fp_mlog= fopen("mlog.dump.txt", "w");
     if(!(fp_in && fp_out && fp_succ && fp_mlog)) {
         printf("MWE Ctor : Could not open file\n");
         abort();
