@@ -122,7 +122,7 @@ void compile(Module &m, string outputPath, char optLevel) {
     { // Bound this scope
         // formatted_raw_ostream fos(out->os());
         raw_pwrite_stream *OS = &Out->os();
-        FileType = TargetMachine::CGFT_ObjectFile;
+        FileType              = TargetMachine::CGFT_ObjectFile;
         // Ask the target to add backend passes as necessary.
         if (machine->addPassesToEmitFile(pm, *OS, FileType)) {
             report_fatal_error("target does not support generation "
@@ -229,9 +229,9 @@ void runBranchTaxonomyPass(Function &F) {
 }
 void optimizeModule(Module *Mod) {
     PassManagerBuilder PMB;
-    PMB.OptLevel = 2;
+    PMB.OptLevel     = 2;
     PMB.SLPVectorize = false;
-    PMB.BBVectorize = false;
+    PMB.BBVectorize  = false;
     legacy::PassManager PM;
     PMB.populateModulePassManager(PM);
     PM.run(*Mod);
@@ -276,7 +276,7 @@ void breakCritEdges(Module &M, StringRef FunctionName) {
 }
 
 bool checkIntrinsic(CallSite &CS) {
-    auto *F = CS.getCalledFunction();
+    auto *F   = CS.getCalledFunction();
     auto Name = F->getName();
     if (Name.startswith("llvm.memcpy") || Name.startswith("llvm.memmove") ||
         Name.startswith("llvm.memset")) {

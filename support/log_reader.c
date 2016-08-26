@@ -1,10 +1,10 @@
 #include <assert.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <stdbool.h>
 
 /** ANSI Terminal Colors **/
 #define RED "\x1b[31m"
@@ -16,7 +16,7 @@
 #define RESET "\x1b[0m"
 
 /** Compile : $ gcc -Wno-format -I<path/to/LogTypes.def> log_reader.c -o reader
- ** Usage : $ ./reader livein.dump.bin liveout.dump.bin succ.dump.bin | less -r  
+ ** Usage : $ ./reader livein.dump.bin liveout.dump.bin succ.dump.bin | less -r
  **/
 
 /**
@@ -30,7 +30,7 @@
  **/
 
 #ifdef __clang__
-#error "clang doesn't packed attributes for structs, use gcc"
+#error "clang doesn't like packed attributes for structs, use gcc"
 #endif
 
 #include "LogTypes.def"
@@ -55,38 +55,38 @@ off_t fsize(const char *filename) {
 }
 
 int main(int argc, char *argv[]) {
-    FILE *infp = fopen(argv[1], "rb");
-    FILE *outfp = fopen(argv[2], "rb");
+    FILE *infp   = fopen(argv[1], "rb");
+    FILE *outfp  = fopen(argv[2], "rb");
     FILE *succfp = fopen(argv[3], "rb");
     assert(infp && outfp && succfp && "Could not open files");
 
-    off_t fsz = fsize(argv[1]);
+    off_t fsz      = fsize(argv[1]);
     uint64_t iters = fsz / sizeof(struct LIVEIN);
 
     printf("Num Iters: %lu\n", iters);
 
-    struct LIVEIN *inptr = (struct LIVEIN *)malloc(sizeof(struct LIVEIN));
+    struct LIVEIN *inptr   = (struct LIVEIN *)malloc(sizeof(struct LIVEIN));
     struct LIVEOUT *outptr = (struct LIVEOUT *)malloc(sizeof(struct LIVEOUT));
-    bool *succptr = (bool *)malloc(sizeof(bool));
+    bool *succptr          = (bool *)malloc(sizeof(bool));
 
     printf("------\n");
     for (uint64_t c = 0; iters > 0; c++, iters--) {
         fread((void *)inptr, sizeof(struct LIVEIN), 1, infp);
         fread((void *)outptr, sizeof(struct LIVEOUT), 1, outfp);
         fread((void *)succptr, sizeof(bool), 1, succfp);
-        if(*succptr) {
+        if (*succptr) {
             printf(GREEN "SUCCESS " CYAN "#%lu\n" RESET, c);
         } else {
             printf(RED "FAIL " CYAN "#%lu\n" RESET, c);
         }
-        #define X(type, name, format) \
-            printf(YELLOW "> " RESET #name " " format "\n", inptr->name);
-                X_FIELDS_LIVEIN
-        #undef X
-        #define X(type, name, format) \
-            printf(BLUE "< " RESET #name " " format "\n", outptr->name);
-                X_FIELDS_LIVEOUT
-        #undef X
+#define X(type, name, format)                                                  \
+    printf(YELLOW "> " RESET #name " " format "\n", inptr->name);
+        X_FIELDS_LIVEIN
+#undef X
+#define X(type, name, format)                                                  \
+    printf(BLUE "< " RESET #name " " format "\n", outptr->name);
+        X_FIELDS_LIVEOUT
+#undef X
         printf("------\n");
     }
 

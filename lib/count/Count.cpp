@@ -24,7 +24,7 @@ struct Count : public ModulePass {
     Count() : ModulePass(ID) {}
 
     map<unsigned, unsigned long long> CountMap;
-    uint64_t Counter = 0;
+    uint64_t Counter   = 0;
     uint64_t BBCounter = 0;
 
     set<pair<Value *, Value *>> EdgeMap;
@@ -32,10 +32,10 @@ struct Count : public ModulePass {
     bool doInitialization(Module &M) {
         // assert(FunctionList.size() == 1 &&
         //"Can only patch one function at a time");
-        CountMap[Instruction::Add] = 0;
-        CountMap[Instruction::FAdd] = 0;
+        CountMap[Instruction::Add]           = 0;
+        CountMap[Instruction::FAdd]          = 0;
         CountMap[Instruction::GetElementPtr] = 0;
-        CountMap[Instruction::Load] = 0;
+        CountMap[Instruction::Load]          = 0;
         return false;
     }
 

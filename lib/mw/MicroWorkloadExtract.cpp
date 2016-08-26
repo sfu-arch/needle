@@ -14,10 +14,10 @@
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
-#include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Dominators.h"
+#include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
@@ -62,7 +62,7 @@ void MicroWorkloadExtract::readSequences() {
 
         P.Id = Tokens[0];
 
-        P.Freq = stoull(Tokens[1]);
+        P.Freq  = stoull(Tokens[1]);
         P.PType = static_cast<PathType>(stoi(Tokens[2]));
 
         // Token[3] is the number of instructions in path.
@@ -245,7 +245,7 @@ void MicroWorkloadExtract::extractHelper(
 
     for (auto IT = RevTopoChop.rbegin(), IE = RevTopoChop.rend(); IT != IE;
          IT++) {
-        auto C = *IT;
+        auto C      = *IT;
         auto *NewBB = BasicBlock::Create(
             Context, StringRef("my_") + C->getName(), StaticFunc, nullptr);
         assert(VMap.count(C) == 0 && "Need new values");
@@ -267,7 +267,7 @@ void MicroWorkloadExtract::extractHelper(
     // Assign names, if you don't have a name,
     // a name will be assigned to you.
     Function::arg_iterator AI = StaticFunc->arg_begin();
-    uint32_t VReg = 0;
+    uint32_t VReg             = 0;
     for (auto Val : LiveIn) {
         auto Name = Val->getName();
         if (Name.empty())
@@ -286,7 +286,7 @@ void MicroWorkloadExtract::extractHelper(
     auto rewriteUses = [&VMap, &RevTopoChop, &StaticFunc](Value *Val,
                                                           Value *RewriteVal) {
         std::vector<User *> Users(Val->user_begin(), Val->user_end());
-        for (std::vector<User *>::iterator use = Users.begin(),
+        for (std::vector<User *>::iterator use  = Users.begin(),
                                            useE = Users.end();
              use != useE; ++use) {
             if (Instruction *inst = dyn_cast<Instruction>(*use)) {
@@ -328,7 +328,7 @@ void MicroWorkloadExtract::extractHelper(
             if (find(LiveIn.begin(), LiveIn.end(), &I) != LiveIn.end())
                 continue;
             std::vector<User *> Users(I.user_begin(), I.user_end());
-            for (std::vector<User *>::iterator use = Users.begin(),
+            for (std::vector<User *>::iterator use  = Users.begin(),
                                                useE = Users.end();
                  use != useE; ++use) {
                 if (Instruction *inst = dyn_cast<Instruction>(*use)) {
@@ -385,7 +385,7 @@ void MicroWorkloadExtract::extractHelper(
         for (auto U = CE->user_begin(), UE = CE->user_end(); U != UE; U++) {
             if (auto UCE = dyn_cast<ConstantExpr>(*U)) {
                 assert(VMap.count(CE) && "Mapping for ConstantExpr");
-                auto NCE = handleCExpr(UCE, CE, VMap[CE]);
+                auto NCE  = handleCExpr(UCE, CE, VMap[CE]);
                 VMap[UCE] = NCE;
                 UpdateCExpr.push_back(UCE);
                 AllCExpr.push_back(UCE);
@@ -412,12 +412,12 @@ void MicroWorkloadExtract::extractHelper(
     // Patch branches
     auto insertGuardCall = [&GuardFunc, &Context](BranchInst *CBR,
                                                   bool FreqCondition) {
-        auto *Blk = CBR->getParent();
+        auto *Blk  = CBR->getParent();
         Value *Arg = CBR->getCondition();
         Value *Dom = FreqCondition ? ConstantInt::getTrue(Context)
                                    : ConstantInt::getFalse(Context);
         vector<Value *> Params = {Arg, Dom};
-        auto CI = CallInst::Create(GuardFunc, Params, "", Blk);
+        auto CI                = CallInst::Create(GuardFunc, Params, "", Blk);
         // Add a ReadNone+NoInline attribute to the CallSite, which
         // will hopefully help the optimizer.
         CI->setDoesNotAccessMemory();
@@ -427,7 +427,7 @@ void MicroWorkloadExtract::extractHelper(
     for (auto IT = next(RevTopoChop.begin()), IE = RevTopoChop.end(); IT != IE;
          IT++) {
         auto *NewBB = cast<BasicBlock>(VMap[*IT]);
-        auto T = NewBB->getTerminator();
+        auto T      = NewBB->getTerminator();
 
         assert(!isa<IndirectBrInst>(T) && "Not handled");
         assert(!isa<InvokeInst>(T) && "Not handled");
@@ -572,25 +572,23 @@ void MicroWorkloadExtract::extractHelper(
         // errs() << "LO : " << *L << "\n";
         assert(LO && "Live Out not remapped");
         auto *Block = cast<Instruction>(LO)->getParent();
-        Idx[1] = ConstantInt::get(Type::getInt32Ty(Context), OutIndex);
+        Idx[1]      = ConstantInt::get(Type::getInt32Ty(Context), OutIndex);
         // cast<PointerType>(Ptr->getType()->getScalarType())->getElementType()
         GetElementPtrInst *StructGEP = GetElementPtrInst::Create(
             cast<PointerType>(StructPtr->getType())->getElementType(),
             &*StructPtr, Idx, "", Block->getTerminator());
 
-        auto *SI = new StoreInst(LO, StructGEP, Block->getTerminator());
+        auto *SI  = new StoreInst(LO, StructGEP, Block->getTerminator());
         MDNode *N = MDNode::get(Context, MDString::get(Context, "true"));
         SI->setMetadata("LO", N);
         OutIndex++;
     }
 }
 
-static
-pair<BasicBlock*, BasicBlock*>
-getReturnBlocks(Function *F) {
-    auto &Ctx = F->getContext();
+static pair<BasicBlock *, BasicBlock *> getReturnBlocks(Function *F) {
+    auto &Ctx           = F->getContext();
     BasicBlock *RetTrue = nullptr, *RetFalse = nullptr;
-    ConstantInt *True = ConstantInt::getTrue(Ctx),
+    ConstantInt *True  = ConstantInt::getTrue(Ctx),
                 *False = ConstantInt::getFalse(Ctx);
     /// RetFalse will remain nullptr where the outlined function does not
     /// have any guards which are converted to conditional branches to a
@@ -610,7 +608,6 @@ getReturnBlocks(Function *F) {
     return {RetTrue, RetFalse};
 }
 
-
 /// Live Value logging : This should only be run on offloaded functions
 /// it makes assumptions on what things are being returned.
 /// 1. Live in logging happens immediately upon function entry
@@ -618,18 +615,17 @@ getReturnBlocks(Function *F) {
 ///     a. success : actual values are dumped out
 ///     b. fail : partial
 /// This approach is to ensure consistency per invocation
-void 
-MicroWorkloadExtract::valueLogging(Function *F) {
+void MicroWorkloadExtract::valueLogging(Function *F) {
     if (!EnableValueLogging)
         return;
 
-    auto Mod = F->getParent();
-    auto DL = Mod->getDataLayout();
-    auto &Ctx = F->getContext();
+    auto Mod     = F->getParent();
+    auto DL      = Mod->getDataLayout();
+    auto &Ctx    = F->getContext();
     auto *VoidTy = Type::getVoidTy(Ctx);
 
     BasicBlock *RetTrue = nullptr, *RetFalse = nullptr;
-    tie(RetTrue, RetFalse) = getReturnBlocks(F);
+    tie(RetTrue, RetFalse)                   = getReturnBlocks(F);
     /// Live in value logging
     /// First gather all the live in values into a struct
     /// a. Create a struct inside the function
@@ -639,19 +635,19 @@ MicroWorkloadExtract::valueLogging(Function *F) {
         LiveInArgs.insert(&*AB);
     }
     auto *StructTy = getStructType(LiveInArgs, Mod);
-    auto *LIS = new AllocaInst(StructTy, "", &*InsertionPt);
+    auto *LIS      = new AllocaInst(StructTy, "", &*InsertionPt);
 
     /// b. Stick the live in values into this struct
     int32_t Index = 0;
     Value *Idx[2];
-    Idx[0] = Constant::getNullValue(Type::getInt32Ty(Ctx));
+    Idx[0]        = Constant::getNullValue(Type::getInt32Ty(Ctx));
     StoreInst *SI = nullptr;
     for (auto &L : LiveInArgs) {
         Idx[1] = ConstantInt::get(Type::getInt32Ty(Ctx), Index);
         GetElementPtrInst *StructGEP = GetElementPtrInst::Create(
             cast<PointerType>(LIS->getType())->getElementType(), &*LIS, Idx,
             "");
-        if(!SI) {
+        if (!SI) {
             StructGEP->insertAfter(LIS);
         } else {
             StructGEP->insertAfter(SI);
@@ -667,9 +663,9 @@ MicroWorkloadExtract::valueLogging(Function *F) {
     LiveInStructBI->insertAfter(SI);
     uint64_t LiveInSize = DL.getTypeStoreSize(
         cast<PointerType>(LIS->getType())->getElementType());
-    auto *LiveInSz = ConstantInt::get(Type::getInt64Ty(Ctx), LiveInSize);
+    auto *LiveInSz        = ConstantInt::get(Type::getInt64Ty(Ctx), LiveInSize);
     Value *LiveInParams[] = {LiveInStructBI, LiveInSz};
-    auto *LiveInDumpFn = Mod->getOrInsertFunction(
+    auto *LiveInDumpFn    = Mod->getOrInsertFunction(
         "__log_in",
         FunctionType::get(
             VoidTy, {Type::getInt8PtrTy(Ctx), Type::getInt64Ty(Ctx)}, false));
@@ -685,14 +681,14 @@ MicroWorkloadExtract::valueLogging(Function *F) {
     auto LiveOutStructPtr = --F->arg_end();
     auto *LiveOutStructTy =
         cast<PointerType>(LiveOutStructPtr->getType())->getElementType();
-    uint64_t Size = DL.getTypeStoreSize(LiveOutStructTy);
+    uint64_t Size         = DL.getTypeStoreSize(LiveOutStructTy);
     auto *LiveOutStructBI = new BitCastInst(
         &*LiveOutStructPtr, PointerType::getInt8PtrTy(Ctx), "dump_cast",
         &*F->getEntryBlock().getFirstInsertionPt());
     auto *Sz = ConstantInt::get(Type::getInt64Ty(Ctx), Size);
 
     Value *Params[] = {LiveOutStructBI, Sz};
-    auto *DumpFn = Mod->getOrInsertFunction(
+    auto *DumpFn    = Mod->getOrInsertFunction(
         "__log_out",
         FunctionType::get(
             VoidTy, {Type::getInt8PtrTy(Ctx), Type::getInt64Ty(Ctx)}, false));
@@ -702,31 +698,30 @@ MicroWorkloadExtract::valueLogging(Function *F) {
         CallInst::Create(DumpFn, Params, "", RetFalse->getTerminator());
 
     /// Dump a value which indicates whether the iteration was successful
- 
-    auto *SuccDumpFn = Mod->getOrInsertFunction(
-        "__log_succ",
-        FunctionType::get(VoidTy, {Type::getInt1Ty(Ctx)}, false));
-    assert(SuccDumpFn && "Could not insert dump function");
-    CallInst::Create(SuccDumpFn, {ConstantInt::getTrue(Ctx)}, 
-            "", RetTrue->getTerminator());
-    CallInst::Create(SuccDumpFn, {ConstantInt::getFalse(Ctx)}, 
-            "", RetFalse->getTerminator());
-    
 
+    auto *SuccDumpFn = Mod->getOrInsertFunction(
+        "__log_succ", FunctionType::get(VoidTy, {Type::getInt1Ty(Ctx)}, false));
+    assert(SuccDumpFn && "Could not insert dump function");
+    CallInst::Create(SuccDumpFn, {ConstantInt::getTrue(Ctx)}, "",
+                     RetTrue->getTerminator());
+    CallInst::Create(SuccDumpFn, {ConstantInt::getFalse(Ctx)}, "",
+                     RetFalse->getTerminator());
 
     /// Generate a C declaration for the struct being dumped
     auto getFormat = [](uint64_t Sz) -> string {
-        switch(Sz) {
-            case 64 : return string("\"%llu\"");
-            default: return string("\"%lu\"");
+        switch (Sz) {
+        case 64:
+            return string("\"%llu\"");
+        default:
+            return string("\"%lu\"");
         }
     };
     auto structDefXMacro = [&DL, &getFormat](StructType *ST, StringRef Name,
-                                raw_ostream &Out) {
+                                             raw_ostream &Out) {
         stringstream Def;
         Def << ("\n\n#define X_FIELDS_" + Name.str() + " \\\n");
         for (uint32_t I = 0; I < ST->getNumElements(); I++) {
-            if(I != 0)
+            if (I != 0)
                 Def << " \\\n";
             auto Sz = DL.getTypeStoreSizeInBits(ST->getElementType(I));
             // TODO : Signed vs Unsigned ?
@@ -740,20 +735,20 @@ MicroWorkloadExtract::valueLogging(Function *F) {
     raw_fd_ostream Out("LogTypes.def", EC, sys::fs::F_None);
     structDefXMacro(StructTy, "LIVEIN", Out);
     structDefXMacro(cast<StructType>(LiveOutStructTy), "LIVEOUT", Out);
+    Out.close();
 }
 
 /// This function records the value of each memory read from the
 /// offloaded function in Topological order. To reduce the number
-/// of values instrumented alias analysis is used to only grab the 
+/// of values instrumented alias analysis is used to only grab the
 /// first unique memory location. (address, value) tuples are written
-/// out to a file. 
-void
-MicroWorkloadExtract::memoryLogging(Function *F) {
-    if(!EnableMemoryLogging) 
+/// out to a file.
+void MicroWorkloadExtract::memoryLogging(Function *F) {
+    if (!EnableMemoryLogging)
         return;
 
     SetVector<LoadInst *> Loads;
-    auto &AA = getAnalysis<AAResultsWrapperPass>(*F).getAAResults();
+    auto &AA            = getAnalysis<AAResultsWrapperPass>(*F).getAAResults();
     auto isAliasingLoad = [&AA, &Loads](LoadInst *LI) -> bool {
         for (auto &L : Loads) {
             if (AA.isMustAlias(MemoryLocation::get(LI), MemoryLocation::get(L)))
@@ -766,30 +761,29 @@ MicroWorkloadExtract::memoryLogging(Function *F) {
     for (auto BB = RPOT.begin(); BB != RPOT.end(); ++BB) {
         for (auto &I : **BB) {
             if (auto *LI = dyn_cast<LoadInst>(&I)) {
-                if(!isAliasingLoad(LI)) {
+                if (!isAliasingLoad(LI)) {
                     Loads.insert(LI);
                 }
             }
         }
     }
 
-    /// Add the instrumentation for each non-aliasing load 
-    auto *Mod = F->getParent();
-    auto &Ctx = Mod->getContext();
-    auto *VoidTy = Type::getVoidTy(Ctx);
+    /// Add the instrumentation for each non-aliasing load
+    auto *Mod     = F->getParent();
+    auto &Ctx     = Mod->getContext();
+    auto *VoidTy  = Type::getVoidTy(Ctx);
     auto *Int64Ty = Type::getInt64Ty(Ctx);
-    auto *MLogFn = Mod->getOrInsertFunction(
-        "__mlog",
-        FunctionType::get(VoidTy, {Int64Ty, Int64Ty}, false));
+    auto *MLogFn  = Mod->getOrInsertFunction(
+        "__mlog", FunctionType::get(VoidTy, {Int64Ty, Int64Ty}, false));
 
-    for(auto &LI : Loads) {
-        auto *Ptr = LI->getPointerOperand(); 
+    for (auto &LI : Loads) {
+        auto *Ptr      = LI->getPointerOperand();
         auto *AddrCast = new PtrToIntInst(Ptr, Int64Ty);
         // TODO : Needs testing for FP stuff
-        auto *ValCast = LI->getType()->isIntegerTy() ?
-            CastInst::CreateIntegerCast(LI, Int64Ty, false) :
-            new FPToSIInst(LI, Int64Ty);
-        Value *Params[] = {AddrCast, ValCast};         
+        auto *ValCast = LI->getType()->isIntegerTy()
+                            ? CastInst::CreateIntegerCast(LI, Int64Ty, false)
+                            : new FPToSIInst(LI, Int64Ty);
+        Value *Params[] = {AddrCast, ValCast};
         AddrCast->insertAfter(LI);
         ValCast->insertAfter(AddrCast);
         CallInst::Create(MLogFn, Params)->insertAfter(ValCast);
@@ -797,14 +791,14 @@ MicroWorkloadExtract::memoryLogging(Function *F) {
 
     /// Add final instrumentation to indicate end of iteration
     /// with success or fail
-     
+
     BasicBlock *RetTrue = nullptr, *RetFalse = nullptr;
-    tie(RetTrue, RetFalse) = getReturnBlocks(F);
-    auto *TrueSentinel = ConstantInt::get(Int64Ty, 0xFFFFFFFF, false);
+    tie(RetTrue, RetFalse)                   = getReturnBlocks(F);
+    auto *TrueSentinel  = ConstantInt::get(Int64Ty, 0xFFFFFFFF, false);
     auto *FalseSentinel = ConstantInt::get(Int64Ty, 0x0, false);
-    Value *Params[] = {TrueSentinel, FalseSentinel};
+    Value *Params[]     = {TrueSentinel, FalseSentinel};
     CallInst::Create(MLogFn, Params, "", RetTrue->getTerminator());
-    if(RetFalse) {
+    if (RetFalse) {
         Value *Params[] = {FalseSentinel, FalseSentinel};
         CallInst::Create(MLogFn, Params, "", RetFalse->getTerminator());
     }
@@ -862,9 +856,9 @@ Function *MicroWorkloadExtract::extract(
     LoopInfo *LI, string Id) {
 
     auto *StartBB = RevTopoChop.back();
-    auto *LastBB = RevTopoChop.front();
+    auto *LastBB  = RevTopoChop.front();
 
-    auto BackEdges = common::getBackEdges(StartBB);
+    auto BackEdges         = common::getBackEdges(StartBB);
     auto ReachableFromLast = fSliceDFS(LastBB, BackEdges);
 
     assert(verifyChop(RevTopoChop) && "Invalid Region!");
@@ -1019,11 +1013,11 @@ Function *MicroWorkloadExtract::extract(
     // for (auto *V : LiveOut) {
     //     errs() << *V << "\n";
     // }
-    Data["num-live-in"] = LiveIn.size();
+    Data["num-live-in"]  = LiveIn.size();
     Data["num-live-out"] = LiveOut.size();
-    Data["num-globals"] = Globals.size();
+    Data["num-globals"]  = Globals.size();
 
-    auto DataLayoutStr = Mod->getDataLayout();
+    auto DataLayoutStr   = Mod->getDataLayout();
     auto TargetTripleStr = StartBB->getParent()->getParent()->getTargetTriple();
     Mod->setDataLayout(DataLayoutStr);
     Mod->setTargetTriple(TargetTripleStr);
@@ -1047,7 +1041,7 @@ Function *MicroWorkloadExtract::extract(
         }
     }
 
-    auto *StructTy = getStructType(LiveOut, Mod);
+    auto *StructTy    = getStructType(LiveOut, Mod);
     auto *StructPtrTy = PointerType::getUnqual(StructTy);
     ParamTy.push_back(StructPtrTy);
 
@@ -1064,7 +1058,7 @@ Function *MicroWorkloadExtract::extract(
     // we use this as placeholder to create a superblock and enable
     // optimizations.
     ParamTy.clear();
-    ParamTy = {Int1Ty, Int1Ty};
+    ParamTy                  = {Int1Ty, Int1Ty};
     FunctionType *GuFuncType = FunctionType::get(VoidTy, ParamTy, false);
 
     // Create the guard function
@@ -1085,11 +1079,11 @@ Function *MicroWorkloadExtract::extract(
 
 static SetVector<BasicBlock *>
 getSliceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
-    auto *StartBB = BlockMap[P.Seq.front()];
-    auto *LastBB = BlockMap[P.Seq.back()];
+    auto *StartBB  = BlockMap[P.Seq.front()];
+    auto *LastBB   = BlockMap[P.Seq.back()];
     auto BackEdges = common::getBackEdges(StartBB);
 
-    auto Chop = getSliceChop(StartBB, LastBB, BackEdges);
+    auto Chop        = getSliceChop(StartBB, LastBB, BackEdges);
     auto RevTopoChop = getTopoChop(Chop, StartBB, BackEdges);
 
     return RevTopoChop;
@@ -1119,29 +1113,25 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
 
     // Setup Basic Control Flow
     BasicBlock *StartBB = Blocks.back(), *LastBB = Blocks.front();
-    auto BackEdges = common::getBackEdges(StartBB);
+    auto BackEdges         = common::getBackEdges(StartBB);
     auto ReachableFromLast = fSliceDFS(LastBB, BackEdges);
-    auto &Ctx = F.getContext();
-    auto *Mod = F.getParent();
-    auto *Int64Ty = Type::getInt64Ty(Ctx);
-    auto *Int32Ty = Type::getInt32Ty(Ctx);
-    auto *VoidTy = Type::getVoidTy(Ctx);
-    auto *Success = BasicBlock::Create(Ctx, "offload.true", &F);
+    auto &Ctx              = F.getContext();
+    auto *Mod              = F.getParent();
+    auto *Int64Ty          = Type::getInt64Ty(Ctx);
+    auto *Int32Ty          = Type::getInt32Ty(Ctx);
+    auto *VoidTy           = Type::getVoidTy(Ctx);
+    auto *Success          = BasicBlock::Create(Ctx, "offload.true", &F);
 
-    CallInst::Create(Mod->getOrInsertFunction(
-                         "__success", FunctionType::get(VoidTy, {}, false)),
-                     {}, "", Success);
-#ifdef PASHA_DEBUG
-    if (SimulateDFG)
+    if (EnableValueLogging || EnableMemoryLogging) {
         CallInst::Create(Mod->getOrInsertFunction(
                              "__success", FunctionType::get(VoidTy, {}, false)),
                          {}, "", Success);
-#endif
+    }
 
-    auto *Fail = BasicBlock::Create(Ctx, "offload.false", &F);
-    auto *Merge = BasicBlock::Create(Ctx, "mergeblock", &F, nullptr);
+    auto *Fail        = BasicBlock::Create(Ctx, "offload.false", &F);
+    auto *Merge       = BasicBlock::Create(Ctx, "mergeblock", &F, nullptr);
     ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
-    auto *Offload = cast<Function>(
+    auto *Offload     = cast<Function>(
         Mod->getOrInsertFunction("__offload_func_" + Id, OffloadTy));
 
     // Split the start basic block so that we can insert a call to the offloaded
@@ -1153,8 +1143,8 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     // Add a struct to the function entry block in order to
     // capture the live outs.
     auto InsertionPt = F.getEntryBlock().getFirstInsertionPt();
-    auto *StructTy = getStructType(LiveOut, Mod);
-    auto *LOS = new AllocaInst(StructTy, "", &*InsertionPt);
+    auto *StructTy   = getStructType(LiveOut, Mod);
+    auto *LOS        = new AllocaInst(StructTy, "", &*InsertionPt);
     GetElementPtrInst *StPtr =
         GetElementPtrInst::CreateInBounds(LOS, {Zero}, "", &*InsertionPt);
 
@@ -1189,32 +1179,32 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     BranchInst::Create(Merge, LastBB);
 
     // Fail Path -- Begin
-    ArrayType *LogArrTy = ArrayType::get(IntegerType::get(Ctx, 8), 0);
+    ArrayType *LogArrTy   = ArrayType::get(IntegerType::get(Ctx, 8), 0);
+    ArrayType *SizesArrTy = ArrayType::get(IntegerType::get(Ctx, 32), 0);
     // FIXME : These need to become internal to each new module
-    auto *ULog = Mod->getOrInsertGlobal("__undo_log_" + Id, LogArrTy);
+    auto *ULog     = Mod->getOrInsertGlobal("__undo_log_" + Id, LogArrTy);
+    auto *USizes   = Mod->getOrInsertGlobal("__undo_sizes_" + Id, SizesArrTy);
     auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores_" + Id,
                                             IntegerType::getInt32Ty(Ctx));
-    Type *ParamTy[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx)};
+    Type *ParamTy[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx),
+                       Type::getInt32PtrTy(Ctx)};
     auto *UndoTy = FunctionType::get(Type::getVoidTy(Ctx), ParamTy, false);
-    auto *Undo = Mod->getOrInsertFunction("__undo_mem", UndoTy);
+    auto *Undo   = Mod->getOrInsertFunction("__undo_mem", UndoTy);
 
     vector<Value *> Idx = {Zero, Zero};
-    auto *UGEP = GetElementPtrInst::CreateInBounds(ULog, Idx, "", Fail);
+    auto *UGEP      = GetElementPtrInst::CreateInBounds(ULog, Idx, "", Fail);
+    auto *USizesGEP = GetElementPtrInst::CreateInBounds(USizes, Idx, "", Fail);
     auto *UNS = GetElementPtrInst::CreateInBounds(NumStore, {Zero}, "", Fail);
     auto *NSLoad = new LoadInst(UNS, "", Fail);
     // Fail -- Undo memory
-    vector<Value *> Args = {UGEP, NSLoad};
+    vector<Value *> Args = {UGEP, NSLoad, USizesGEP};
     CallInst::Create(Undo, Args, "", Fail);
 
-    CallInst::Create(Mod->getOrInsertFunction(
-                         "__fail", FunctionType::get(VoidTy, {}, false)),
-                     {}, "", Fail);
-#ifdef PASHA_DEBUG
-    if (SimulateDFG)
+    if (EnableValueLogging || EnableMemoryLogging) {
         CallInst::Create(Mod->getOrInsertFunction(
                              "__fail", FunctionType::get(VoidTy, {}, false)),
                          {}, "", Fail);
-#endif
+    }
 
     BranchInst::Create(SSplit, Fail);
     // Fail Path -- End
@@ -1246,7 +1236,7 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     for (uint32_t Idx = 0; Idx < LiveOut.size(); Idx++) {
         auto *Val = LiveOut[Idx];
         // GEP Indices always need to i32 types.
-        Value *StIdx = ConstantInt::get(Int32Ty, Idx, false);
+        Value *StIdx     = ConstantInt::get(Int32Ty, Idx, false);
         Value *GEPIdx[2] = {Zero, StIdx};
         auto *EValTy = cast<PointerType>(StPtr->getType())->getElementType();
         auto *ValPtr = GetElementPtrInst::Create(
@@ -1257,7 +1247,7 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         // the LastBB. Use new loaded value if you came from the
         // offloaded function.
         auto *ValTy = Val->getType();
-        auto *Phi = PHINode::Create(ValTy, 2, "", Merge->getTerminator());
+        auto *Phi   = PHINode::Create(ValTy, 2, "", Merge->getTerminator());
         Phi->addIncoming(Val, LastBB);
         Phi->addIncoming(Load, Success);
 
@@ -1274,7 +1264,7 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
             Use &U = *UI;
             ++UI;
             Instruction *UserInst = cast<Instruction>(U.getUser());
-            BasicBlock *UserBB = UserInst->getParent();
+            BasicBlock *UserBB    = UserInst->getParent();
             if (UserBB != Orig->getParent() &&
                 !(UserBB == Merge && isa<PHINode>(UserInst))) {
                 // errs() << "Rewriting : " << *UserInst << "\n";
@@ -1285,7 +1275,6 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         }
     }
     // Success Path - End
-    //
 
     if (EnableValueLogging || EnableMemoryLogging) {
         auto *MweDtor = Mod->getOrInsertFunction("__mwe_dtor", VoidTy, nullptr);
@@ -1315,12 +1304,12 @@ static void liveInAA(SetVector<Value *> &LiveIn, AAResults &AA,
     copy_if(LiveIn.begin(), LiveIn.end(), back_inserter(Pointers),
             [](Value *V) { return V->getType()->isPointerTy(); });
 
-    Data["num-livein-ptr"] = Pointers.size();
-    Data["num-must-alias"] = 0;
-    Data["num-no-alias"] = 0;
-    Data["num-may-alias"] = 0;
+    Data["num-livein-ptr"]    = Pointers.size();
+    Data["num-must-alias"]    = 0;
+    Data["num-no-alias"]      = 0;
+    Data["num-may-alias"]     = 0;
     Data["num-partial-alias"] = 0;
-    Data["num-ld-ld-pairs"] = 0;
+    Data["num-ld-ld-pairs"]   = 0;
 
     for (auto PB = Pointers.begin(), PE = Pointers.end(); PB != PE; PB++) {
         for (auto NP = next(PB); NP != PE; NP++) {
@@ -1348,8 +1337,8 @@ void MicroWorkloadExtract::process(Function &F) {
     common::runStatsPasses(F);
 
     PostDomTree = &getAnalysis<PostDominatorTree>(F);
-    auto *DT = &getAnalysis<DominatorTreeWrapperPass>(F).getDomTree();
-    auto *LI = &getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
+    auto *DT    = &getAnalysis<DominatorTreeWrapperPass>(F).getDomTree();
+    auto *LI    = &getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
 
     map<string, BasicBlock *> BlockMap;
     for (auto &BB : F)
@@ -1363,8 +1352,8 @@ void MicroWorkloadExtract::process(Function &F) {
         for (auto &P : Sequences) {
             if (Start == nullptr) {
                 Start = BlockMap[P.Seq.front()];
-                End = BlockMap[P.Seq.back()];
-                Id = P.Id;
+                End   = BlockMap[P.Seq.back()];
+                Id    = P.Id;
             }
 
             if (Start == BlockMap[P.Seq.front()] &&
@@ -1377,13 +1366,13 @@ void MicroWorkloadExtract::process(Function &F) {
         }
 
         auto BackEdges = common::getBackEdges(Start);
-        Blocks = getTopoChop(MergeBlocks, Start, BackEdges);
+        Blocks         = getTopoChop(MergeBlocks, Start, BackEdges);
 
     } else {
         assert(Sequences.size() == 1 &&
                "Only 1 sequence for trace and slice (chop)");
         auto &P = Sequences.front();
-        Id = P.Id;
+        Id      = P.Id;
         switch (ExtractAs) {
         case ExtractType::slice:
             Blocks = getSliceBlocks(P, BlockMap);

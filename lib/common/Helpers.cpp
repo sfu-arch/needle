@@ -51,8 +51,8 @@ void DFGPrinter::visitBasicBlock(BasicBlock &BB) {
         if (isa<BasicBlock>(V)) {
             if (auto *N = dyn_cast<BasicBlock>(V)->getTerminator()->getMetadata(
                     "BB_UID")) {
-                auto *S = dyn_cast<MDString>(N->getOperand(0));
-                auto id = stoi(S->getString().str());
+                auto *S  = dyn_cast<MDString>(N->getOperand(0));
+                auto id  = stoi(S->getString().str());
                 nodes[V] = id;
                 return true;
             } else {
@@ -60,8 +60,8 @@ void DFGPrinter::visitBasicBlock(BasicBlock &BB) {
             }
         } else if (isa<Instruction>(V)) {
             if (auto *N = dyn_cast<Instruction>(V)->getMetadata("UID")) {
-                auto *S = dyn_cast<MDString>(N->getOperand(0));
-                auto id = stoi(S->getString().str());
+                auto *S  = dyn_cast<MDString>(N->getOperand(0));
+                auto id  = stoi(S->getString().str());
                 nodes[V] = id;
                 return true;
             } else {

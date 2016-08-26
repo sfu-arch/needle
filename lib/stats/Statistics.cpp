@@ -28,7 +28,7 @@ bool Statistics::doInitialization(Module &M) {
 #define HANDLE_INST(N, OPCODE, CLASS) OpcodeCount[#OPCODE] = 0;
 #include "llvm/IR/Instruction.def"
     OpcodeCount["CondBr"] = 0;
-    OpcodeCount["Guard"] = 0;
+    OpcodeCount["Guard"]  = 0;
 
 #define HANDLE_INST(N, OPCODE, CLASS) OpcodeWt[#OPCODE] = 1;
 #include "llvm/IR/Instruction.def"
@@ -97,7 +97,7 @@ Statistics::criticalPath(Function &F) {
     /// Decode the longest path by picking the predecessor with
     /// with the largest weight starting from the max value that
     /// has been computed.
-    uint64_t Max = 0;
+    uint64_t Max     = 0;
     BasicBlock *Last = nullptr;
     // errs() << "Distance\n";
     for (auto &BB : TopoBlocks) {
@@ -105,7 +105,7 @@ Statistics::criticalPath(Function &F) {
         // errs() << Distance[BB] << "\n";
         auto Dist = Distance[BB];
         if (Max < Dist) {
-            Max = Dist;
+            Max  = Dist;
             Last = BB;
         }
     }
@@ -120,10 +120,10 @@ Statistics::criticalPath(Function &F) {
         auto *BB = Worklist.front();
         Worklist.pop_front();
         BasicBlock *Select = nullptr;
-        uint64_t Max = 0;
+        uint64_t Max       = 0;
         for (auto PB = pred_begin(BB), PE = pred_end(BB); PB != PE; PB++) {
             if (Distance[*PB] > Max) {
-                Max = Distance[*PB];
+                Max    = Distance[*PB];
                 Select = *PB;
             }
         }
@@ -138,7 +138,7 @@ Statistics::criticalPath(Function &F) {
     for (auto &KV : LongestPath) {
         CritPathSize += getBlockSize(KV.first);
     }
-    Data["crit-path-ops"] = CritPathSize;
+    Data["crit-path-ops"]    = CritPathSize;
     Data["crit-path-blocks"] = LongestPath.size();
 
     errs() << "LongestPath\n";

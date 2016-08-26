@@ -43,7 +43,7 @@ bool EPPProfile::runOnModule(Module &module) {
 
     for (auto &func : module) {
         if (isTargetFunction(func, FunctionList)) {
-            LI = &getAnalysis<LoopInfoWrapperPass>(func).getLoopInfo();
+            LI        = &getAnalysis<LoopInfoWrapperPass>(func).getLoopInfo();
             auto &enc = getAnalysis<EPPEncode>(func);
             instrument(func, enc);
         }
@@ -73,16 +73,16 @@ static SmallVector<BasicBlock *, 1> getFunctionExitBlocks(Function &F) {
 }
 
 void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
-    Module *M = F.getParent();
-    auto &Ctx = M->getContext();
+    Module *M    = F.getParent();
+    auto &Ctx    = M->getContext();
     auto *voidTy = Type::getVoidTy(Ctx);
 
 #ifndef RT32
     auto *CtrTy = Type::getInt128Ty(Ctx);
-    auto *Zap = ConstantInt::getIntegerValue(CtrTy, APInt(128, 0, true));
+    auto *Zap   = ConstantInt::getIntegerValue(CtrTy, APInt(128, 0, true));
 #else
     auto *CtrTy = Type::getInt64Ty(Ctx);
-    auto *Zap = ConstantInt::getIntegerValue(CtrTy, APInt(64, 0, true));
+    auto *Zap   = ConstantInt::getIntegerValue(CtrTy, APInt(64, 0, true));
 #endif
 
     auto *logFun2 = M->getOrInsertFunction("PaThPrOfIlInG_logPath2", voidTy,
@@ -115,8 +115,8 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
 
     auto InsertLogPath = [&logFun2, &Ctr, &CtrTy, &Zap](BasicBlock *BB) {
         auto logPos = BB->getTerminator();
-        auto *LI = new LoadInst(Ctr, "ld.epp.ctr", logPos);
-        auto *CI = CallInst::Create(logFun2, {LI}, "");
+        auto *LI    = new LoadInst(Ctr, "ld.epp.ctr", logPos);
+        auto *CI    = CallInst::Create(logFun2, {LI}, "");
         CI->insertAfter(LI);
         (new StoreInst(Zap, Ctr))->insertAfter(CI);
     };
@@ -149,7 +149,7 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
                 found = true;
         assert(found && "Could not find the edge to split");
 
-        auto *F = Tgt->getParent();
+        auto *F  = Tgt->getParent();
         auto *BB = BasicBlock::Create(Ctx, Src->getName() + ".intp", F);
         patchPhis(Src, Tgt, BB);
         auto *T = Src->getTerminator();

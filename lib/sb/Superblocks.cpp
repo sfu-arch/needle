@@ -53,7 +53,7 @@ void Superblocks::readSequences() {
         Temp.split(Tokens, ' ');
         P.Id = Tokens[0];
 
-        P.Freq = stoull(Tokens[1]);
+        P.Freq  = stoull(Tokens[1]);
         P.PType = static_cast<PathType>(stoi(Tokens[2]));
 
         move(Tokens.begin() + 4, Tokens.end() - 1, back_inserter(P.Seq));
@@ -123,7 +123,7 @@ void Superblocks::construct(
                 if (EdgeProfile.count(E) != 0) {
                     if (EdgeProfile[E].ugt(Count)) {
                         Count = EdgeProfile[E];
-                        Next = *SB;
+                        Next  = *SB;
                     }
                 }
             }
@@ -186,7 +186,7 @@ void printPathSrc(SmallVector<llvm::BasicBlock *, 8> &blocks) {
 /// and edge from the header to any successor is present.
 void Superblocks::hyperblock(Loop *L, LoopInfo &LI) {
     auto *Header = L->getHeader();
-    bool Found = false;
+    bool Found   = false;
     for (auto SB = succ_begin(Header), SE = succ_end(Header); SB != SE; SB++) {
         if (EdgeProfile.count({Header, *SB}))
             Found = true;

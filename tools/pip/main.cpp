@@ -33,7 +33,7 @@ struct PredictionBuffer {
 
     void add(PathID id, size_t pathCount) {
         buffer[end] = {id, pathCount};
-        end = (end + 1) % capacity;
+        end         = (end + 1) % capacity;
         count += pathCount;
     }
 
@@ -45,14 +45,14 @@ struct PredictionBuffer {
         bool containsTarget = false;
         uint64_t history[2 * (capacity - 1)];
         unsigned historyIndex = 0;
-        unsigned bufferIndex = start;
+        unsigned bufferIndex  = start;
         while (historyIndex < 2 * (capacity - 1)) {
-            auto &idCount = buffer[bufferIndex];
+            auto &idCount  = buffer[bufferIndex];
             auto remaining = idCount.second;
             containsTarget |= idCount.first == target;
             while (remaining && historyIndex < 2 * (capacity - 1)) {
                 history[historyIndex + 1] = idCount.first.first;
-                history[historyIndex] = idCount.first.second;
+                history[historyIndex]     = idCount.first.second;
                 historyIndex += 2;
                 --remaining;
             }
@@ -82,8 +82,8 @@ struct PredictionBuffer {
 // NOTE: This invalidates the passed in string.
 PathID parsePathID(char *str) {
     PathID pathID;
-    pathID.first = strtoul(str + 8, nullptr, 16);
-    str[8] = '\0';
+    pathID.first  = strtoul(str + 8, nullptr, 16);
+    str[8]        = '\0';
     pathID.second = strtoul(str, nullptr, 16);
     return pathID;
 }
@@ -111,8 +111,8 @@ int main(int argc, char **argv) {
     std::unordered_map<std::string, std::vector<std::pair<PathID, uint64_t>>>
         samples;
 
-    uint64_t statusCount = 0;
-    bool tracking = false;
+    uint64_t statusCount  = 0;
+    bool tracking         = false;
     uint64_t trackedCount = 0;
     while (trackedCount < THRESHOLD && (std::cin >> idString >> count)) {
         PathID pathID = parsePathID(&idString.front());

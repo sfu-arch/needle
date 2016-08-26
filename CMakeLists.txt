@@ -85,7 +85,7 @@ function(add_bitcode BC FILES)
     add_custom_command(
         OUTPUT ${BC}
         COMMAND ${CLANG_EXE} 
-                -c -emit-llvm ${BITCODE_FLAGS}
+                -c -g -emit-llvm ${BITCODE_FLAGS}
                 ${FILES}
                 -o ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${BC}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}

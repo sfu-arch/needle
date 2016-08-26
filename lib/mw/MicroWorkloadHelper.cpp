@@ -39,8 +39,8 @@ static bool replaceGuardsHelper(Function &F, BasicBlock *RetBlock) {
                 if (CI->getCalledFunction()->getName().equals("__guard_func")) {
                     // Arg 0 : The value to branch on
                     // Arg 1 : The dominant side of the branch (true or false)
-                    Value *Arg0 = CI->getArgOperand(0);
-                    auto *Arg1 = cast<ConstantInt>(CI->getArgOperand(1));
+                    Value *Arg0    = CI->getArgOperand(0);
+                    auto *Arg1     = cast<ConstantInt>(CI->getArgOperand(1));
                     auto *NewBlock = SplitBlock(&BB, CI);
                     CI->eraseFromParent();
                     BB.getTerminator()->eraseFromParent();
@@ -58,10 +58,10 @@ static bool replaceGuardsHelper(Function &F, BasicBlock *RetBlock) {
 }
 
 static Function *createUndoFunction(Module *Mod) {
-    auto &Ctx = Mod->getContext();
-    auto *VoidTy = Type::getVoidTy(Ctx);
+    auto &Ctx       = Mod->getContext();
+    auto *VoidTy    = Type::getVoidTy(Ctx);
     Type *ParamTy[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx)};
-    auto *FlushTy = FunctionType::get(VoidTy, ParamTy, false);
+    auto *FlushTy   = FunctionType::get(VoidTy, ParamTy, false);
     auto *FlushFunc = Function::Create(FlushTy, GlobalValue::ExternalLinkage,
                                        "__undo_mem", Mod);
     return FlushFunc;
@@ -76,7 +76,7 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
     // add a new function to the module which will flush
     // the undo log
     Module *Mod = Offload->getParent();
-    auto &Ctx = Mod->getContext();
+    auto &Ctx   = Mod->getContext();
     SmallVector<StoreInst *, 16> Stores;
 
     auto &AA = getAnalysis<AAResultsWrapperPass>(*Offload).getAAResults();
@@ -116,8 +116,23 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
                            Initializer, "__undo_log_" + Id);
     ULog->setAlignment(8);
 
-    // Save the number of stores as a Global Variable as well
-    auto *Int32Ty = IntegerType::getInt32Ty(Ctx);
+    // Create a global with the store size of each undo slot
+    // Alternatively, smuggle the size in the address
+    ArrayType *SizeArrTy =
+        ArrayType::get(IntegerType::get(Ctx, 32), Stores.size());
+    auto &DL = Mod->getDataLayout();
+    SmallVector<uint32_t, 8> UndoSizesInBits(Stores.size());
+    transform(Stores.begin(), Stores.end(), UndoSizesInBits.begin(),
+              [&DL](StoreInst *SI) {
+                  return DL.getTypeStoreSizeInBits(
+                      SI->getValueOperand()->getType());
+              });
+    auto *InitUndoSizes = ConstantDataArray::get(Ctx, UndoSizesInBits);
+    new GlobalVariable(*Mod, SizeArrTy, false, GlobalValue::ExternalLinkage,
+                       InitUndoSizes, "__undo_sizes_" + Id);
+
+    // Save the number of stores as a Global Variable
+    auto *Int32Ty   = IntegerType::getInt32Ty(Ctx);
     auto *NumStores = ConstantInt::get(Int32Ty, Stores.size(), 0);
     new GlobalVariable(*Mod, Int32Ty, false, GlobalValue::ExternalLinkage,
                        NumStores, "__undo_num_stores_" + Id);
@@ -128,13 +143,13 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
 
     uint32_t LogIndex = 0;
     Value *Idx[2];
-    Idx[0] = ConstantInt::getNullValue(Type::getInt32Ty(Ctx));
-    auto Int8Ty = Type::getInt8Ty(Ctx);
+    Idx[0]        = ConstantInt::getNullValue(Type::getInt32Ty(Ctx));
+    auto Int8Ty   = Type::getInt8Ty(Ctx);
     auto *Int64Ty = Type::getInt64Ty(Ctx);
     for (auto &SI : Stores) {
         auto *Ptr = SI->getPointerOperand();
-        auto *LI = new LoadInst(Ptr, "undo", SI);
-        Idx[1] = ConstantInt::get(Type::getInt32Ty(Ctx), LogIndex * 8);
+        auto *LI  = new LoadInst(Ptr, "undo", SI);
+        Idx[1]    = ConstantInt::get(Type::getInt32Ty(Ctx), LogIndex * 8);
         LogIndex++;
         GetElementPtrInst *AddrGEP = GetElementPtrInst::Create(
             cast<PointerType>(ULog->getType())->getElementType(), ULog, Idx, "",
@@ -160,11 +175,11 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
     // defineUndoFunction(Mod, ULog, Undo, Stores.size());
 
     // Add a buffer init memset into the offload function entry
-    Type *Tys[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx)};
+    Type *Tys[]  = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx)};
     auto *Memset = Intrinsic::getDeclaration(Mod, Intrinsic::memset, Tys);
-    auto *Zero = ConstantInt::get(Int64Ty, 0, false);
-    Idx[1] = Zero;
-    auto *UGEP = GetElementPtrInst::Create(
+    auto *Zero   = ConstantInt::get(Int64Ty, 0, false);
+    Idx[1]       = Zero;
+    auto *UGEP   = GetElementPtrInst::Create(
         cast<PointerType>(ULog->getType())->getElementType(), ULog, Idx, "",
         Offload->getEntryBlock().getFirstNonPHI());
     Value *Params[] = {
@@ -178,7 +193,7 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
 }
 
 void MicroWorkloadHelper::replaceGuards(Function *Offload) {
-    auto &Context = Offload->getContext();
+    auto &Context       = Offload->getContext();
     auto *RetFalseBlock = BasicBlock::Create(Context, "ret.fail", Offload);
     ReturnInst::Create(Context, ConstantInt::getFalse(Context), RetFalseBlock);
 

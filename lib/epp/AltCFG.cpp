@@ -82,7 +82,7 @@ EdgeListTy altcfg::getChords(EdgeListTy &ST) const {
 EdgeWtMapTy altcfg::getIncrements(BasicBlock *Entry, BasicBlock *Exit) {
     EdgeWtMapTy Inc;
     auto ST = getSpanningTree(Entry);
-    auto C = getChords(ST);
+    auto C  = getChords(ST);
     computeIncrement(Inc, Entry, Exit, C, ST);
     return Inc;
 }

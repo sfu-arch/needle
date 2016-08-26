@@ -53,7 +53,7 @@ void EPPEncode::releaseMemory() {
 void EPPEncode::encode(Function &F) {
     DEBUG(errs() << "Called Encode on " << F.getName() << "\n");
 
-    auto POB = common::postOrder(F, LI);
+    auto POB   = common::postOrder(F, LI);
     auto Entry = POB.back(), Exit = POB.front();
     auto BackEdges = common::getBackEdges(F);
 
@@ -86,7 +86,7 @@ void EPPEncode::encode(Function &F) {
                 numPaths.insert(make_pair(S, APInt(128, 0, true)));
 
             // This is the only place we need to check for overflow.
-            bool Ov = false;
+            bool Ov   = false;
             pathCount = pathCount.sadd_ov(numPaths[S], Ov);
             if (Ov) {
                 report_fatal_error("Integer Overflow");

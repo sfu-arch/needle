@@ -138,7 +138,7 @@ bool EPPDecode::runOnModule(Module &M) {
             break;
         case FIFO:
             start = 1;
-            end = 1;
+            end   = 1;
             break;
         }
         vector<BasicBlock *> blocks(path.blocks.second.begin() + start,
@@ -175,7 +175,7 @@ pair<PathType, vector<llvm::BasicBlock *>>
 EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
     vector<llvm::BasicBlock *> Sequence;
     auto *Position = &F.getEntryBlock();
-    auto &ACFG = Enc.ACFG;
+    auto &ACFG     = Enc.ACFG;
 
     DEBUG(errs() << "Decode Called On: " << pathID << "\n");
 
@@ -193,7 +193,7 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
             if (ACFG[{Position, Tgt}].uge(Wt) &&
                 ACFG[{Position, Tgt}].ule(pathID)) {
                 Select = {Position, Tgt};
-                Wt = ACFG[{Position, Tgt}];
+                Wt     = ACFG[{Position, Tgt}];
             }
         }
         DEBUG(errs() << " )\n\n\n");

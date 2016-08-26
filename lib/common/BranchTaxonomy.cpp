@@ -13,7 +13,7 @@ using namespace helpers;
 bool BranchTaxonomy::doInitialization(Module &M) { return false; }
 
 void BranchTaxonomy::loopBounds(Function &F) {
-    LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
+    LoopInfo &LI          = getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
     ScalarEvolution &SCEV = getAnalysis<ScalarEvolutionWrapperPass>(F).getSE();
 
     uint64_t Bounded = 0, NumLoops = 0;
@@ -28,7 +28,7 @@ void BranchTaxonomy::loopBounds(Function &F) {
         }
     }
 
-    Data["num-loops"] = NumLoops;
+    Data["num-loops"]     = NumLoops;
     Data["bounded-loops"] = Bounded;
 }
 

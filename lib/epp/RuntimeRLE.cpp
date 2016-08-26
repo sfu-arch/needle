@@ -17,20 +17,20 @@ FILE *fp = nullptr;
 
 void EPP(init)() {
     EPP(PathId) = -1;
-    fp = fopen("path-profile-trace.txt", "w");
+    fp          = fopen("path-profile-trace.txt", "w");
 }
 
 void EPP(logPath2)(__int128 Val) {
     if (EPP(PathId) == -1) {
-        EPP(PathId) = Val;
+        EPP(PathId)  = Val;
         EPP(Counter) = 1;
     } else if (EPP(PathId) == Val) {
         EPP(Counter) += 1;
     } else {
-        uint64_t low = (uint64_t)EPP(PathId);
+        uint64_t low  = (uint64_t)EPP(PathId);
         uint64_t high = (EPP(PathId) >> 64);
         fprintf(fp, "%016lx%016lx %lu\n", high, low, EPP(Counter));
-        EPP(PathId) = Val;
+        EPP(PathId)  = Val;
         EPP(Counter) = 1;
     }
 }
@@ -45,18 +45,18 @@ FILE *fp = nullptr;
 
 void EPP(init)() {
     EPP(PathId) = -1;
-    fp = fopen("path-profile-trace.txt", "w");
+    fp          = fopen("path-profile-trace.txt", "w");
 }
 
 void EPP(logPath2)(uint64_t Val) {
     if (EPP(PathId) == -1) {
-        EPP(PathId) = Val;
+        EPP(PathId)  = Val;
         EPP(Counter) = 1;
     } else if (EPP(PathId) == Val) {
         EPP(Counter) += 1;
     } else {
         fprintf(fp, "%016llx %llu\n", EPP(PathId), EPP(Counter));
-        EPP(PathId) = Val;
+        EPP(PathId)  = Val;
         EPP(Counter) = 1;
     }
 }

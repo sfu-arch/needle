@@ -6,8 +6,8 @@ char arr[SIZE] = {1};
 
 int foo(int argc) {
     int sum = 0;
-    for(int i = 0; i < SIZE; i++) {
-        if( i % argc ) {
+    for (int i = 0; i < SIZE; i++) {
+        if (i % argc) {
             sum += arr[i];
         } else {
             sum -= arr[i];
@@ -17,6 +17,6 @@ int foo(int argc) {
 }
 
 int main(int argc, char *argv[]) {
-    printf("%d\n",foo(argc));
+    printf("%d\n", foo(argc));
     return 0;
 }

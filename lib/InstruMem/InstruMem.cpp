@@ -28,10 +28,10 @@ void InstruMemPass::visitFunction(Function &f) {
     Module *m = f.getParent();
 
     auto *voidTy = Type::getVoidTy(m->getContext());
-    auto *i64Ty = Type::getInt64Ty(m->getContext());
-    i8PtrTy = Type::getInt8PtrTy(m->getContext());
-    auto *fTy = Type::getFloatTy(m->getContext());
-    auto *dTy = Type::getDoubleTy(m->getContext());
+    auto *i64Ty  = Type::getInt64Ty(m->getContext());
+    i8PtrTy      = Type::getInt8PtrTy(m->getContext());
+    auto *fTy    = Type::getFloatTy(m->getContext());
+    auto *dTy    = Type::getDoubleTy(m->getContext());
 
     std::string pre = "__InstruMem_";
     onLoad =
@@ -46,12 +46,12 @@ void InstruMemPass::visitLoadInst(LoadInst &li) {
 
     auto *i64Ty = Type::getInt64Ty(li.getContext());
 
-    Value *loaded = li.getPointerOperand();
+    Value *loaded   = li.getPointerOperand();
     BitCastInst *bc = new BitCastInst(loaded, i8PtrTy, "", &li);
 
     if (auto *N = dyn_cast<Instruction>(&li)->getMetadata("UID")) {
         auto *S = dyn_cast<MDString>(N->getOperand(0));
-        loadId = stoi(S->getString().str());
+        loadId  = stoi(S->getString().str());
     } else
         assert(0);
 
@@ -84,7 +84,7 @@ void InstruMemPass::visitStoreInst(StoreInst &si) {
 
     auto *i64Ty = Type::getInt64Ty(si.getContext());
 
-    Value *stored = si.getPointerOperand();
+    Value *stored   = si.getPointerOperand();
     BitCastInst *bc = new BitCastInst(stored, i8PtrTy, "", &si);
 
     if (auto *N = dyn_cast<Instruction>(&si)->getMetadata("UID")) {

@@ -108,14 +108,14 @@ void AliasEdgeWriter::writeEdges(CallInst *CI, Function *OF) {
         return V;
     };
 
-    Data["num-aa-pairs"] = 0;
-    Data["num-no-alias"] = 0;
-    Data["num-must-alias"] = 0;
-    Data["num-partial-alias"] = 0;
+    Data["num-aa-pairs"]        = 0;
+    Data["num-no-alias"]        = 0;
+    Data["num-must-alias"]      = 0;
+    Data["num-partial-alias"]   = 0;
     Data["num-may-alias-naive"] = 0;
-    Data["num-ld-ld-pairs"] = 0;
-    Data["num-ipaa-no-alias"] = 0;
-    Data["num-ipaa-may-alias"] = 0;
+    Data["num-ld-ld-pairs"]     = 0;
+    Data["num-ipaa-no-alias"]   = 0;
+    Data["num-ipaa-may-alias"]  = 0;
 
     for (auto MB = MemOps.begin(), ME = MemOps.end(); MB != ME; MB++) {
         for (auto NB = next(MB); NB != ME; NB++) {

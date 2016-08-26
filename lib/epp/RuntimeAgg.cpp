@@ -21,7 +21,7 @@ void EPP(save)() {
     FILE *fp = fopen("path-profile-results.txt", "w");
     fprintf(fp, "%lu\n", EPP(path).size());
     for (auto &KV : EPP(path)) {
-        uint64_t low = (uint64_t)KV.first;
+        uint64_t low  = (uint64_t)KV.first;
         uint64_t high = (KV.first >> 64);
         // Print the hex values with a 0x prefix messes up
         // the APInt constructor.
