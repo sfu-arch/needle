@@ -1,0 +1,53 @@
+# Value Logging 
+
+The mwe tool supports logging of live values (in and out) as well as memory live input values. 
+
+## Live Values
+
+When a set of blocks are marked for outlining (extraction), values which are def'ed outside the region and used inside the regions are maked as *live in* values. Similarly, values which are def'ed in the region and used outside the region are marked as *live out* values. The mwe tool passes live in values to the outlined path/braid as parameters to the *__offload_funcion_XXX*. The last parameter is a struct, passed by reference which contains the live out values.
+
+The logging instrumentation dumps out the parameters as a struct written out in the binary format to livein.dump.bin. Similarly the live out values are written out to liveout.dump.bin. Note that the live out values may be garbage for offload function invocations which do not succeed. To know which invocations succeeded a third file succ.dump.bin is generated which is a sequence of 0/1 indicating failure/success. Sample readers for the logging file structures is provided in support/log_reader.c.
+
+### Usage (Live Values)
+
+$ mwe -fn=longest_match -u=/path/to/helpers.bc -log -seq=epp-sequences.txt -ExtractType::trace 164.gzip.bc -o 164.gzip-mwe 
+
+This produces
+- LogTypes.def
+
+$ ./164.gzip-mwe input.combined 
+
+This produces 
+- livein.dump.bin
+- liveout.dump.bin
+- succ.dump.bin
+
+### Format
+- livein.dump.bin : Variable (path/braid dependent) size structure dumped in binary format N times, where N is the number of times the offload function is called.
+- liveout.dump.bin : Similar to livein.dump.bin
+- succ.dump.bin : 0/1 (uint32_t) in binary indicating fail/success.
+
+### Sample Log Reader
+Since the structure of the dump files is different for each outlined region, a definition file is produced which defines live in and live out structs to help read data from the files. Sample usage of such a construct is demonstrated in support/log_reader.c.
+
+## Memory Values
+
+This logs the state of memory before the invocation of the outlined region. To conserve space it does not log the entire process address space. A best effort is made to only capture the *first* read from a unique location as a addr, value pair. When reconstructing a memory map, only the first entry for an address should be used to initialize memory. The result of the invocation, i.e success fail is encoded as the last entry for the invocation. A failing success invocation will have addr = 0xFFFFFFFF, whereas a failing invocation will have addr = 0x0. The log file is dumped in plain text, it is recommended to setup a pipe into a gzip process prior to executed an instrumented binary.  
+
+### Usage (Memory Values -- Reads)
+
+$ mwe -fn=longest_match -u=/path/to/helpers.bc -mlog -seq=epp-sequences.txt -ExtractType::trace 164.gzip.bc -o 164.gzip-mwe 
+
+$ mkfifo mlog.dump.txt
+$ gzip -c < mlog.dump.txt > mlog.dump.txt.gz &
+$ ./164.gzip-mwe input.combined
+
+To view the first 10 lines of the trace
+
+$ zcat mlog.dump.txt.gz | head 
+
+This produces
+- mlog.dump.txt.gz 
+
+### Format
+The format is plain text with each entry on a new line. Each line has a addr,value pair.
