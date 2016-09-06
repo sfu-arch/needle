@@ -210,6 +210,8 @@ int main(int argc, char **argv, const char **env) {
         runAliasEdgeWriter(Composite.get());
     }
 
+    StripDebugInfo(*Composite.get());
+
     common::writeModule(Composite.get(), "full.ll");
     common::generateBinary(*Composite, outFile, optLevel, libPaths, libraries);
 
