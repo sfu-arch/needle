@@ -105,8 +105,8 @@ void __success() {
     __mwe_success_count++;
 }
 
-void __mlog(uint64_t addr, uint64_t val) {
-    fprintf(fp_mlog, "%p %lu\n", (void *)addr, val);
+void __mlog(uint64_t addr, uint64_t val, uint64_t sz) {
+    fprintf(fp_mlog, "%p %lu %lu\n", (void *)addr, val, sz);
 }
 
 void __fail() {

@@ -1,4 +1,5 @@
 #define DEBUG_TYPE "pasha_mwe"
+
 #include "MicroWorkloadExtract.h"
 #include "Common.h"
 #include "llvm/ADT/APInt.h"
@@ -771,19 +772,22 @@ void MicroWorkloadExtract::memoryLogging(Function *F) {
     /// Add the instrumentation for each non-aliasing load
     auto *Mod     = F->getParent();
     auto &Ctx     = Mod->getContext();
+    auto &DL = Mod->getDataLayout();
     auto *VoidTy  = Type::getVoidTy(Ctx);
     auto *Int64Ty = Type::getInt64Ty(Ctx);
     auto *MLogFn  = Mod->getOrInsertFunction(
-        "__mlog", FunctionType::get(VoidTy, {Int64Ty, Int64Ty}, false));
+        "__mlog", FunctionType::get(VoidTy, {Int64Ty, Int64Ty, Int64Ty}, false));
 
     for (auto &LI : Loads) {
         auto *Ptr      = LI->getPointerOperand();
         auto *AddrCast = new PtrToIntInst(Ptr, Int64Ty);
-        // TODO : Needs testing for FP stuff
+        // TODO : Needs testing for FP stuff > 64 bits?
         auto *ValCast = LI->getType()->isIntegerTy()
                             ? CastInst::CreateIntegerCast(LI, Int64Ty, false)
                             : new FPToSIInst(LI, Int64Ty);
-        Value *Params[] = {AddrCast, ValCast};
+        uint64_t Sz = DL.getTypeSizeInBits(LI->getType()); 
+        ConstantInt *Size = ConstantInt::get(Int64Ty, 0, false);
+        Value *Params[] = {AddrCast, ValCast, Size};
         AddrCast->insertAfter(LI);
         ValCast->insertAfter(AddrCast);
         CallInst::Create(MLogFn, Params)->insertAfter(ValCast);
