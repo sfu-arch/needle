@@ -632,7 +632,7 @@ void MicroWorkloadExtract::valueLogging(Function *F) {
     /// a. Create a struct inside the function
     auto InsertionPt = F->getEntryBlock().getFirstInsertionPt();
     SetVector<Value *> LiveInArgs;
-    for (auto AB = F->arg_begin(), AE = prev(F->arg_end()); AB != AE; AB++) {
+    for (auto AB = F->arg_begin(), AE = F->arg_end(); AB != AE; AB++) {
         LiveInArgs.insert(&*AB);
     }
     auto *StructTy = getStructType(LiveInArgs, Mod);
