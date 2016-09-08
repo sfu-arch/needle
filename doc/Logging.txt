@@ -4,7 +4,7 @@ The mwe tool supports logging of live values (in and out) as well as memory live
 
 ## Live Values
 
-When a set of blocks are marked for outlining (extraction), values which are def'ed outside the region and used inside the regions are maked as *live in* values. Similarly, values which are def'ed in the region and used outside the region are marked as *live out* values. The mwe tool passes live in values to the outlined path/braid as parameters to the *__offload_funcion_XXX*. The last parameter is a struct, passed by reference which contains the live out values.
+When a set of blocks are marked for outlining (extraction), values which are def'ed outside the region and used inside the regions are maked as *live in* values. Similarly, values which are def'ed in the region and used outside the region are marked as *live out* values. The mwe tool passes live in values to the outlined path/braid as parameters to the *__offload_funcion_XXX*. The last parameter is a struct, passed by reference which contains the live out values. The address of the live out storage struct is considered to be an additional live in value.
 
 The logging instrumentation dumps out the parameters as a struct written out in the binary format to livein.dump.bin. Similarly the live out values are written out to liveout.dump.bin. Note that the live out values may be garbage for offload function invocations which do not succeed. To know which invocations succeeded a third file succ.dump.bin is generated which is a sequence of 0/1 indicating failure/success. Sample readers for the logging file structures is provided in support/log_reader.c.
 
@@ -32,7 +32,7 @@ Since the structure of the dump files is different for each outlined region, a d
 
 ## Memory Values
 
-This logs the state of memory before the invocation of the outlined region. To conserve space it does not log the entire process address space. A best effort is made to only capture the *first* read from a unique location as a addr, value pair. When reconstructing a memory map, only the first entry for an address should be used to initialize memory. The result of the invocation, i.e success fail is encoded as the last entry for the invocation. A failing success invocation will have addr = 0xFFFFFFFF, whereas a failing invocation will have addr = 0x0. The log file is dumped in plain text, it is recommended to setup a pipe into a gzip process prior to executed an instrumented binary.  
+This logs the state of memory before the invocation of the outlined region. To conserve space it does not log the entire process address space. A best effort is made to only capture the *first* read from a unique location as a addr, value pair. When reconstructing a memory map, only the first entry for an address should be used to initialize memory. The result of the invocation, i.e success fail is encoded as the last entry for the invocation. A successful invocation will have addr = 0x1, whereas a failing invocation will have addr = 0x0. The log file is dumped in plain text, it is recommended to setup a pipe into a gzip process prior to executed an instrumented binary.  
 
 ### Usage (Memory Values -- Reads)
 
