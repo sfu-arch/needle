@@ -53,7 +53,7 @@ if(CLANG_FOUND)
         message(FATAL_ERROR "Incompatible clang version -- need ${CLANG_VERSION_REQ}, found ${CLANG_VERSION}")
     endif()
 else()
-    message(FATAL_ERROR "Pasha needs clang ${CLANG_VERSION_REQ}.X in PATH, Cmake will exit" )
+    message(FATAL_ERROR "Pasha needs clang ${CLANG_VERSION_REQ} in PATH, Cmake will exit" )
 endif()
 
 

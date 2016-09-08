@@ -786,7 +786,7 @@ void MicroWorkloadExtract::memoryLogging(Function *F) {
                             ? CastInst::CreateIntegerCast(LI, Int64Ty, false)
                             : new FPToSIInst(LI, Int64Ty);
         uint64_t Sz = DL.getTypeSizeInBits(LI->getType()); 
-        ConstantInt *Size = ConstantInt::get(Int64Ty, 0, false);
+        ConstantInt *Size = ConstantInt::get(Int64Ty, Sz, false);
         Value *Params[] = {AddrCast, ValCast, Size};
         AddrCast->insertAfter(LI);
         ValCast->insertAfter(AddrCast);
@@ -798,7 +798,7 @@ void MicroWorkloadExtract::memoryLogging(Function *F) {
 
     BasicBlock *RetTrue = nullptr, *RetFalse = nullptr;
     tie(RetTrue, RetFalse)                   = getReturnBlocks(F);
-    auto *TrueSentinel  = ConstantInt::get(Int64Ty, 0xFFFFFFFF, false);
+    auto *TrueSentinel  = ConstantInt::get(Int64Ty, 0x1, false);
     auto *FalseSentinel = ConstantInt::get(Int64Ty, 0x0, false);
     Value *Params[]     = {TrueSentinel, FalseSentinel, FalseSentinel};
     CallInst::Create(MLogFn, Params, "", RetTrue->getTerminator());

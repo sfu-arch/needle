@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <inttypes.h>
 
 uint64_t __mwe_success_count  = 0;
 uint64_t __mwe_fail_count     = 0;
@@ -70,8 +71,8 @@ void __undo_mem(char *buffer, uint32_t num_locs, uint32_t *sizes) {
 #undef LIST
 
 void __mwe_dtor() {
-    printf("mwe-num-success %lu\n", __mwe_success_count);
-    printf("mwe-num-fail %lu\n", __mwe_fail_count);
+    printf("mwe-num-success %llu\n", __mwe_success_count);
+    printf("mwe-num-fail %llu\n", __mwe_fail_count);
     fclose(fp_in);
     fclose(fp_out);
     fclose(fp_succ);
@@ -106,7 +107,7 @@ void __success() {
 }
 
 void __mlog(uint64_t addr, uint64_t val, uint64_t sz) {
-    fprintf(fp_mlog, "%p %lu %lu\n", (void *)addr, val, sz);
+    fprintf(fp_mlog, "0x%016llx %llu %llu\n", addr, val, sz);
 }
 
 void __fail() {
