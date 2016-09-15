@@ -50,4 +50,4 @@ This produces
 - mlog.dump.txt.gz 
 
 ### Format
-The format is plain text with each entry on a new line. Each line has a addr,value pair.
+The format is plain text with each entry on a new line. Each line has a addr,value,size (in bits)
