@@ -73,10 +73,13 @@ void __undo_mem(char *buffer, uint32_t num_locs, uint32_t *sizes) {
 void __mwe_dtor() {
     printf("mwe-num-success %llu\n", __mwe_success_count);
     printf("mwe-num-fail %llu\n", __mwe_fail_count);
-    fclose(fp_in);
-    fclose(fp_out);
-    fclose(fp_succ);
-    fclose(fp_mlog);
+
+    if(fp_in) {
+        fclose(fp_in);
+        fclose(fp_out);
+        fclose(fp_succ);
+        fclose(fp_mlog);
+    }
 }
 
 void __mwe_ctor() {

@@ -40,8 +40,11 @@ using namespace mwe;
 using namespace std;
 
 extern cl::list<std::string> FunctionList;
+
 extern cl::opt<bool> EnableValueLogging;
 extern cl::opt<bool> EnableMemoryLogging;
+extern cl::opt<bool> EnableSimpleLogging;
+
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
 extern cl::opt<bool> SimulateDFG;
@@ -1126,7 +1129,7 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     auto *VoidTy           = Type::getVoidTy(Ctx);
     auto *Success          = BasicBlock::Create(Ctx, "offload.true", &F);
 
-    if (EnableValueLogging || EnableMemoryLogging) {
+    if (EnableValueLogging || EnableMemoryLogging || EnableSimpleLogging) {
         CallInst::Create(Mod->getOrInsertFunction(
                              "__success", FunctionType::get(VoidTy, {}, false)),
                          {}, "", Success);
@@ -1204,7 +1207,7 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     vector<Value *> Args = {UGEP, NSLoad, USizesGEP};
     CallInst::Create(Undo, Args, "", Fail);
 
-    if (EnableValueLogging || EnableMemoryLogging) {
+    if (EnableValueLogging || EnableMemoryLogging || EnableSimpleLogging) {
         CallInst::Create(Mod->getOrInsertFunction(
                              "__fail", FunctionType::get(VoidTy, {}, false)),
                          {}, "", Fail);
@@ -1286,6 +1289,11 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
 
         auto *MweCtor = Mod->getOrInsertFunction("__mwe_ctor", VoidTy, nullptr);
         appendToGlobalCtors(*Mod, llvm::cast<Function>(MweCtor), 0);
+    }
+
+    if (EnableSimpleLogging) {
+        auto *MweDtor = Mod->getOrInsertFunction("__mwe_dtor", VoidTy, nullptr);
+        appendToGlobalDtors(*Mod, llvm::cast<Function>(MweDtor), 0);
     }
 }
 

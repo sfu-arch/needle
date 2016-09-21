@@ -108,6 +108,10 @@ cl::opt<bool> DumpStats("dump-stats", cl::desc("Pasha stats"),
 cl::opt<bool> AAEdges("aa-edges", cl::desc("Generate edges to enforce AA"),
                       cl::value_desc("boolean"), cl::init(false));
 
+cl::opt<bool> EnableSimpleLogging("slog",
+                                 cl::desc("Enable simple logging (pass/fail) for extracted regions"),
+                                 cl::value_desc("boolean"), cl::init(false));
+
 cl::opt<bool> EnableValueLogging("log",
                                  cl::desc("Enable value logging (In/Out)"),
                                  cl::value_desc("boolean"), cl::init(false));
