@@ -31,6 +31,7 @@ using namespace mwe;
 using namespace std;
 
 extern cl::opt<bool> SimulateDFG;
+extern cl::opt<bool> DisableUndoLog;
 
 static bool replaceGuardsHelper(Function &F, BasicBlock *RetBlock) {
     for (auto &BB : F) {
@@ -260,7 +261,10 @@ bool MicroWorkloadHelper::runOnModule(Module &M) {
         common::runStatsPasses(F);
         common::writeModule(F.getParent(), F.getName().str() + string(".ll"));
         replaceGuards(&F);
-        addUndoLog(&F);
+
+        if(!DisableUndoLog) {
+            addUndoLog(&F);
+        }
         // writeIfConversionDot(F);
     }
     return false;
