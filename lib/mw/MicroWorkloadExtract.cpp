@@ -47,6 +47,7 @@ extern bool isTargetFunction(const Function &f,
 extern cl::opt<bool> SimulateDFG;
 extern cl::opt<bool> ConvertGlobalsToPointers;
 extern cl::opt<ExtractType> ExtractAs;
+extern cl::opt<bool> DisableUndoLog;
 
 void MicroWorkloadExtract::readSequences() {
     ifstream SeqFile(SeqFilePath.c_str(), ios::in);
@@ -781,11 +782,21 @@ void MicroWorkloadExtract::memoryLogging(Function *F) {
     for (auto &LI : Loads) {
         auto *Ptr      = LI->getPointerOperand();
         auto *AddrCast = new PtrToIntInst(Ptr, Int64Ty);
+        errs() << *LI << "\n";
+
         // TODO : Needs testing for FP stuff > 64 bits?
-        auto *ValCast = LI->getType()->isIntegerTy()
-                            ? CastInst::CreateIntegerCast(LI, Int64Ty, false)
-                            : new FPToSIInst(LI, Int64Ty);
         uint64_t Sz = DL.getTypeSizeInBits(LI->getType()); 
+        if(Sz > 64) {
+            report_fatal_error("Cannot convert larger than 64 bits");
+        }
+
+        // auto *ValCast = LI->getType()->isIntegerTy()
+        //                     ? CastInst::CreateIntegerCast(LI, Int64Ty, false)
+        //                     : new FPToSIInst(LI, Int64Ty);
+        
+        auto CastOp = CastInst::getCastOpcode(LI, false, Int64Ty, false); 
+        auto *ValCast = CastInst::Create(CastOp, LI, Int64Ty);
+
         ConstantInt *Size = ConstantInt::get(Int64Ty, Sz, false);
         Value *Params[] = {AddrCast, ValCast, Size};
         AddrCast->insertAfter(LI);
@@ -1202,7 +1213,10 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     auto *NSLoad = new LoadInst(UNS, "", Fail);
     // Fail -- Undo memory
     vector<Value *> Args = {UGEP, NSLoad, USizesGEP};
-    CallInst::Create(Undo, Args, "", Fail);
+
+    if(!DisableUndoLog) {
+        CallInst::Create(Undo, Args, "", Fail);
+    }
 
     if (EnableValueLogging || EnableMemoryLogging) {
         CallInst::Create(Mod->getOrInsertFunction(
@@ -1290,7 +1304,6 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
 }
 
 static void runHelperPasses(Function *Offload, string Id) {
-
     legacy::PassManager PM;
     PM.add(createBasicAAWrapperPass());
     PM.add(llvm::createTypeBasedAAWrapperPass());

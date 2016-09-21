@@ -115,6 +115,8 @@ cl::opt<bool> EnableValueLogging("log",
 cl::opt<bool> EnableMemoryLogging("mlog", cl::desc("Enable memory logging"),
                                   cl::value_desc("boolean"), cl::init(false));
 
+cl::opt<bool> DisableUndoLog("ulog", cl::desc("Disable Undo Log"), cl::init(false), cl::Hidden);
+
 bool isTargetFunction(const Function &f,
                       const cl::list<std::string> &FunctionList) {
     if (f.isDeclaration())
