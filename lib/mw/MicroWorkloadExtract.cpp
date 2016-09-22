@@ -709,7 +709,8 @@ void MicroWorkloadExtract::valueLogging(Function *F) {
     assert(SuccDumpFn && "Could not insert dump function");
     CallInst::Create(SuccDumpFn, {ConstantInt::getTrue(Ctx)}, "",
                      RetTrue->getTerminator());
-    CallInst::Create(SuccDumpFn, {ConstantInt::getFalse(Ctx)}, "",
+    if (RetFalse)
+        CallInst::Create(SuccDumpFn, {ConstantInt::getFalse(Ctx)}, "",
                      RetFalse->getTerminator());
 
     /// Generate a C declaration for the struct being dumped
@@ -793,10 +794,6 @@ void MicroWorkloadExtract::memoryLogging(Function *F) {
             report_fatal_error("Cannot convert larger than 64 bits");
         }
 
-        // auto *ValCast = LI->getType()->isIntegerTy()
-        //                     ? CastInst::CreateIntegerCast(LI, Int64Ty, false)
-        //                     : new FPToSIInst(LI, Int64Ty);
-        
         auto CastOp = CastInst::getCastOpcode(LI, false, Int64Ty, false); 
         auto *ValCast = CastInst::Create(CastOp, LI, Int64Ty);
 
