@@ -43,6 +43,7 @@ static bool replaceGuardsHelper(Function &F, BasicBlock *RetBlock) {
                     Value *Arg0    = CI->getArgOperand(0);
                     auto *Arg1     = cast<ConstantInt>(CI->getArgOperand(1));
                     auto *NewBlock = SplitBlock(&BB, CI);
+                    NewBlock->setName("g");
                     CI->eraseFromParent();
                     BB.getTerminator()->eraseFromParent();
                     if (Arg1->isOne()) {

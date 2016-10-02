@@ -312,21 +312,9 @@ void MicroWorkloadExtract::extractHelper(
     if (ConvertGlobalsToPointers) {
         ValueToValueMapTy GlobalPointer;
         for (auto G : Globals) {
-            //errs() << *G << "\n";
             AI->setName(G->getName() + ".in");
             Value *RewriteVal = &*AI++;
             GlobalPointer[G] = RewriteVal;
-            // for (auto UB = G->user_begin(), UE = G->user_end(); UB != UE;
-            //      UB++) {
-            //     errs() << "  " << **UB << "\n";
-            //     if (auto *UI = dyn_cast<Instruction>(*UB)) {
-            //         errs() << UI->getParent()->getParent()->getName() << "\n";
-            //         if (UI->getParent()->getParent() == StaticFunc) {
-            //             errs() << "Rewriting\n";
-            //             UI->replaceUsesOfWith(G, RewriteVal);
-            //         }
-            //     }
-            // }
         }
 
         function<void(Value*, Value*)> rewriteHelper;
