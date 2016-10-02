@@ -310,18 +310,49 @@ void MicroWorkloadExtract::extractHelper(
     }
 
     if (ConvertGlobalsToPointers) {
+        ValueToValueMapTy GlobalPointer;
         for (auto G : Globals) {
+            //errs() << *G << "\n";
+            AI->setName(G->getName() + ".in");
             Value *RewriteVal = &*AI++;
-            for (auto UB = G->user_begin(), UE = G->user_end(); UB != UE;
-                 UB++) {
-                if (auto *UI = dyn_cast<Instruction>(*UB)) {
-                    if (UI->getParent()->getParent() == StaticFunc) {
-                        UI->replaceUsesOfWith(G, RewriteVal);
-                    }
+            GlobalPointer[G] = RewriteVal;
+            // for (auto UB = G->user_begin(), UE = G->user_end(); UB != UE;
+            //      UB++) {
+            //     errs() << "  " << **UB << "\n";
+            //     if (auto *UI = dyn_cast<Instruction>(*UB)) {
+            //         errs() << UI->getParent()->getParent()->getName() << "\n";
+            //         if (UI->getParent()->getParent() == StaticFunc) {
+            //             errs() << "Rewriting\n";
+            //             UI->replaceUsesOfWith(G, RewriteVal);
+            //         }
+            //     }
+            // }
+        }
+
+        function<void(Value*, Value*)> rewriteHelper;
+        rewriteHelper = [&GlobalPointer, &rewriteHelper](Value *I, Value *P) {
+            if(auto *CE = dyn_cast<ConstantExpr>(I)) {
+                for(auto OI = CE->op_begin(), OE = CE->op_end(); OI != OE; OI++) {
+                    rewriteHelper(*OI, CE);        
+                }
+            }
+            else if(auto *GV = dyn_cast<GlobalVariable>(I)){
+                dyn_cast<User>(P)->replaceUsesOfWith(GV, GlobalPointer[GV]);
+            }
+
+        };
+
+        for(auto &BB : *StaticFunc) {
+            for(auto &I : BB ) {
+                for(auto OI = I.op_begin(), OE = I.op_end(); OI != OE; OI++) {
+                    rewriteHelper(*OI, &I);
                 }
             }
         }
     }
+
+    //errs() << *StaticFunc << "\n";
+
 
     for (auto IT = RevTopoChop.rbegin(), IE = RevTopoChop.rend(); IT != IE;
          IT++) {
@@ -588,6 +619,8 @@ void MicroWorkloadExtract::extractHelper(
         SI->setMetadata("LO", N);
         OutIndex++;
     }
+
+
 }
 
 static pair<BasicBlock *, BasicBlock *> getReturnBlocks(Function *F) {
