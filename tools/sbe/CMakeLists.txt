@@ -15,11 +15,11 @@ llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES ${LLVM_TARGETS_TO_BUILD}
     target_link_libraries(sbe inliner namer sb common simplify InstruMem ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
 
 # Platform dependencies.
-target_link_libraries(sbe
-pthread
-dl
-curses
-)
+#target_link_libraries(sbe
+#pthread
+#dl
+##curses
+#)
 
 set_target_properties(sbe
                       PROPERTIES

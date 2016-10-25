@@ -15,11 +15,11 @@ llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES ${LLVM_TARGETS_TO_BUILD}
 target_link_libraries(epp epp-inst inliner namer common simplify InstruMem ${REQ_LLVM_LIBRARIES})
 
 # Platform dependencies.
-target_link_libraries(epp
-    pthread
-    dl
-    curses
-)
+#target_link_libraries(epp
+    #pthread
+    #dl
+    ##curses
+#)
 
 set_target_properties(epp
                       PROPERTIES

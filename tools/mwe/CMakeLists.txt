@@ -16,11 +16,11 @@ llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES ${LLVM_TARGETS_TO_BUILD}
 target_link_libraries(mwe inliner namer mw common simplify InstruMem aew ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
 
 # Platform dependencies.
-target_link_libraries(mwe
-pthread
-dl
-curses
-)
+#target_link_libraries(mwe
+#pthread
+#dl
+##curses
+#)
 
 set_target_properties(mwe
                       PROPERTIES
