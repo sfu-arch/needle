@@ -35,9 +35,9 @@ void InstruMemPass::visitFunction(Function &f) {
 
     std::string pre = "__InstruMem_";
     onLoad =
-        m->getOrInsertFunction(pre + "load", voidTy, i64Ty, i8PtrTy, nullptr);
+        m->getOrInsertFunction(pre + "load", voidTy, i64Ty, i8PtrTy, i64Ty, nullptr);
     onStore =
-        m->getOrInsertFunction(pre + "store", voidTy, i64Ty, i8PtrTy, nullptr);
+        m->getOrInsertFunction(pre + "store", voidTy, i64Ty, i8PtrTy, i64Ty, nullptr);
 }
 
 void InstruMemPass::visitLoadInst(LoadInst &li) {
@@ -62,13 +62,15 @@ void InstruMemPass::visitLoadInst(LoadInst &li) {
         /*BasicBlock::iterator insrtPt = li;
         insrtPt++;
         Instruction* next = &*insrtPt;*/
-
-        Value *args[] = {ConstantInt::get(i64Ty, loadId), bc};
+        auto DL = li.getModule()->getDataLayout();  
+        auto Sz = DL.getTypeStoreSize(li.getType());
+        Value *args[] = {ConstantInt::get(i64Ty, loadId), bc, ConstantInt::get(i64Ty, Sz)};
 
         CallInst::Create(onLoad, args)->insertAfter(&li);
     } // load NOT at end of BB
     else {
 
+        llvm_unreachable("ska124:this should be dead code");
         BasicBlock *parent = li.getParent();
 
         Value *args[] = {ConstantInt::get(i64Ty, loadId), bc};
@@ -101,12 +103,14 @@ void InstruMemPass::visitStoreInst(StoreInst &si) {
         insrtPt++;
         Instruction* next = &*insrtPt;*/
 
-        Value *args[] = {ConstantInt::get(i64Ty, storeId), bc};
+        auto DL = si.getModule()->getDataLayout();  
+        auto Sz = DL.getTypeStoreSize(si.getType());
+        Value *args[] = {ConstantInt::get(i64Ty, storeId), bc, ConstantInt::get(i64Ty, Sz)};
 
         CallInst::Create(onStore, args)->insertAfter(&si);
     } // store NOT at end of BB
     else {
-
+        llvm_unreachable("ska124:this should be dead code");
         BasicBlock *parent = si.getParent();
 
         Value *args[] = {ConstantInt::get(i64Ty, storeId), bc};
