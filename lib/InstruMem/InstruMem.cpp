@@ -63,7 +63,7 @@ void InstruMemPass::visitLoadInst(LoadInst &li) {
         insrtPt++;
         Instruction* next = &*insrtPt;*/
         auto DL = li.getModule()->getDataLayout();  
-        auto Sz = DL.getTypeStoreSize(li.getType());
+        auto Sz = DL.getTypeStoreSize(cast<PointerType>(li.getPointerOperand()->getType())->getElementType());
         Value *args[] = {ConstantInt::get(i64Ty, loadId), bc, ConstantInt::get(i64Ty, Sz)};
 
         CallInst::Create(onLoad, args)->insertAfter(&li);
@@ -104,7 +104,7 @@ void InstruMemPass::visitStoreInst(StoreInst &si) {
         Instruction* next = &*insrtPt;*/
 
         auto DL = si.getModule()->getDataLayout();  
-        auto Sz = DL.getTypeStoreSize(si.getType());
+        auto Sz = DL.getTypeStoreSize(cast<PointerType>(si.getPointerOperand()->getType())->getElementType());
         Value *args[] = {ConstantInt::get(i64Ty, storeId), bc, ConstantInt::get(i64Ty, Sz)};
 
         CallInst::Create(onStore, args)->insertAfter(&si);
