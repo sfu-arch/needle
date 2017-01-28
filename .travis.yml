@@ -2,16 +2,15 @@ language: cpp
 sudo: required
 dist: trusty
 compiler:
-- gcc 
+- g++
 os:
 - linux
 before_install:
-- echo $LANG
-- echo $LC_ALL
 - ./scripts/dependencies.sh
 before_script: 
 - sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-5 /usr/bin/gcc
 - gcc --version
+- g++ --version
 - cmake .
 script:
 - make -j 4
@@ -25,3 +24,7 @@ addons:
     packages:
     - gcc-5
     - g++-5
+    - clang-3.8 
+    - llvm-3.8-dev 
+    - cmake 
+    - doxygen
