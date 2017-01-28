@@ -1,7 +1,7 @@
-project(Pasha)
+project(needle)
 cmake_minimum_required(VERSION 2.8)
 
-set(PACKAGE_NAME pasha)
+set(PACKAGE_NAME needle)
 set(PACKAGE_VERSION 0.1)
 set(PACKAGE_STRING "${PACKAGE_NAME} ${PACKAGE_VERSION}")
 set(PACKAGE_BUGREPORT "ska124@sfu.ca")
@@ -53,7 +53,7 @@ if(CLANG_FOUND)
         message(FATAL_ERROR "Incompatible clang version -- need ${CLANG_VERSION_REQ}, found ${CLANG_VERSION}")
     endif()
 else()
-    message(FATAL_ERROR "Pasha needs clang ${CLANG_VERSION_REQ} in PATH, Cmake will exit" )
+    message(FATAL_ERROR "needle needs clang ${CLANG_VERSION_REQ} in PATH, Cmake will exit" )
 endif()
 
 
@@ -91,14 +91,14 @@ if(DOXYGEN_FOUND)
     add_custom_target(doc
         ${DOXYGEN_EXECUTABLE} ${CMAKE_BINARY_DIR}/Doxyfile
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-        COMMENT "Generating API documentation for PASHA" VERBATIM
+        COMMENT "Generating API documentation for needle" VERBATIM
     )
 endif(DOXYGEN_FOUND)
 
 # Debug Variable Definition
 
 if(CMAKE_BUILD_TYPE EQUAL "Debug")
-    add_definitions(-DPASHA_DEBUG)
+    add_definitions(-DNEEDLE_DEBUG)
 endif()
 
 

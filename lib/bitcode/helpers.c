@@ -117,11 +117,3 @@ void __fail() {
     /*printf("mwe-fail\n");*/
     __mwe_fail_count++;
 }
-
-void __attribute__((__noinline__)) __InstruMem_load(uint64_t id, char *ptr, uint64_t size) {
-    asm("");
-}
-
-void __attribute__((__noinline__)) __InstruMem_store(uint64_t id, char *ptr, uint64_t size) {
-    asm("");
-}

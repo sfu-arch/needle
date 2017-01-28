@@ -30,7 +30,7 @@ using namespace llvm;
 using namespace mwe;
 using namespace std;
 
-extern cl::opt<bool> SimulateDFG;
+//extern cl::opt<bool> SimulateDFG;
 extern cl::opt<bool> DisableUndoLog;
 
 static bool replaceGuardsHelper(Function &F, BasicBlock *RetBlock) {
@@ -250,14 +250,14 @@ bool MicroWorkloadHelper::runOnModule(Module &M) {
         // the get the id from the last part of the name. Use this id for the
         // undo log buffer and the num store variable.
 
-        if (SimulateDFG) {
-            common::labelUID(F);
-            common::writeModule(F.getParent(), string("single.") +
-                                                   F.getName().str() +
-                                                   string(".ll"));
-            common::printDFG(F);
-            common::instrumentDFG(F);
-        }
+        //if (SimulateDFG) {
+            //common::labelUID(F);
+            //common::writeModule(F.getParent(), string("single.") +
+                                                   //F.getName().str() +
+                                                   //string(".ll"));
+            //common::printDFG(F);
+            //common::instrumentDFG(F);
+        //}
 
         common::runStatsPasses(F);
         common::writeModule(F.getParent(), F.getName().str() + string(".ll"));

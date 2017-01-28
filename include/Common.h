@@ -1,7 +1,6 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#include "InstruMem.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -49,7 +48,6 @@ void printDFG(llvm::Function &);
 void printDFG(llvm::Module &);
 void labelUID(llvm::Module &);
 void labelUID(llvm::Function &);
-void instrumentDFG(llvm::Function &);
 vector<BasicBlock *> postOrder(Function &, LoopInfo *);
 void runStatsPasses(Function &);
 void printPathSrc(SetVector<llvm::BasicBlock *> &, raw_ostream &out = errs());

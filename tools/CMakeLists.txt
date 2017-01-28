@@ -1,7 +1,2 @@
-#add_subdirectory(pasha)
 add_subdirectory(epp)
 add_subdirectory(mwe)
-add_subdirectory(sbe)
-add_subdirectory(ifc)
-add_subdirectory(pip)
-add_subdirectory(mead)

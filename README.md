@@ -1,5 +1,3 @@
-### Program Analysis for the Synthesis of Hardware Accelerators (PASHA)
-
 ### Dependencies 
 
 1. LLVM 3.8.0

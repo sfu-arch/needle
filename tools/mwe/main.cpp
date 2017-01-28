@@ -33,7 +33,7 @@
 #include <string>
 #include <thread>
 
-#include "AliasEdgeWriter.h"
+//#include "AliasEdgeWriter.h"
 #include "AllInliner.h"
 #include "AllInliner.h"
 #include "Common.h"
@@ -92,10 +92,10 @@ cl::list<string> libraries("l", cl::Prefix,
 cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
                         cl::value_desc("filename"), cl::Required);
 
-cl::opt<bool> SimulateDFG("simdfg",
-                          cl::desc("Generate dfg.*.dot for simulation, add "
-                                   "instrumentation to binary for Pintool"),
-                          cl::value_desc("boolean"), cl::init(false));
+//cl::opt<bool> SimulateDFG("simdfg",
+                          //cl::desc("Generate dfg.*.dot for simulation, add "
+                                   //"instrumentation to binary for Pintool"),
+                          //cl::value_desc("boolean"), cl::init(false));
 
 cl::opt<bool> ConvertGlobalsToPointers(
     "global-to-pointer",
@@ -105,8 +105,8 @@ cl::opt<bool> ConvertGlobalsToPointers(
 cl::opt<bool> DumpStats("dump-stats", cl::desc("Pasha stats"),
                         cl::value_desc("boolean"), cl::init(false));
 
-cl::opt<bool> AAEdges("aa-edges", cl::desc("Generate edges to enforce AA"),
-                      cl::value_desc("boolean"), cl::init(false));
+//cl::opt<bool> AAEdges("aa-edges", cl::desc("Generate edges to enforce AA"),
+                      //cl::value_desc("boolean"), cl::init(false));
 
 cl::opt<bool> EnableSimpleLogging("slog",
                                  cl::desc("Enable simple logging (pass/fail) for extracted regions"),
@@ -131,17 +131,17 @@ bool isTargetFunction(const Function &f,
     return false;
 }
 
-void runAliasEdgeWriter(Module *M) {
-    legacy::PassManager PM;
-    PM.add(createBasicAAWrapperPass());
-    PM.add(llvm::createTypeBasedAAWrapperPass());
-    PM.add(createGlobalsAAWrapperPass());
-    PM.add(createSCEVAAWrapperPass());
-    PM.add(createScopedNoAliasAAWrapperPass());
-    PM.add(createCFLAAWrapperPass());
-    PM.add(new aew::AliasEdgeWriter());
-    PM.run(*M);
-}
+//void runAliasEdgeWriter(Module *M) {
+    //legacy::PassManager PM;
+    //PM.add(createBasicAAWrapperPass());
+    //PM.add(llvm::createTypeBasedAAWrapperPass());
+    //PM.add(createGlobalsAAWrapperPass());
+    //PM.add(createSCEVAAWrapperPass());
+    //PM.add(createScopedNoAliasAAWrapperPass());
+    //PM.add(createCFLAAWrapperPass());
+    //PM.add(new aew::AliasEdgeWriter());
+    //PM.run(*M);
+//}
 
 int main(int argc, char **argv, const char **env) {
     // This boilerplate provides convenient stack traces and clean LLVM exit
@@ -212,9 +212,9 @@ int main(int argc, char **argv, const char **env) {
         assert(ret == false && "Error in linkInModule");
     }
 
-    if (AAEdges) {
-        runAliasEdgeWriter(Composite.get());
-    }
+    //if (AAEdges) {
+        //runAliasEdgeWriter(Composite.get());
+    //}
 
     StripDebugInfo(*Composite.get());
 
