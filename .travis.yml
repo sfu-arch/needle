@@ -2,14 +2,12 @@ language: cpp
 sudo: required
 dist: trusty
 compiler:
-- g++
+- g++-5
 os:
 - linux
 before_install:
 - ./scripts/dependencies.sh
 before_script: 
-- sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-5 /usr/bin/gcc
-- gcc --version
 - g++ --version
 - cmake .
 script:
