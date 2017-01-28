@@ -8,12 +8,20 @@ os:
 before_install:
 - echo $LANG
 - echo $LC_ALL
-- if [ $TRAVIS_OS_NAME == linux ]; then ./scripts/dependencies.sh; fi
+- ./scripts/dependencies.sh
 before_script: 
+- sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-5 /usr/bin/gcc
+- gcc --version
 - cmake .
 script:
 - make -j 4
 branches:
   only:
   - master
-
+addons:
+  apt:
+    sources:
+    - ubuntu-toolchain-r-test
+    packages:
+    - gcc-5
+    - g++-5
