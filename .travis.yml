@@ -8,6 +8,7 @@ os:
 before_install:
 - ./scripts/dependencies.sh
 before_script: 
+- sudo apt-get autoremove llvm-dev llvm llvm-3.5 clang clang-3.5
 - sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-5 /usr/bin/gcc
 - sudo unlink /usr/bin/g++ && sudo ln -s /usr/bin/g++-5 /usr/bin/g++
 - g++ --version
