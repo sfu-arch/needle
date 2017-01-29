@@ -5,8 +5,6 @@ compiler:
 - g++
 os:
 - linux
-before_install:
-- ./scripts/dependencies.sh
 before_script: 
 - sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-5 /usr/bin/gcc
 - sudo unlink /usr/bin/g++ && sudo ln -s /usr/bin/g++-5 /usr/bin/g++
@@ -16,7 +14,7 @@ before_script:
 - export PATH=${PWD}/clang+llvm-3.8.1-x86_64-linux-gnu-ubuntu-14.04/bin:$PATH
 - cmake -DLLVM_DIR=clang+llvm-3.8.1-x86_64-linux-gnu-ubuntu-14.04/share/llvm/cmake/ .
 script:
-- make -j 4
+- make -j 8
 branches:
   only:
   - master
@@ -27,7 +25,4 @@ addons:
     packages:
     - gcc-5
     - g++-5
-    - clang-3.8 
-    - llvm-3.8-dev 
     - cmake 
-    - doxygen
