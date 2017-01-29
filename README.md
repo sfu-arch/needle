@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/sfu-arch/needle.svg?branch=master)](https://travis-ci.org/sfu-arch/needle)
+
 ### Dependencies 
 
 1. LLVM 3.8.0
