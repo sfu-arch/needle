@@ -26,3 +26,5 @@ addons:
     - gcc-5
     - g++-5
     - cmake 
+notifications:
+  email: false
