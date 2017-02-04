@@ -80,7 +80,7 @@ void MicroWorkloadExtract::readSequences() {
         // errs() << *P.Seq.begin() << " " << *P.Seq.rbegin() << "\n";
         Count++;
 
-        if (ExtractAs == trace || ExtractAs == slice)
+        if (ExtractAs == path)
             break;
     }
     // errs() << "read " << Count << " block sequences\n";
@@ -91,11 +91,10 @@ MicroWorkloadExtract::MicroWorkloadExtract(
     std::string S, std::vector<std::unique_ptr<llvm::Module>> &EM)
     : llvm::ModulePass(ID), SeqFilePath(S), ExtractedModules(EM) {
     switch (ExtractAs) {
-    case trace:
+    case path:
         extractAsChop = false;
         break;
-    case slice:
-    case merge:
+    case braid:
         extractAsChop = true;
         break;
     }
@@ -1389,7 +1388,7 @@ void MicroWorkloadExtract::process(Function &F) {
 
     SetVector<BasicBlock *> Blocks;
     std::string Id;
-    if (ExtractAs == merge) {
+    if (ExtractAs == braid) {
         BasicBlock *Start = nullptr, *End = nullptr;
         DenseSet<BasicBlock *> MergeBlocks;
         for (auto &P : Sequences) {
@@ -1413,14 +1412,14 @@ void MicroWorkloadExtract::process(Function &F) {
 
     } else {
         assert(Sequences.size() == 1 &&
-               "Only 1 sequence for trace and slice (chop)");
+               "Only 1 sequence for path");
         auto &P = Sequences.front();
         Id      = P.Id;
         switch (ExtractAs) {
-        case ExtractType::slice:
-            Blocks = getSliceBlocks(P, BlockMap);
-            break;
-        case ExtractType::trace:
+        //case ExtractType::slice:
+            //Blocks = getSliceBlocks(P, BlockMap);
+            //break;
+        case ExtractType::path:
             Blocks = getTraceBlocks(P, BlockMap);
             break;
         }

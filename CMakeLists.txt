@@ -18,9 +18,22 @@ set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/" ${CMAKE_MODULE_PATH})
 ############## LLVM CONFIGURATION #################
 
 # LLVM_DIR must be set to the prefix of /share/llvm/cmake via commandline
-find_package(LLVM REQUIRED CONFIG)
+#find_package(LLVM "3.8" REQUIRED CONFIG)
+
+
+if(NOT DEFINED LLVM_DIR)
+    if(EXISTS ${CMAKE_SOURCE_DIR}/llvm-3.8)
+        set(LLVM_DIR ${CMAKE_SOURCE_DIR}/llvm-3.8/share/llvm/cmake) 
+    else()
+        message(FATAL_ERROR "Please run get_llvm.sh OR set LLVM_DIR to the LLVM installation directory")
+    endif()
+endif()
+
+
+find_package(LLVM "3.8" REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+
 
 # We incorporate the CMake features provided by LLVM:
 list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
@@ -113,3 +126,4 @@ set(CMAKE_TEMP_LIBRARY_PATH "${PROJECT_BINARY_DIR}/lib")
 
 add_subdirectory(lib)
 add_subdirectory(tools)
+add_subdirectory(examples)

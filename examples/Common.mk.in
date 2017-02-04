@@ -1,0 +1,15 @@
+# Trailing spaces in these variables will cause problems
+#
+ROOT			= @CMAKE_SOURCE_DIR@
+ARCH			= x86_64
+LLVM_VERSION	= 3.8
+BITCODE_REPO	= $(ROOT)/examples/$(ARCH)
+LLVM_OBJ		= @LLVM_INSTALL_PREFIX@/bin
+NEEDLE_OBJ		= @CMAKE_BINARY_DIR@/bin
+NEEDLE_LIB		= @CMAKE_BINARY_DIR@/lib
+HELPER_LIB		= $(NEEDLE_LIB)/helpers.bc
+DATA			= $(ROOT)/examples/inputs
+
+APPS = 164.gzip 179.art 183.equake 401.bzip2 444.namd 456.hmmer 458.sjeng \
+	   470.lbm blackscholes bodytrack dwt53 fft-2d
+

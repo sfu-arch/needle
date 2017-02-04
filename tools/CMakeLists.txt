@@ -1,2 +1,2 @@
 add_subdirectory(epp)
-add_subdirectory(mwe)
+add_subdirectory(needle)
