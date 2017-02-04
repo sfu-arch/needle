@@ -1,3 +1,4 @@
+all: needle-run-path 
 
 setup: .setup.success
 .setup.success: 
@@ -9,7 +10,7 @@ setup: .setup.success
 	@echo SETUP
 
 epp-inst: setup .epp-inst.success
-.epp-inst.success:
+.epp-inst.success: setup
 	cd $(FUNCTION) && \
 	export PATH=$(LLVM_OBJ):$(PATH) && \
 		$(NEEDLE_OBJ)/epp $(LDFLAGS) -L$(NEEDLE_LIB) -epp-fn=$(FUNCTION) $(NAME).bc -o $(NAME)-epp $(LIBS) 2> ../epp-inst.log
@@ -23,7 +24,7 @@ ifdef PRERUN
 endif
 
 epp-run: epp-inst prerun .epp-run.success
-.epp-run.success:
+.epp-run.success: epp-inst prerun 
 	cd $(FUNCTION) && \
 	export LD_LIBRARY_PATH=$(NEEDLE_LIB):/usr/local/lib64 && \
 	./$(NAME)-epp $(RUNCMD) 2>&1 > ../epp-run.log
@@ -31,7 +32,7 @@ epp-run: epp-inst prerun .epp-run.success
 	@echo EPP-RUN
 
 epp-decode: epp-run .epp-decode.success
-.epp-decode.success:
+.epp-decode.success: epp-run 
 	cd $(FUNCTION) && \
 	export PATH=$(LLVM_OBJ):$(PATH) && \
     $(NEEDLE_OBJ)/epp -epp-fn=$(FUNCTION) $(NAME).bc -p=path-profile-results.txt 2> ../epp-decode.log
@@ -39,7 +40,7 @@ epp-decode: epp-run .epp-decode.success
 	@echo EPP-DECODE
 
 needle-path: epp-decode .needle-path.success
-.needle-path.success: 
+.needle-path.success: epp-decode 
 	cd $(FUNCTION) && \
 	export PATH=$(LLVM_OBJ):$(PATH) && \
     python $(ROOT)/examples/scripts/path.py epp-sequences.txt > paths.stats.txt && \
@@ -49,7 +50,7 @@ needle-path: epp-decode .needle-path.success
 	@echo NEEDLE-PATH
 
 needle-braid: epp-decode .needle-braid.success
-.needle-braid.success: 
+.needle-braid.success: epp-decode 
 	cd $(FUNCTION) && \
 	export PATH=$(LLVM_OBJ):$(PATH) && \
     python $(ROOT)/examples/scripts/braid.py epp-sequences.txt > braids.stats.txt && \

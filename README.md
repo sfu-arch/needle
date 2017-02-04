@@ -7,13 +7,13 @@
 4. Doxygen 1.7.6 (optional)
 
 ### Build 
-1. Clone this repository (or download)
+1. Clone this repository (or download)    
     `$ git clone git@github.com:sfu-arch/needle.git`
-2. Download LLVM  
+2. Download LLVM    
     `$ cd needle && ./get_llvm.sh && cd ..`
-3. Run cmake and make in a separate build folder 
+3. Run cmake and make in a separate build folder    
     `$ mkdir needle-build && cd needle-build && cmake ../needle -DLLVM_DIR=../needle/llvm-3.8/share/llvm/cmake && make -j 4`
-4. Run an example
+4. Run an example    
     `$ cd examples/workloads/164.gzip && make needle-run-path`
 
 
