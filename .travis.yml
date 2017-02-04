@@ -14,7 +14,7 @@ before_script:
 - export PATH=${PWD}/clang+llvm-3.8.1-x86_64-linux-gnu-ubuntu-14.04/bin:$PATH
 - cmake -DLLVM_DIR=clang+llvm-3.8.1-x86_64-linux-gnu-ubuntu-14.04/share/llvm/cmake/ .
 script:
-- make -j 8
+- make VERBOSE=1
 branches:
   only:
   - master
