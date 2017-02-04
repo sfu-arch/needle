@@ -1428,7 +1428,7 @@ void MicroWorkloadExtract::process(Function &F) {
     Data["num-extract-blocks"] = Blocks.size();
 
     /// Print out the source lines :
-    common::printPathSrc(Blocks);
+    //common::printPathSrc(Blocks);
     // errs() << "Blocks:\n";
     // Get the number of phi nodes originally
     uint32_t PhiBefore = 0;

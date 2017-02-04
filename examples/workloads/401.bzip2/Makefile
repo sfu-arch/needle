@@ -6,7 +6,7 @@ BC=$(BITCODE_REPO)/$(LLVM_VERSION)/$(SUITE)/$(NAME).bc
 CFLAGS=
 FUNCTION=BZ2_compressBlock
 LDFLAGS=
-RUNCMD="$(DATA)/$(NAME)/input.source 2"
+RUNCMD=$(DATA)/$(NAME)/input.source 2
 TESTCMD="$(DATA)/$(NAME)/dryer.jpg 2"
 PRERUN=
 

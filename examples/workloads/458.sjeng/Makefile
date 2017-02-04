@@ -6,7 +6,7 @@ BC=$(BITCODE_REPO)/$(LLVM_VERSION)/$(SUITE)/$(NAME).bc
 CFLAGS=
 FUNCTION=gen
 LDFLAGS=
-RUNCMD="$(DATA)/$(NAME)/ref.txt"
+RUNCMD=$(DATA)/$(NAME)/ref.txt
 TESTCMD="$(DATA)/$(NAME)/test.txt"
 PRERUN=
 
