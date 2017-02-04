@@ -7,7 +7,7 @@ CFLAGS=
 FUNCTION=fft
 LDFLAGS=
 RUNCMD=
-PRERUN=""
+PRERUN=
 LIBS="-lrt"
 
 include ../Rules.mk
