@@ -1,4 +1,4 @@
-#define DEBUG_TYPE "pasha_epp_tool"
+#define DEBUG_TYPE "needle_epp_tool"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Analysis/BasicAliasAnalysis.h"
@@ -60,15 +60,18 @@ using namespace epp;
 cl::opt<string> inPath(cl::Positional, cl::desc("<Module to analyze>"),
                        cl::value_desc("bitcode filename"), cl::Required);
 
+
+cl::OptionCategory NeedleOptionCategory("Needle Options","Options for the Needle Framework");
+
 cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
-                        cl::value_desc("filename"));
+                        cl::value_desc("filename"), cl::cat(NeedleOptionCategory));
 
 cl::opt<string> profile("p", cl::desc("Path to path profiling results"),
-                        cl::value_desc("filename"));
+                        cl::value_desc("filename"), cl::cat(NeedleOptionCategory));
 
-cl::opt<unsigned>
-    numberOfPaths("n", cl::desc("Number of most frequent paths to compute"),
-                  cl::value_desc("number"), cl::init(5));
+//cl::opt<unsigned>
+    //numberOfPaths("n", cl::desc("Number of most frequent paths to compute"),
+                  //cl::value_desc("number"), cl::init(5));
 
 // Determine optimization level.
 cl::opt<char> optLevel("O",
@@ -89,10 +92,10 @@ cl::list<string> libraries("l", cl::Prefix,
 
 cl::list<std::string> FunctionList("epp-fn", cl::value_desc("String"),
                                    cl::desc("List of functions to instrument"),
-                                   cl::OneOrMore, cl::CommaSeparated);
+                                   cl::OneOrMore, cl::CommaSeparated, cl::cat(NeedleOptionCategory));
 
 cl::opt<bool> printSrcLines("src", cl::desc("Print Source Line Numbers"),
-                            cl::init(false));
+                            cl::init(false), cl::cat(NeedleOptionCategory));
 
 bool isTargetFunction(const Function &f,
                       const cl::list<std::string> &FunctionList) {
