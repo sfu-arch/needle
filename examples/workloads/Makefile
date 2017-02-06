@@ -1,6 +1,6 @@
 include Common.mk
 
-TOPTARGETS := clean setup epp-inst epp-run epp-decode 
+TOPTARGETS := clean setup epp-inst epp-run epp-decode needle-path needle-braid needle-run-path needle-run-braid
 
 $(TOPTARGETS): $(APPS)
 
