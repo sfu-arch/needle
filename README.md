@@ -1,4 +1,3 @@
-
 ## NEEDLE: Leveraging Program Analysis to extract Accelerators from Whole Programs
 [![Build Status](https://travis-ci.org/sfu-arch/needle.svg?branch=master)](https://travis-ci.org/sfu-arch/needle)
 
@@ -22,20 +21,21 @@
 
 ### What's in the NEEDLE repository?
 
-* [doc](./doc)
-* [cmake](./cmake)
-* [examples](./examples)
-* [include](./include)
-* [support](./support)
-* [tools](./tools)
-* [lib](./lib)
-  * [epp](./lib/epp)
-  * [inliner](./lib/inliner)
-  * [namer](./lib/namer)
-  * [common](./lib/common)
-  * [bitcode](./lib/bitcode)
-  * [mw](./lib/mw)
+* [doc](./doc) -- Documentation for logging infrastructure and overlapping paths
+* [cmake](./cmake) -- Additional CMake modules
+* [examples](./examples) -- Sample workloads drawn from SPEC, PARSEC and PERFECT
+* [include](./include) -- Headers for the project
+* [support](./support) -- Tool to read dumped binary logs
+* [tools](./tools) -- EPP and NEEDLE tools
+* [lib](./lib) 
+  * [epp](./lib/epp) -- Module passes for efficient path profiling
+  * [inliner](./lib/inliner) -- Module passes for aggressive inlining 
+  * [namer](./lib/namer) -- Module pass for naming all LLVM Values
+  * [common](./lib/common) -- Common shared routines across libraries 
+  * [bitcode](./lib/bitcode) -- Runtime which implements software speculation support and logging
+  * [needle](./lib/needle) -- Needle framework libraries
 
+The NEEDLE repository is organized as an LLVM project. It generates two binaries as tools. They are `epp` and `needle`. The `epp` tool takes whole program bitcode as input and produces an instrumented binary. This binary is then executed to collect an aggregate path profile. The path profile is decoded to enumerate constituent basic blocks. The paths enumerated can now be analysed. Selected paths are specified by enumerating basic block sequences to the `needle` tool. The `needle` tool creates a new function containing only the specified blocks. Branches where only a single successor is included are converted to early exits from the function. The function can then be used as a template for different backends.
 
 ### Running the Examples
 
@@ -67,6 +67,8 @@ Each workload consists of a folder in the examples directory. This contains a Ma
 
 ### How can I use NEEDLE?
 
+You can use NEEDLE to collect the aggregate path profile of your workload (`epp-inst` -> `epp-run` -> `epp-decode`). Then analyse the path profile to select the basic blocks from one or more paths to target as the offload function. This serves as input to the next stage which creates the offload function (`needle-path` or `needle-braid`).
+
 #### How do I compile my workload into bitcode?
 
 Any C/C++ workload can be converted into a single monolithic bitcode file for analysis. Researchers have even compiled the FreeBSD kernel into bitcode. Please take a look at the Whole Program LLVM project.  
@@ -75,7 +77,11 @@ https://github.com/travitch/whole-program-llvm
 
 #### What is an offload function?
 
+An offload function is a created automatically by the `needle` tool by outlining selected basic blocks. For basic block where some successors are not outlined an early exit is generated. Software speculation support is added to ensure that program state is restored if an early return from the function occurs.
+
 #### How does NEEDLE implement software speculation?
+
+NEEDLE implements software speculation by maintaining an `undo log`. An `undo log` entry is created for every write to memory from the outlined region. NEEDLE instruments every write with a read to capture the original value present in the memory location. If speculation along the path or braid fails, the values recorded in the `undo log` are written back to memory. 
 
 #### What is a backend? Why do I need it?
 
@@ -87,12 +93,12 @@ A simulation oriented backend was used in Chainsaw (Sharifian et al. MICRO'16), 
 
 Dual licensed for industry and academia.   
 Industrial users can use this software under the MIT License.
-Academic users can use this software under the CRAPL License.
+Academic users can use this software under the [CRAPL License](http://matt.might.net/articles/crapl/).
 License text for both are provided in the repository.
 
 ### Authors
 
-Snehasish Kumar <ska124@sfu.ca>  
+Snehasish Kumar -- <ska124@sfu.ca>  
 
 ### Lexicon
 

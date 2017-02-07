@@ -1,5 +1,5 @@
 add_subdirectory(epp)
-add_subdirectory(mw)
+add_subdirectory(needle)
 add_subdirectory(inliner)
 add_subdirectory(namer)
 add_subdirectory(common)
