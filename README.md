@@ -22,6 +22,20 @@
 
 ### What's in the NEEDLE repository?
 
+* [doc](./doc)
+* [cmake](./cmake)
+* [examples](./examples)
+* [include](./include)
+* [support](./support)
+* [tools](./tools)
+* [lib](./lib)
+  * [epp](./lib/epp)
+  * [inliner](./lib/inliner)
+  * [namer](./lib/namer)
+  * [common](./lib/common)
+  * [bitcode](./lib/bitcode)
+  * [mw](./lib/mw)
+
 
 ### Running the Examples
 
