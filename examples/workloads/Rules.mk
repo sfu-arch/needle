@@ -2,7 +2,7 @@ all: needle-run-path
 
 setup: .setup.done
 .setup.done: 
-	@echo SETUP
+	@echo "SETUP"
 	@rm -rf $(FUNCTION)
 	@mkdir $(FUNCTION)
 	$(LLVM_OBJ)/llvm-link $(BC) $(BITCODE_REPO)/$(LLVM_VERSION)/lib/m.bc -o $(FUNCTION)/$(NAME).bc
@@ -11,7 +11,7 @@ setup: .setup.done
 
 epp-inst: .setup.done .epp-inst.done
 .epp-inst.done: .setup.done 
-	@echo EPP-INST
+	@echo "EPP-INST"
 	cd $(FUNCTION) && \
 	export PATH=$(LLVM_OBJ):$(PATH) && \
 		$(NEEDLE_OBJ)/epp $(LDFLAGS) -L$(NEEDLE_LIB) -epp-fn=$(FUNCTION) $(NAME).bc -o $(NAME)-epp $(LIBS) 2> ../epp-inst.log
@@ -27,7 +27,7 @@ endif
 
 epp-run: .epp-inst.done .epp-run.done .prerun.done
 .epp-run.done: .epp-inst.done .prerun.done
-	@echo EPP-RUN
+	@echo "EPP-RUN"
 	cd $(FUNCTION) && \
 	export LD_LIBRARY_PATH=$(NEEDLE_LIB):/usr/local/lib64 && \
 	./$(NAME)-epp $(RUNCMD) 2>&1 > ../epp-run.log
@@ -35,7 +35,7 @@ epp-run: .epp-inst.done .epp-run.done .prerun.done
 
 epp-decode: .epp-run.done .epp-decode.done
 .epp-decode.done: .epp-run.done 
-	@echo EPP-DECODE
+	@echo "EPP-DECODE"
 	cd $(FUNCTION) && \
 	export PATH=$(LLVM_OBJ):$(PATH) && \
     $(NEEDLE_OBJ)/epp -epp-fn=$(FUNCTION) $(NAME).bc -p=path-profile-results.txt 2> ../epp-decode.log
@@ -43,7 +43,7 @@ epp-decode: .epp-run.done .epp-decode.done
 
 needle-path: .epp-decode.done .needle-path.done
 .needle-path.done: .epp-decode.done 
-	@echo NEEDLE-PATH
+	@echo "NEEDLE-PATH"
 	cd $(FUNCTION) && \
 	export PATH=$(LLVM_OBJ):$(PATH) && \
     python $(ROOT)/examples/scripts/path.py epp-sequences.txt > paths.stats.txt && \
@@ -51,7 +51,7 @@ needle-path: .epp-decode.done .needle-path.done
 
 needle-braid: .epp-decode.done .needle-braid.done
 .needle-braid.done: .epp-decode.done 
-	@echo NEEDLE-BRAID
+	@echo "NEEDLE-BRAID"
 	cd $(FUNCTION) && \
 	export PATH=$(LLVM_OBJ):$(PATH) && \
     python $(ROOT)/examples/scripts/braid.py epp-sequences.txt > braids.stats.txt && \

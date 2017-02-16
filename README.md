@@ -1,6 +1,18 @@
 ## NEEDLE: Leveraging Program Analysis to extract Accelerators from Whole Programs
 [![Build Status](https://travis-ci.org/sfu-arch/needle.svg?branch=master)](https://travis-ci.org/sfu-arch/needle)
 
+### Citation
+
+```
+    @inproceedings{kumar2017needle,
+        title={NEEDLE: Leveraging Program Analysis to extract Accelerators from Whole Programs},
+        author={Kumar, Snehasish and Sumner, William and Srinivasan, Vijayalakshmi and Margerm, Steve and Shriraman, Arrvindh},
+        booktitle={High Performance Computer Architecture (HPCA2017), 2017 IEEE 23rd International Symposium on},
+        year={2017},
+        organization={IEEE}
+    }
+```
+
 
 ### Dependencies 
 
