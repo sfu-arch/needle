@@ -1,4 +1,4 @@
-#define DEBUG_TYPE "pasha_mwe"
+#define DEBUG_TYPE "needle"
 
 #include "MicroWorkloadExtract.h"
 #include "Common.h"
@@ -1080,9 +1080,10 @@ Function *MicroWorkloadExtract::extract(
     auto *StructPtrTy = PointerType::getUnqual(StructTy);
     ParamTy.push_back(StructPtrTy);
 
-    // TODO : Add two more params
+    // TODO: Add two more params
     // 1. pointer to char undo buffer.
     // 2. pointer to sizes buffer.
+    
 
     FunctionType *StFuncType = FunctionType::get(Int1Ty, ParamTy, false);
 

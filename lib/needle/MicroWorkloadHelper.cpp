@@ -1,4 +1,5 @@
-#define DEBUG_TYPE "pasha_mwe"
+#define DEBUG_TYPE "needle"
+
 #include "MicroWorkloadExtract.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseSet.h"
@@ -31,6 +32,7 @@ using namespace std;
 
 //extern cl::opt<bool> SimulateDFG;
 extern cl::opt<bool> DisableUndoLog;
+extern cl::opt<bool> OffloadDFG;
 
 static bool replaceGuardsHelper(Function &F, BasicBlock *RetBlock) {
     for (auto &BB : F) {
@@ -219,26 +221,26 @@ void MicroWorkloadHelper::replaceGuards(Function *Offload) {
         GuardFunc->eraseFromParent();
 }
 
-void writeIfConversionDot(Function &F) {
-    ofstream Out("ifc." + F.getName().str() + ".dot", ios::out);
-    Out << "digraph \"IFC Graph\" {\n";
-    for (auto &BB : F) {
-        Out << "Node" << &BB << " [shape=record, label=\"" << BB.getName().str()
-            << "\"";
+//void writeIfConversionDot(Function &F) {
+    //ofstream Out("ifc." + F.getName().str() + ".dot", ios::out);
+    //Out << "digraph \"IFC Graph\" {\n";
+    //for (auto &BB : F) {
+        //Out << "Node" << &BB << " [shape=record, label=\"" << BB.getName().str()
+            //<< "\"";
 
-        auto T = BB.getTerminator();
-        for (unsigned I = 0; I < T->getNumSuccessors(); I++) {
-            Out << ", S" << I << "=\"Node" << T->getSuccessor(I) << "\"";
-        }
-        Out << "];\n";
+        //auto T = BB.getTerminator();
+        //for (unsigned I = 0; I < T->getNumSuccessors(); I++) {
+            //Out << ", S" << I << "=\"Node" << T->getSuccessor(I) << "\"";
+        //}
+        //Out << "];\n";
 
-        for (unsigned I = 0; I < T->getNumSuccessors(); I++) {
-            Out << "Node" << &BB << "->Node" << T->getSuccessor(I) << ";\n";
-        }
-    }
-    Out << "}\n";
-    Out.close();
-}
+        //for (unsigned I = 0; I < T->getNumSuccessors(); I++) {
+            //Out << "Node" << &BB << "->Node" << T->getSuccessor(I) << ";\n";
+        //}
+    //}
+    //Out << "}\n";
+    //Out.close();
+//}
 
 bool MicroWorkloadHelper::runOnModule(Module &M) {
     // This needs to change if there are more
@@ -260,6 +262,11 @@ bool MicroWorkloadHelper::runOnModule(Module &M) {
             //common::printDFG(F);
             //common::instrumentDFG(F);
         //}
+        
+        if(OffloadDFG) {
+            common::labelUID(F);
+            common::printDFG(F);
+        }
 
         common::runStatsPasses(F);
         common::writeModule(F.getParent(), F.getName().str() + string(".ll"));
@@ -268,7 +275,6 @@ bool MicroWorkloadHelper::runOnModule(Module &M) {
         if(!DisableUndoLog) {
             addUndoLog(&F);
         }
-        // writeIfConversionDot(F);
     }
     return false;
 }
