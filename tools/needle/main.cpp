@@ -55,7 +55,7 @@ cl::opt<std::string>
               cl::Required, cl::cat(NeedleOptionCategory));
 
 cl::opt<ExtractType> ExtractAs(
-    cl::desc("Choose extract type, trace / chop"),
+    cl::desc("Choose extract type, path/braid"),
     cl::values(clEnumVal(ExtractType::path, "Extract as path"),
                //clEnumVal(ExtractType::slice, "Extract as slice (chop)"),
                clEnumVal(ExtractType::braid, "Extract as braid (merged paths)"),
@@ -106,12 +106,12 @@ cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
                                    //"instrumentation to binary for Pintool"),
                           //cl::value_desc("boolean"), cl::init(false));
 
-cl::opt<bool> ConvertGlobalsToPointers(
-    "global-to-pointer",
-    cl::desc("Convert globals in the extracted function to live in pointers"),
-    cl::value_desc("boolean"), cl::init(false), cl::cat(NeedleOptionCategory));
+//cl::opt<bool> ConvertGlobalsToPointers(
+    //"global-to-pointer",
+    //cl::desc("Convert globals in the extracted function to live in pointers"),
+    //cl::value_desc("boolean"), cl::init(false), cl::cat(NeedleOptionCategory));
 
-cl::opt<bool> DumpStats("dump-stats", cl::desc("Pasha stats"),
+cl::opt<bool> DumpStats("dump-stats", cl::desc("Needle Stats"),
                         cl::value_desc("boolean"), cl::init(false),
                         cl::cat(NeedleOptionCategory));
 

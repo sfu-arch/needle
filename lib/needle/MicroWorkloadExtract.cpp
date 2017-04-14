@@ -48,7 +48,7 @@ extern cl::opt<bool> EnableSimpleLogging;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
 extern cl::opt<bool> SimulateDFG;
-extern cl::opt<bool> ConvertGlobalsToPointers;
+//extern cl::opt<bool> ConvertGlobalsToPointers;
 extern cl::opt<ExtractType> ExtractAs;
 extern cl::opt<bool> DisableUndoLog;
 
@@ -308,7 +308,7 @@ void MicroWorkloadExtract::extractHelper(
         rewriteUses(Val, RewriteVal);
     }
 
-    if (ConvertGlobalsToPointers) {
+    //if (ConvertGlobalsToPointers) {
         ValueToValueMapTy GlobalPointer;
         for (auto G : Globals) {
             AI->setName(G->getName() + ".in");
@@ -336,7 +336,7 @@ void MicroWorkloadExtract::extractHelper(
                 }
             }
         }
-    }
+    //}
 
     //errs() << *StaticFunc << "\n";
 
@@ -1070,15 +1070,19 @@ Function *MicroWorkloadExtract::extract(
         ParamTy.push_back(Val->getType());
 
     /// Add Globals as arguments if param is set
-    if (ConvertGlobalsToPointers) {
+    //if (ConvertGlobalsToPointers) {
         for (auto &G : Globals) {
             ParamTy.push_back(G->getType());
         }
-    }
+    //}
 
     auto *StructTy    = getStructType(LiveOut, Mod);
     auto *StructPtrTy = PointerType::getUnqual(StructTy);
     ParamTy.push_back(StructPtrTy);
+
+    // TODO : Add two more params
+    // 1. pointer to char undo buffer.
+    // 2. pointer to sizes buffer.
 
     FunctionType *StFuncType = FunctionType::get(Int1Ty, ParamTy, false);
 
@@ -1196,11 +1200,11 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     /// function being offloaded. So this creates functionally incorrect
     /// code for the ARM hybrid where the FPGA fabric only references its own
     /// global block ram instead of the one shared with the CPU.
-    if (ConvertGlobalsToPointers) {
+    //if (ConvertGlobalsToPointers) {
         for (auto &G : Globals) {
             Params.push_back(G);
         }
-    }
+    //}
 
     Params.push_back(StPtr);
     /// Create the call to the offloaded function

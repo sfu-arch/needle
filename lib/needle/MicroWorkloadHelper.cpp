@@ -21,7 +21,6 @@
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Transforms/Utils/CodeExtractor.h"
-//#include <boost/algorithm/string.hpp>
 #include <cxxabi.h>
 
 #include "Common.h"
@@ -118,8 +117,9 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
                            Initializer, "__undo_log_" + Id);
     ULog->setAlignment(8);
 
+
     // Create a global with the store size of each undo slot
-    // Alternatively, smuggle the size in the address
+    // Alternatively, smuggle the size in the address (i.e the address being saved)
     ArrayType *SizeArrTy =
         ArrayType::get(IntegerType::get(Ctx, 32), Stores.size());
     auto &DL = Mod->getDataLayout();
@@ -138,6 +138,11 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
     auto *NumStores = ConstantInt::get(Int32Ty, Stores.size(), 0);
     new GlobalVariable(*Mod, Int32Ty, false, GlobalValue::ExternalLinkage,
                        NumStores, "__undo_num_stores_" + Id);
+
+    // TODO: Instead of using ULog directly over here, get the function parameter
+    // using the argument iterator and use it as the pointer to the structures. 
+    // At the call site we will wire in the appropriate globals to the appropriate
+    // function call parameters.
 
     // Instrument the stores :
     // a) Get the value from the load
@@ -172,9 +177,6 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
     }
 
     createUndoFunction(Mod);
-
-    // Create a function to flush the undo log buffer
-    // defineUndoFunction(Mod, ULog, Undo, Stores.size());
 
     // Add a buffer init memset into the offload function entry
     Type *Tys[]  = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx)};

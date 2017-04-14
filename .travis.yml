@@ -15,6 +15,7 @@ before_script:
 - cmake -DLLVM_DIR=clang+llvm-3.8.1-x86_64-linux-gnu-ubuntu-14.04/share/llvm/cmake/ .
 script:
 - make VERBOSE=1
+- cd examples/workloads/164.gzip && make needle-run-path
 branches:
   only:
   - master
