@@ -1376,7 +1376,6 @@ static void liveInAA(SetVector<Value *> &LiveIn, AAResults &AA,
 
     for (auto PB = Pointers.begin(), PE = Pointers.end(); PB != PE; PB++) {
         for (auto NP = next(PB); NP != PE; NP++) {
-
             switch (AA.alias(*PB, *NP)) {
             case AliasResult::MustAlias:
                 Data["num-must-alias"]++;
@@ -1394,6 +1393,7 @@ static void liveInAA(SetVector<Value *> &LiveIn, AAResults &AA,
         }
     }
 }
+
 
 void MicroWorkloadExtract::process(Function &F) {
 
@@ -1436,14 +1436,7 @@ void MicroWorkloadExtract::process(Function &F) {
                "Only 1 sequence for path");
         auto &P = Sequences.front();
         Id      = P.Id;
-        switch (ExtractAs) {
-        //case ExtractType::slice:
-            //Blocks = getSliceBlocks(P, BlockMap);
-            //break;
-        case ExtractType::path:
             Blocks = getTraceBlocks(P, BlockMap);
-            break;
-        }
     }
 
     Data["num-extract-blocks"] = Blocks.size();
@@ -1474,10 +1467,9 @@ void MicroWorkloadExtract::process(Function &F) {
     Function *Offload =
         extract(PostDomTree, Mod, BlockV, LiveIn, LiveOut, Globals, DT, LI, Id);
 
-    // auto &AA = getAnalysis<AAResultsWrapperPass>(F).getAAResults();
-    // liveInAA(LiveIn, AA, Data);
 
     runHelperPasses(Offload, Id);
+
     instrument(F, BlockV, Offload->getFunctionType(), LiveIn, LiveOut, Globals,
                DT, Id);
 
