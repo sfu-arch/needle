@@ -582,6 +582,8 @@ void MicroWorkloadExtract::extractHelper(
         }
     }
 
+    //errs() << *StaticFunc << "\n";
+
     // Get the struct pointer from the argument list,
     // assume that output struct is always last arg
     auto StructPtr = --StaticFunc->arg_end();
@@ -606,8 +608,6 @@ void MicroWorkloadExtract::extractHelper(
         SI->setMetadata("LO", N);
         OutIndex++;
     }
-
-
 }
 
 static pair<BasicBlock *, BasicBlock *> getReturnBlocks(Function *F) {
@@ -1076,14 +1076,23 @@ Function *MicroWorkloadExtract::extract(
         }
     //}
 
-    auto *StructTy    = getStructType(LiveOut, Mod);
-    auto *StructPtrTy = PointerType::getUnqual(StructTy);
-    ParamTy.push_back(StructPtrTy);
 
     // TODO: Add two more params
     // 1. pointer to char undo buffer.
-    // 2. pointer to sizes buffer.
+    // 2. pointer to int sizes buffer.
+   
+    ArrayType *LogArrTy =
+        ArrayType::get(IntegerType::get(Mod->getContext(), 8), 0);
     
+    ArrayType *SizeArrTy =
+        ArrayType::get(IntegerType::get(Mod->getContext(), 32), 0);
+    
+    ParamTy.push_back(PointerType::getUnqual(LogArrTy));
+    ParamTy.push_back(PointerType::getUnqual(SizeArrTy));
+
+    auto *StructTy    = getStructType(LiveOut, Mod);
+    auto *StructPtrTy = PointerType::getUnqual(StructTy);
+    ParamTy.push_back(StructPtrTy);
 
     FunctionType *StFuncType = FunctionType::get(Int1Ty, ParamTy, false);
 
@@ -1207,7 +1216,20 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         }
     //}
 
+    // FIXME : These need to become internal to each new module
+    ArrayType *LogArrTy   = ArrayType::get(IntegerType::get(Ctx, 8), 0);
+    ArrayType *SizesArrTy = ArrayType::get(IntegerType::get(Ctx, 32), 0);
+
+    auto *ULog     = Mod->getOrInsertGlobal("__undo_log_" + Id, LogArrTy);
+    auto *USizes   = Mod->getOrInsertGlobal("__undo_sizes_" + Id, SizesArrTy);
+    auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores_" + Id,
+                                            IntegerType::getInt32Ty(Ctx));
+
+    Params.push_back(ULog);
+    Params.push_back(USizes);
+
     Params.push_back(StPtr);
+
     /// Create the call to the offloaded function
     auto *CI = CallInst::Create(Offload, Params, "", StartBB);
     BranchInst::Create(Success, Fail, CI, StartBB);
@@ -1219,13 +1241,6 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     BranchInst::Create(Merge, LastBB);
 
     // Fail Path -- Begin
-    ArrayType *LogArrTy   = ArrayType::get(IntegerType::get(Ctx, 8), 0);
-    ArrayType *SizesArrTy = ArrayType::get(IntegerType::get(Ctx, 32), 0);
-    // FIXME : These need to become internal to each new module
-    auto *ULog     = Mod->getOrInsertGlobal("__undo_log_" + Id, LogArrTy);
-    auto *USizes   = Mod->getOrInsertGlobal("__undo_sizes_" + Id, SizesArrTy);
-    auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores_" + Id,
-                                            IntegerType::getInt32Ty(Ctx));
     Type *ParamTy[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx),
                        Type::getInt32PtrTy(Ctx)};
     auto *UndoTy = FunctionType::get(Type::getVoidTy(Ctx), ParamTy, false);
@@ -1236,6 +1251,7 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     auto *USizesGEP = GetElementPtrInst::CreateInBounds(USizes, Idx, "", Fail);
     auto *UNS = GetElementPtrInst::CreateInBounds(NumStore, {Zero}, "", Fail);
     auto *NSLoad = new LoadInst(UNS, "", Fail);
+
     // Fail -- Undo memory
     vector<Value *> Args = {UGEP, NSLoad, USizesGEP};
 

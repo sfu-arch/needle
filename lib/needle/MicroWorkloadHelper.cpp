@@ -114,11 +114,10 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
     ArrayType *LogArrTy =
         ArrayType::get(IntegerType::get(Ctx, 8), Stores.size() * 2 * 8);
     auto *Initializer = ConstantAggregateZero::get(LogArrTy);
-    GlobalVariable *ULog =
+    GlobalVariable *ULogGV =
         new GlobalVariable(*Mod, LogArrTy, false, GlobalValue::ExternalLinkage,
                            Initializer, "__undo_log_" + Id);
-    ULog->setAlignment(8);
-
+    ULogGV->setAlignment(8);
 
     // Create a global with the store size of each undo slot
     // Alternatively, smuggle the size in the address (i.e the address being saved)
@@ -141,10 +140,12 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
     new GlobalVariable(*Mod, Int32Ty, false, GlobalValue::ExternalLinkage,
                        NumStores, "__undo_num_stores_" + Id);
 
-    // TODO: Instead of using ULog directly over here, get the function parameter
+    // Instead of using ULog directly over here, get the function parameter
     // using the argument iterator and use it as the pointer to the structures. 
     // At the call site we will wire in the appropriate globals to the appropriate
-    // function call parameters.
+    // function call parameters. 
+    
+    auto ULog = &*------Offload->arg_end();  // Hehe
 
     // Instrument the stores :
     // a) Get the value from the load
