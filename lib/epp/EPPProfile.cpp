@@ -28,6 +28,7 @@ using namespace std;
 extern cl::list<std::string> FunctionList;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
+extern cl::opt<bool> wideCounter;
 
 bool EPPProfile::doInitialization(Module &m) {
     assert(FunctionList.size() == 1 &&
@@ -51,12 +52,27 @@ bool EPPProfile::runOnModule(Module &module) {
 
     auto *voidTy = Type::getVoidTy(Ctx);
 
-    auto *init =
-        module.getOrInsertFunction("PaThPrOfIlInG_init", voidTy, nullptr);
-    appendToGlobalCtors(module, llvm::cast<Function>(init), 0);
+    //auto *init =
+        //module.getOrInsertFunction("PaThPrOfIlInG_init", voidTy, nullptr);
+    //appendToGlobalCtors(module, llvm::cast<Function>(init), 0);
 
-    auto *printer =
-        module.getOrInsertFunction("PaThPrOfIlInG_save", voidTy, nullptr);
+    Function *printer = nullptr;
+    Function *init = nullptr;
+
+    if(wideCounter) {
+        printer =  cast<Function>
+            (module.getOrInsertFunction("PaThPrOfIlInG_save64", voidTy, nullptr));
+        init = cast<Function>
+            (module.getOrInsertFunction("PaThPrOfIlInG_init64", voidTy, nullptr));
+    }
+    else {
+        printer = cast<Function>
+            (module.getOrInsertFunction("PaThPrOfIlInG_save32", voidTy, nullptr));
+        init = cast<Function>
+            (module.getOrInsertFunction("PaThPrOfIlInG_init32", voidTy, nullptr));
+    }
+
+    appendToGlobalCtors(module, llvm::cast<Function>(init), 0);
     appendToGlobalDtors(module, llvm::cast<Function>(printer), 0);
 
     return true;
@@ -77,16 +93,26 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     auto &Ctx    = M->getContext();
     auto *voidTy = Type::getVoidTy(Ctx);
 
-#ifndef RT32
-    auto *CtrTy = Type::getInt128Ty(Ctx);
-    auto *Zap   = ConstantInt::getIntegerValue(CtrTy, APInt(128, 0, true));
-#else
-    auto *CtrTy = Type::getInt64Ty(Ctx);
-    auto *Zap   = ConstantInt::getIntegerValue(CtrTy, APInt(64, 0, true));
-#endif
+    IntegerType *CtrTy = nullptr;
+    Constant *Zap = nullptr;
+    
+    if(wideCounter) {
+        CtrTy = Type::getInt128Ty(Ctx);
+        Zap   = ConstantInt::getIntegerValue(CtrTy, APInt(128, 0, true));
+    } else {
+        CtrTy = Type::getInt64Ty(Ctx);
+        Zap   = ConstantInt::getIntegerValue(CtrTy, APInt(64, 0, true));
+    }
 
-    auto *logFun2 = M->getOrInsertFunction("PaThPrOfIlInG_logPath2", voidTy,
-                                           CtrTy, nullptr);
+    Function* logFun = nullptr;
+
+    if(wideCounter) {
+        logFun = cast<Function>(M->getOrInsertFunction("PaThPrOfIlInG_logPath64", voidTy,
+                                               CtrTy, nullptr));
+    } else {
+        logFun = cast<Function>(M->getOrInsertFunction("PaThPrOfIlInG_logPath32", voidTy,
+                                               CtrTy, nullptr));
+    }
 
     auto *Ctr = new AllocaInst(CtrTy, nullptr, "epp.ctr",
                                &*F.getEntryBlock().getFirstInsertionPt());
@@ -98,25 +124,28 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         if (Increment.ne(APInt(128, 0, true))) {
             DEBUG(errs() << "Inserting Increment " << Increment << " "
                          << addPos->getParent()->getName() << "\n");
+
             // Context Counter
             auto *LI = new LoadInst(Ctr, "ld.epp.ctr", addPos);
 
-#ifndef RT32
-            auto *CI = ConstantInt::getIntegerValue(CtrTy, Increment);
-#else
-            auto I64 = APInt(64, Increment.getLimitedValue(), true);
-            auto *CI = ConstantInt::getIntegerValue(CtrTy, I64);
-#endif
+            Constant *CI = nullptr;
+            if(wideCounter)
+                CI = ConstantInt::getIntegerValue(CtrTy, Increment);
+            else {
+                auto I64 = APInt(64, Increment.getLimitedValue(), true);
+                CI = ConstantInt::getIntegerValue(CtrTy, I64);
+            }
+
             auto *BI = BinaryOperator::CreateAdd(LI, CI);
             BI->insertAfter(LI);
             (new StoreInst(BI, Ctr))->insertAfter(BI);
         }
     };
 
-    auto InsertLogPath = [&logFun2, &Ctr, &CtrTy, &Zap](BasicBlock *BB) {
+    auto InsertLogPath = [&logFun, &Ctr, &CtrTy, &Zap](BasicBlock *BB) {
         auto logPos = BB->getTerminator();
         auto *LI    = new LoadInst(Ctr, "ld.epp.ctr", logPos);
-        auto *CI    = CallInst::Create(logFun2, {LI}, "");
+        auto *CI    = CallInst::Create(logFun, {LI}, "");
         CI->insertAfter(LI);
         (new StoreInst(Zap, Ctr))->insertAfter(CI);
     };

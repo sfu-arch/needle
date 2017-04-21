@@ -9,58 +9,57 @@ extern "C" {
 // e.g. EPP(entry) yields PaThPrOfIlInG_entry
 #define EPP(X) PaThPrOfIlInG_##X
 
-#ifndef RT32
+#ifdef __LP64__
 
-__int128 EPP(PathId);
-uint64_t EPP(Counter);
-FILE *fp = nullptr;
+__int128 EPP(PathId64);
+uint64_t EPP(Counter64);
+FILE *fp64 = nullptr;
 
-void EPP(init)() {
-    EPP(PathId) = -1;
-    fp          = fopen("path-profile-trace.txt", "w");
+void EPP(init64)() {
+    EPP(PathId64) = -1;
+    fp64          = fopen("path-profile-trace.txt", "w");
 }
 
-void EPP(logPath2)(__int128 Val) {
-    if (EPP(PathId) == -1) {
-        EPP(PathId)  = Val;
-        EPP(Counter) = 1;
-    } else if (EPP(PathId) == Val) {
-        EPP(Counter) += 1;
+void EPP(logPath64)(__int128 Val) {
+    if (EPP(PathId64) == -1) {
+        EPP(PathId64)  = Val;
+        EPP(Counter64) = 1;
+    } else if (EPP(PathId64) == Val) {
+        EPP(Counter64) += 1;
     } else {
-        uint64_t low  = (uint64_t)EPP(PathId);
-        uint64_t high = (EPP(PathId) >> 64);
-        fprintf(fp, "%016lx%016lx %lu\n", high, low, EPP(Counter));
-        EPP(PathId)  = Val;
-        EPP(Counter) = 1;
+        uint64_t low  = (uint64_t)EPP(PathId64);
+        uint64_t high = (EPP(PathId64) >> 64);
+        fprintf(fp64, "%016lx%016lx %lu\n", high, low, EPP(Counter64));
+        EPP(PathId64)  = Val;
+        EPP(Counter64) = 1;
     }
 }
 
-void EPP(save)() { fclose(fp); }
+void EPP(save)() { fclose(fp64); }
 
-#else
-
-int64_t EPP(PathId);
-uint64_t EPP(Counter);
-FILE *fp = nullptr;
-
-void EPP(init)() {
-    EPP(PathId) = -1;
-    fp          = fopen("path-profile-trace.txt", "w");
-}
-
-void EPP(logPath2)(uint64_t Val) {
-    if (EPP(PathId) == -1) {
-        EPP(PathId)  = Val;
-        EPP(Counter) = 1;
-    } else if (EPP(PathId) == Val) {
-        EPP(Counter) += 1;
-    } else {
-        fprintf(fp, "%016llx %llu\n", EPP(PathId), EPP(Counter));
-        EPP(PathId)  = Val;
-        EPP(Counter) = 1;
-    }
-}
-
-void EPP(save)() { fclose(fp); }
 #endif
+
+int64_t EPP(PathId32);
+uint64_t EPP(Counter32);
+FILE *fp32 = nullptr;
+
+void EPP(init32)() {
+    EPP(PathId32) = -1;
+    fp32          = fopen("path-profile-trace.txt", "w");
+}
+
+void EPP(logPath32)(uint64_t Val) {
+    if (EPP(PathId32) == -1) {
+        EPP(PathId32)  = Val;
+        EPP(Counter32) = 1;
+    } else if (EPP(PathId32) == Val) {
+        EPP(Counter32) += 1;
+    } else {
+        fprintf(fp32, "%016lx %lu\n", EPP(PathId32), EPP(Counter32));
+        EPP(PathId32)  = Val;
+        EPP(Counter32) = 1;
+    }
+}
+
+void EPP(save32)() { fclose(fp32); }
 }

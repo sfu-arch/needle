@@ -71,8 +71,8 @@ void __undo_mem(char *buffer, uint32_t num_locs, uint32_t *sizes) {
 #undef LIST
 
 void __mwe_dtor() {
-    printf("mwe-num-success %llu\n", __mwe_success_count);
-    printf("mwe-num-fail %llu\n", __mwe_fail_count);
+    printf("mwe-num-success %" PRIu64 "\n", __mwe_success_count);
+    printf("mwe-num-fail %" PRIu64 "\n", __mwe_fail_count);
 
     if(fp_in) {
         fclose(fp_in);
@@ -110,7 +110,7 @@ void __success() {
 }
 
 void __mlog(uint64_t addr, uint64_t val, uint64_t sz) {
-    fprintf(fp_mlog, "0x%016llx %llu %llu\n", addr, val, sz);
+    fprintf(fp_mlog, "0x%016" PRIx64 " %" PRIu64 " %" PRIu64 "\n", addr, val, sz);
 }
 
 void __fail() {

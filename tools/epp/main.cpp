@@ -69,9 +69,9 @@ cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
 cl::opt<string> profile("p", cl::desc("Path to path profiling results"),
                         cl::value_desc("filename"), cl::cat(NeedleOptionCategory));
 
-//cl::opt<unsigned>
-    //numberOfPaths("n", cl::desc("Number of most frequent paths to compute"),
-                  //cl::value_desc("number"), cl::init(5));
+cl::opt<bool> wideCounter("use-wide-counter", cl::desc("Use wide (128 bit) counters. Only available on 64 bit systems"), 
+                                cl::value_desc("boolean"), cl::init(false), cl::cat(NeedleOptionCategory));
+
 
 // Determine optimization level.
 cl::opt<char> optLevel("O",
@@ -86,9 +86,6 @@ cl::list<string> libPaths("L", cl::Prefix,
 cl::list<string> libraries("l", cl::Prefix,
                            cl::desc("Specify libraries to link to"),
                            cl::value_desc("library prefix"));
-
-// cl::list<string>
-// linkM("b", cl::desc("Bitcode modules to merge (comma separated list)"));
 
 cl::list<std::string> FunctionList("epp-fn", cl::value_desc("String"),
                                    cl::desc("List of functions to instrument"),
