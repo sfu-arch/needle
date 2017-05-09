@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <string.h>
 
 uint64_t __mwe_success_count  = 0;
 uint64_t __mwe_fail_count     = 0;
@@ -70,29 +71,37 @@ void __undo_mem(char *buffer, uint32_t num_locs, uint32_t *sizes) {
 
 #undef LIST
 
-void __mwe_dtor() {
-    printf("mwe-num-success %" PRIu64 "\n", __mwe_success_count);
-    printf("mwe-num-fail %" PRIu64 "\n", __mwe_fail_count);
+void __mwe_dtor(char **ulog) {
+
+    free(*ulog);
 
     if(fp_in) {
+        printf("mwe-num-success %" PRIu64 "\n", __mwe_success_count);
+        printf("mwe-num-fail %" PRIu64 "\n", __mwe_fail_count);
         fclose(fp_in);
         fclose(fp_out);
         fclose(fp_succ);
         fclose(fp_mlog);
     }
+
 }
 
-void __mwe_ctor() {
-    fp_in   = fopen("livein.dump.bin", "wb");
-    fp_out  = fopen("liveout.dump.bin", "wb");
-    fp_succ = fopen("succ.dump.bin", "wb");
-    fp_mlog = fopen("mlog.dump.txt", "w");
-    if (!(fp_in && fp_out && fp_succ && fp_mlog)) {
-        printf("MWE Ctor : Could not open file\n");
-        abort();
+void __mwe_ctor(char **ulog, size_t ulog_size, int log_enable) {
+
+    *ulog = (char *)malloc(ulog_size);
+
+    if(log_enable) {
+        fp_in   = fopen("livein.dump.bin", "wb");
+        fp_out  = fopen("liveout.dump.bin", "wb");
+        fp_succ = fopen("succ.dump.bin", "wb");
+        fp_mlog = fopen("mlog.dump.txt", "w");
+        if (!(fp_in && fp_out && fp_succ && fp_mlog)) {
+            printf("MWE Ctor : Could not open file\n");
+            abort();
+        }
+        __mwe_success_count = 0;
+        __mwe_fail_count    = 0;
     }
-    __mwe_success_count = 0;
-    __mwe_fail_count    = 0;
 }
 
 void __log_in(char *ptr, size_t sz) { fwrite(ptr, sizeof(char), sz, fp_in); }

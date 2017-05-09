@@ -31,7 +31,7 @@ using namespace mwe;
 using namespace std;
 
 //extern cl::opt<bool> SimulateDFG;
-extern cl::opt<bool> DisableUndoLog;
+//extern cl::opt<bool> DisableUndoLog;
 extern cl::opt<bool> OffloadDFG;
 
 static bool replaceGuardsHelper(Function &F, BasicBlock *RetBlock) {
@@ -273,9 +273,9 @@ bool MicroWorkloadHelper::runOnModule(Module &M) {
         common::writeModule(F.getParent(), F.getName().str() + string(".ll"));
         replaceGuards(&F);
 
-        if(!DisableUndoLog) {
+        //if(!DisableUndoLog) {
             addUndoLog(&F);
-        }
+        //}
     }
     return false;
 }

@@ -1079,16 +1079,16 @@ Function *MicroWorkloadExtract::extract(
 
     // TODO: Add two more params
     // 1. pointer to char undo buffer.
-    // 2. pointer to int sizes buffer.
+    // 2. pointer to int sizes buffer. -- Not required
    
     ArrayType *LogArrTy =
         ArrayType::get(IntegerType::get(Mod->getContext(), 8), 0);
     
-    ArrayType *SizeArrTy =
-        ArrayType::get(IntegerType::get(Mod->getContext(), 32), 0);
+    //ArrayType *SizeArrTy =
+        //ArrayType::get(IntegerType::get(Mod->getContext(), 32), 0);
     
     ParamTy.push_back(PointerType::getUnqual(LogArrTy));
-    ParamTy.push_back(PointerType::getUnqual(SizeArrTy));
+    //ParamTy.push_back(PointerType::getUnqual(SizeArrTy));
 
     auto *StructTy    = getStructType(LiveOut, Mod);
     auto *StructPtrTy = PointerType::getUnqual(StructTy);
@@ -1149,6 +1149,45 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
     }
     return RPath;
 }
+
+static void addCtorAndDtor(Module *Mod) {
+
+    auto &Ctx = Mod->getContext();
+    auto *VoidTy = Type::getVoidTy(Ctx);
+
+    auto *BufPtrTy = PointerType::getUnqual(Type::getInt8PtrTy(Ctx));
+    auto *PtrToUndoBuffer = Mod->getOrInsertGlobal("__undo_buffer", BufPtrTy);
+
+    Type *CtorParamTy[] = {BufPtrTy, Type::getInt32Ty(Ctx), Type::getInt1Ty(Ctx)};
+
+    auto *MweCtor = Mod->getOrInsertFunction("__mwe_ctor", 
+            FunctionType::get(VoidTy, CtorParamTy, false));
+
+    auto *CtorWrap = cast<Function>(
+        Mod->getOrInsertFunction("__ctor_wrap", VoidTy, nullptr));
+
+    auto *CtorBB = BasicBlock::Create(Ctx, "entry", CtorWrap);
+    IRBuilder<> Builder(CtorBB);
+    // TODO : The size of the undo buffer should be the max of all the
+    // undo buffers in the program.
+    vector<Value*> Args = {PtrToUndoBuffer, ConstantInt::get(Type::getInt32Ty(Ctx), 1024, false), ConstantInt::getFalse(Ctx)};
+    Builder.CreateCall(CtorWrap, Args);
+    Builder.CreateRet(nullptr);
+
+    appendToGlobalCtors(*Mod, llvm::cast<Function>(CtorWrap), 0);
+
+    auto *MweDtor = Mod->getOrInsertFunction("__mwe_dtor", 
+            FunctionType::get(VoidTy, {BufPtrTy}, false));
+    auto *DtorWrap = cast<Function>(
+        Mod->getOrInsertFunction("__dtor_wrap", VoidTy, nullptr));
+    auto *DtorBB = BasicBlock::Create(Ctx, "entry", DtorWrap);
+    IRBuilder<> Builder2(DtorBB);
+    Builder2.CreateCall(DtorWrap, {PtrToUndoBuffer});
+    Builder2.CreateRet(nullptr);
+    
+    appendToGlobalDtors(*Mod, cast<Function>(DtorWrap), 0);
+}
+
 
 static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                        FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
@@ -1216,17 +1255,26 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         }
     //}
 
-    // FIXME : These need to become internal to each new module
     ArrayType *LogArrTy   = ArrayType::get(IntegerType::get(Ctx, 8), 0);
     ArrayType *SizesArrTy = ArrayType::get(IntegerType::get(Ctx, 32), 0);
 
-    auto *ULog     = Mod->getOrInsertGlobal("__undo_log_" + Id, LogArrTy);
+    //auto *ULog     = Mod->getOrInsertGlobal("__undo_log_" + Id, LogArrTy);
     auto *USizes   = Mod->getOrInsertGlobal("__undo_sizes_" + Id, SizesArrTy);
     auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores_" + Id,
                                             IntegerType::getInt32Ty(Ctx));
 
+    // 1. Load the address from the undo log global pointer
+    // 2. Pass the address as parameter   
+    vector<Value *> Idx = {Zero, Zero};
+    
+    auto *BufPtrTy = PointerType::getUnqual(Type::getInt8PtrTy(Ctx));
+    auto *PtrToUndoBuffer = Mod->getOrInsertGlobal("__undo_buffer", BufPtrTy);
+    auto *UndoBuffAddr = new LoadInst(PtrToUndoBuffer, "", StartBB);
+    auto *ULog = GetElementPtrInst::Create(Type::getInt8PtrTy(Ctx), 
+            UndoBuffAddr, Idx, "", StartBB);
+
     Params.push_back(ULog);
-    Params.push_back(USizes);
+    //Params.push_back(USizes);
 
     Params.push_back(StPtr);
 
@@ -1246,7 +1294,6 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     auto *UndoTy = FunctionType::get(Type::getVoidTy(Ctx), ParamTy, false);
     auto *Undo   = Mod->getOrInsertFunction("__undo_mem", UndoTy);
 
-    vector<Value *> Idx = {Zero, Zero};
     auto *UGEP      = GetElementPtrInst::CreateInBounds(ULog, Idx, "", Fail);
     auto *USizesGEP = GetElementPtrInst::CreateInBounds(USizes, Idx, "", Fail);
     auto *UNS = GetElementPtrInst::CreateInBounds(NumStore, {Zero}, "", Fail);
@@ -1255,9 +1302,9 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     // Fail -- Undo memory
     vector<Value *> Args = {UGEP, NSLoad, USizesGEP};
 
-    if(!DisableUndoLog) {
+    //if(!DisableUndoLog) {
         CallInst::Create(Undo, Args, "", Fail);
-    }
+    //}
 
     if (EnableValueLogging || EnableMemoryLogging || EnableSimpleLogging) {
         CallInst::Create(Mod->getOrInsertFunction(
@@ -1326,27 +1373,13 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
             BasicBlock *UserBB    = UserInst->getParent();
             if (UserBB != Orig->getParent() &&
                 !(UserBB == Merge && isa<PHINode>(UserInst))) {
-                // errs() << "Rewriting : " << *UserInst << "\n";
                 SSAU.RewriteUseAfterInsertions(U);
-            } else {
-                // errs() << "Not Rewriting : " << *UserInst << "\n";
-            }
+            }         
         }
     }
     // Success Path - End
-
-    if (EnableValueLogging || EnableMemoryLogging) {
-        auto *MweDtor = Mod->getOrInsertFunction("__mwe_dtor", VoidTy, nullptr);
-        appendToGlobalDtors(*Mod, llvm::cast<Function>(MweDtor), 0);
-
-        auto *MweCtor = Mod->getOrInsertFunction("__mwe_ctor", VoidTy, nullptr);
-        appendToGlobalCtors(*Mod, llvm::cast<Function>(MweCtor), 0);
-    }
-
-    if (EnableSimpleLogging) {
-        auto *MweDtor = Mod->getOrInsertFunction("__mwe_dtor", VoidTy, nullptr);
-        appendToGlobalDtors(*Mod, llvm::cast<Function>(MweDtor), 0);
-    }
+    
+    addCtorAndDtor(Mod);
 }
 
 static void runHelperPasses(Function *Offload, string Id) {
