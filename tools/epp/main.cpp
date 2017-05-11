@@ -60,18 +60,21 @@ using namespace epp;
 cl::opt<string> inPath(cl::Positional, cl::desc("<Module to analyze>"),
                        cl::value_desc("bitcode filename"), cl::Required);
 
-
-cl::OptionCategory NeedleOptionCategory("Needle Options","Options for the Needle Framework");
+cl::OptionCategory NeedleOptionCategory("Needle Options",
+                                        "Options for the Needle Framework");
 
 cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
-                        cl::value_desc("filename"), cl::cat(NeedleOptionCategory));
+                        cl::value_desc("filename"),
+                        cl::cat(NeedleOptionCategory));
 
 cl::opt<string> profile("p", cl::desc("Path to path profiling results"),
-                        cl::value_desc("filename"), cl::cat(NeedleOptionCategory));
+                        cl::value_desc("filename"),
+                        cl::cat(NeedleOptionCategory));
 
-cl::opt<bool> wideCounter("use-wide-counter", cl::desc("Use wide (128 bit) counters. Only available on 64 bit systems"), 
-                                cl::value_desc("boolean"), cl::init(false), cl::cat(NeedleOptionCategory));
-
+cl::opt<bool> wideCounter(
+    "use-wide-counter",
+    cl::desc("Use wide (128 bit) counters. Only available on 64 bit systems"),
+    cl::value_desc("boolean"), cl::init(false), cl::cat(NeedleOptionCategory));
 
 // Determine optimization level.
 cl::opt<char> optLevel("O",
@@ -89,7 +92,8 @@ cl::list<string> libraries("l", cl::Prefix,
 
 cl::list<std::string> FunctionList("epp-fn", cl::value_desc("String"),
                                    cl::desc("List of functions to instrument"),
-                                   cl::OneOrMore, cl::CommaSeparated, cl::cat(NeedleOptionCategory));
+                                   cl::OneOrMore, cl::CommaSeparated,
+                                   cl::cat(NeedleOptionCategory));
 
 cl::opt<bool> printSrcLines("src", cl::desc("Print Source Line Numbers"),
                             cl::init(false), cl::cat(NeedleOptionCategory));

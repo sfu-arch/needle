@@ -48,7 +48,8 @@ using namespace mwe;
 
 // MWE-only options
 
-cl::OptionCategory NeedleOptionCategory("Needle Options","Options for the Needle Framework");
+cl::OptionCategory NeedleOptionCategory("Needle Options",
+                                        "Options for the Needle Framework");
 
 cl::opt<std::string>
     HelperLib("u", cl::desc("Path to the undo library bitcode module"),
@@ -57,7 +58,7 @@ cl::opt<std::string>
 cl::opt<ExtractType> ExtractAs(
     cl::desc("Choose extract type, path/braid"),
     cl::values(clEnumVal(ExtractType::path, "Extract as path"),
-               //clEnumVal(ExtractType::slice, "Extract as slice (chop)"),
+               // clEnumVal(ExtractType::slice, "Extract as slice (chop)"),
                clEnumVal(ExtractType::braid, "Extract as braid (merged paths)"),
                clEnumValEnd),
     cl::Required, cl::cat(NeedleOptionCategory));
@@ -101,27 +102,26 @@ cl::opt<string> outFile("o", cl::desc("Filename of the instrumented program"),
                         cl::value_desc("filename"), cl::Required,
                         cl::cat(NeedleOptionCategory));
 
-//cl::opt<bool> SimulateDFG("simdfg",
-                          //cl::desc("Generate dfg.*.dot for simulation, add "
-                                   //"instrumentation to binary for Pintool"),
-                          //cl::value_desc("boolean"), cl::init(false));
+// cl::opt<bool> SimulateDFG("simdfg",
+// cl::desc("Generate dfg.*.dot for simulation, add "
+//"instrumentation to binary for Pintool"),
+// cl::value_desc("boolean"), cl::init(false));
 
-//cl::opt<bool> ConvertGlobalsToPointers(
-    //"global-to-pointer",
-    //cl::desc("Convert globals in the extracted function to live in pointers"),
-    //cl::value_desc("boolean"), cl::init(false), cl::cat(NeedleOptionCategory));
+// cl::opt<bool> ConvertGlobalsToPointers(
+//"global-to-pointer",
+// cl::desc("Convert globals in the extracted function to live in pointers"),
+// cl::value_desc("boolean"), cl::init(false), cl::cat(NeedleOptionCategory));
 
 cl::opt<bool> DumpStats("dump-stats", cl::desc("Needle Stats"),
                         cl::value_desc("boolean"), cl::init(false),
                         cl::cat(NeedleOptionCategory));
 
-//cl::opt<bool> AAEdges("aa-edges", cl::desc("Generate edges to enforce AA"),
-                      //cl::value_desc("boolean"), cl::init(false));
+// cl::opt<bool> AAEdges("aa-edges", cl::desc("Generate edges to enforce AA"),
+// cl::value_desc("boolean"), cl::init(false));
 
-cl::opt<bool> EnableSimpleLogging("slog",
-                                 cl::desc("Enable simple logging (pass/fail) for extracted regions"),
-                                 cl::value_desc("boolean"), cl::init(false),
-                                 cl::cat(NeedleOptionCategory));
+cl::opt<bool> EnableSimpleLogging(
+    "slog", cl::desc("Enable simple logging (pass/fail) for extracted regions"),
+    cl::value_desc("boolean"), cl::init(false), cl::cat(NeedleOptionCategory));
 
 cl::opt<bool> EnableValueLogging("log",
                                  cl::desc("Enable value logging (In/Out)"),
@@ -132,11 +132,14 @@ cl::opt<bool> EnableMemoryLogging("mlog", cl::desc("Enable memory logging"),
                                   cl::value_desc("boolean"), cl::init(false),
                                   cl::cat(NeedleOptionCategory));
 
-cl::opt<bool> DisableUndoLog("ulog", cl::desc("Disable Undo Log"), cl::init(false), 
-        cl::Hidden, cl::cat(NeedleOptionCategory));
+cl::opt<bool> DisableUndoLog("ulog", cl::desc("Disable Undo Log"),
+                             cl::init(false), cl::Hidden,
+                             cl::cat(NeedleOptionCategory));
 
-cl::opt<bool> OffloadDFG("needle-dfg", cl::desc("Generate Dataflow Graph for Needle offload function"), 
-        cl::init(true), cl::cat(NeedleOptionCategory));
+cl::opt<bool>
+    OffloadDFG("needle-dfg",
+               cl::desc("Generate Dataflow Graph for Needle offload function"),
+               cl::init(true), cl::cat(NeedleOptionCategory));
 
 bool isTargetFunction(const Function &f,
                       const cl::list<std::string> &FunctionList) {
@@ -148,16 +151,16 @@ bool isTargetFunction(const Function &f,
     return false;
 }
 
-//void runAliasEdgeWriter(Module *M) {
-    //legacy::PassManager PM;
-    //PM.add(createBasicAAWrapperPass());
-    //PM.add(llvm::createTypeBasedAAWrapperPass());
-    //PM.add(createGlobalsAAWrapperPass());
-    //PM.add(createSCEVAAWrapperPass());
-    //PM.add(createScopedNoAliasAAWrapperPass());
-    //PM.add(createCFLAAWrapperPass());
-    //PM.add(new aew::AliasEdgeWriter());
-    //PM.run(*M);
+// void runAliasEdgeWriter(Module *M) {
+// legacy::PassManager PM;
+// PM.add(createBasicAAWrapperPass());
+// PM.add(llvm::createTypeBasedAAWrapperPass());
+// PM.add(createGlobalsAAWrapperPass());
+// PM.add(createSCEVAAWrapperPass());
+// PM.add(createScopedNoAliasAAWrapperPass());
+// PM.add(createCFLAAWrapperPass());
+// PM.add(new aew::AliasEdgeWriter());
+// PM.run(*M);
 //}
 
 int main(int argc, char **argv, const char **env) {
@@ -228,7 +231,6 @@ int main(int argc, char **argv, const char **env) {
         bool ret = L.linkInModule(move(M));
         assert(ret == false && "Error in linkInModule");
     }
-
 
     StripDebugInfo(*Composite.get());
 

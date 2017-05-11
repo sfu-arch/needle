@@ -108,7 +108,8 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
     Data["undo-log-size"] = Stores.size();
 
     // Create a global with the store size of each undo slot
-    // Alternatively, smuggle the size in the address (i.e the address being saved)
+    // Alternatively, smuggle the size in the address (i.e the address being
+    // saved)
     ArrayType *SizeArrTy =
         ArrayType::get(IntegerType::get(Ctx, 32), Stores.size());
     auto &DL = Mod->getDataLayout();
@@ -129,16 +130,16 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
                        NumStores, "__undo_num_stores_" + Id);
 
     // Instead of using ULog directly over here, get the function parameter
-    // using the argument iterator and use it as the pointer to the structures. 
-    // At the call site we will wire in the appropriate globals to the appropriate
-    // function call parameters. 
-    
-    auto UBuf = &*----Offload->arg_end();  
+    // using the argument iterator and use it as the pointer to the structures.
+    // At the call site we will wire in the appropriate globals to the
+    // appropriate
+    // function call parameters.
+
+    auto UBuf = &*----Offload->arg_end();
 
     // Instrument the stores :
     // a) Get the value from the load
     // b) Store the value+addr into the undo_log buffer
-    
 
     uint32_t LogIndex = 0;
 
@@ -151,8 +152,8 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
         auto *Pos = ConstantInt::get(Type::getInt32Ty(Ctx), LogIndex * 8);
         LogIndex++;
         GetElementPtrInst *AddrGEP = GetElementPtrInst::Create(
-            cast<PointerType>(UBuf->getType())->getElementType(), UBuf, {Pos}, "",
-            SI);
+            cast<PointerType>(UBuf->getType())->getElementType(), UBuf, {Pos},
+            "", SI);
         auto *AddrCast = new PtrToIntInst(Ptr, Int64Ty, "", SI);
         auto *AddrBI =
             new BitCastInst(AddrGEP, PointerType::getInt64PtrTy(Ctx), "", SI);
@@ -161,8 +162,8 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
         Pos = ConstantInt::get(Type::getInt32Ty(Ctx), LogIndex * 8);
         LogIndex++;
         GetElementPtrInst *ValGEP = GetElementPtrInst::Create(
-            cast<PointerType>(UBuf->getType())->getElementType(), UBuf, {Pos}, "",
-            SI);
+            cast<PointerType>(UBuf->getType())->getElementType(), UBuf, {Pos},
+            "", SI);
         auto *ValBI =
             new BitCastInst(ValGEP, PointerType::get(LI->getType(), 0), "", SI);
         new StoreInst(LI, ValBI, false, SI);
@@ -179,8 +180,8 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
         ConstantInt::get(Type::getInt32Ty(Ctx), Stores.size() * 2 * 8, false),
         ConstantInt::get(Type::getInt32Ty(Ctx), 8, false),
         ConstantInt::getFalse(Ctx)};
-    CallInst::Create(Memset, Params, "")->insertAfter(
-            &*Offload->getEntryBlock().getFirstInsertionPt());
+    CallInst::Create(Memset, Params, "")
+        ->insertAfter(&*Offload->getEntryBlock().getFirstInsertionPt());
 
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
 }
@@ -208,7 +209,6 @@ void MicroWorkloadHelper::replaceGuards(Function *Offload) {
         GuardFunc->eraseFromParent();
 }
 
-
 bool MicroWorkloadHelper::runOnModule(Module &M) {
     // This needs to change if there are more
     // than one offload function in the module we create.
@@ -221,8 +221,7 @@ bool MicroWorkloadHelper::runOnModule(Module &M) {
         // the get the id from the last part of the name. Use this id for the
         // undo log buffer and the num store variable.
 
-        
-        if(OffloadDFG) {
+        if (OffloadDFG) {
             common::labelUID(F);
             common::printDFG(F);
         }

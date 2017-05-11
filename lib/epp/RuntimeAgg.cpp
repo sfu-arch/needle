@@ -32,7 +32,6 @@ void EPP(save64)() {
 
 #endif
 
-
 std::map<uint64_t, uint64_t> EPP(path32);
 
 void EPP(init32)() {}
@@ -49,5 +48,4 @@ void EPP(save32)() {
     }
     fclose(fp);
 }
-
 }

@@ -48,7 +48,7 @@ extern cl::opt<bool> EnableSimpleLogging;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
 extern cl::opt<bool> SimulateDFG;
-//extern cl::opt<bool> ConvertGlobalsToPointers;
+// extern cl::opt<bool> ConvertGlobalsToPointers;
 extern cl::opt<ExtractType> ExtractAs;
 extern cl::opt<bool> DisableUndoLog;
 
@@ -138,7 +138,8 @@ static bool isBlockInPath(const string &S, const Path &P) {
 
 // static DenseSet<BasicBlock *>
 // bSliceDFS(BasicBlock *Begin,
-//           DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
+//           DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges)
+//           {
 //     DenseSet<BasicBlock *> BSlice;
 //     bSliceDFSHelper(Begin, BSlice, BackEdges);
 //     return BSlice;
@@ -165,15 +166,15 @@ fSliceDFS(BasicBlock *Begin,
 // static DenseSet<BasicBlock *> getSliceChop(
 //     BasicBlock *StartBB, BasicBlock *LastBB,
 //     DenseSet<pair<const BasicBlock *, const BasicBlock *>> &BackEdges) {
-// 
+//
 //     DenseSet<BasicBlock *> FSlice = fSliceDFS(StartBB, BackEdges);
 //     DenseSet<BasicBlock *> BSlice = bSliceDFS(LastBB, BackEdges);
-// 
+//
 //     DenseSet<BasicBlock *> Chop;
 //     for (auto &FB : FSlice)
 //         if (BSlice.count(FB))
 //             Chop.insert(FB);
-// 
+//
 //     return Chop;
 // }
 
@@ -312,32 +313,30 @@ void MicroWorkloadExtract::extractHelper(
     for (auto G : Globals) {
         AI->setName(G->getName() + ".in");
         Value *RewriteVal = &*AI++;
-        GlobalPointer[G] = RewriteVal;
+        GlobalPointer[G]  = RewriteVal;
     }
 
-    function<void(Value*, Value*)> rewriteHelper;
+    function<void(Value *, Value *)> rewriteHelper;
     rewriteHelper = [&GlobalPointer, &rewriteHelper](Value *I, Value *P) {
-        if(auto *CE = dyn_cast<ConstantExpr>(I)) {
-            for(auto OI = CE->op_begin(), OE = CE->op_end(); OI != OE; OI++) {
-                rewriteHelper(*OI, CE);        
+        if (auto *CE = dyn_cast<ConstantExpr>(I)) {
+            for (auto OI = CE->op_begin(), OE = CE->op_end(); OI != OE; OI++) {
+                rewriteHelper(*OI, CE);
             }
-        }
-        else if(auto *GV = dyn_cast<GlobalVariable>(I)){
+        } else if (auto *GV = dyn_cast<GlobalVariable>(I)) {
             dyn_cast<User>(P)->replaceUsesOfWith(GV, GlobalPointer[GV]);
         }
 
     };
 
-    for(auto &BB : *StaticFunc) {
-        for(auto &I : BB ) {
-            for(auto OI = I.op_begin(), OE = I.op_end(); OI != OE; OI++) {
+    for (auto &BB : *StaticFunc) {
+        for (auto &I : BB) {
+            for (auto OI = I.op_begin(), OE = I.op_end(); OI != OE; OI++) {
                 rewriteHelper(*OI, &I);
             }
         }
     }
 
-    //errs() << *StaticFunc << "\n";
-
+    // errs() << *StaticFunc << "\n";
 
     for (auto IT = RevTopoChop.rbegin(), IE = RevTopoChop.rend(); IT != IE;
          IT++) {
@@ -580,7 +579,6 @@ void MicroWorkloadExtract::extractHelper(
         }
     }
 
-
     // Get the struct pointer from the argument list,
     // assume that output struct is always last arg
     auto StructPtr = --StaticFunc->arg_end();
@@ -728,7 +726,7 @@ void MicroWorkloadExtract::valueLogging(Function *F) {
                      RetTrue->getTerminator());
     if (RetFalse)
         CallInst::Create(SuccDumpFn, {ConstantInt::getFalse(Ctx)}, "",
-                     RetFalse->getTerminator());
+                         RetFalse->getTerminator());
 
     /// Generate a C declaration for the struct being dumped
     auto getFormat = [](uint64_t Sz) -> string {
@@ -794,11 +792,12 @@ void MicroWorkloadExtract::memoryLogging(Function *F) {
     /// Add the instrumentation for each non-aliasing load
     auto *Mod     = F->getParent();
     auto &Ctx     = Mod->getContext();
-    auto &DL = Mod->getDataLayout();
+    auto &DL      = Mod->getDataLayout();
     auto *VoidTy  = Type::getVoidTy(Ctx);
     auto *Int64Ty = Type::getInt64Ty(Ctx);
     auto *MLogFn  = Mod->getOrInsertFunction(
-        "__mlog", FunctionType::get(VoidTy, {Int64Ty, Int64Ty, Int64Ty}, false));
+        "__mlog",
+        FunctionType::get(VoidTy, {Int64Ty, Int64Ty, Int64Ty}, false));
 
     for (auto &LI : Loads) {
         auto *Ptr      = LI->getPointerOperand();
@@ -806,16 +805,16 @@ void MicroWorkloadExtract::memoryLogging(Function *F) {
         errs() << *LI << "\n";
 
         // TODO : Needs testing for FP stuff > 64 bits?
-        uint64_t Sz = DL.getTypeSizeInBits(LI->getType()); 
-        if(Sz > 64) {
+        uint64_t Sz = DL.getTypeSizeInBits(LI->getType());
+        if (Sz > 64) {
             report_fatal_error("Cannot convert larger than 64 bits");
         }
 
-        auto CastOp = CastInst::getCastOpcode(LI, false, Int64Ty, false); 
+        auto CastOp   = CastInst::getCastOpcode(LI, false, Int64Ty, false);
         auto *ValCast = CastInst::Create(CastOp, LI, Int64Ty);
 
         ConstantInt *Size = ConstantInt::get(Int64Ty, Sz, false);
-        Value *Params[] = {AddrCast, ValCast, Size};
+        Value *Params[]   = {AddrCast, ValCast, Size};
         AddrCast->insertAfter(LI);
         ValCast->insertAfter(AddrCast);
         CallInst::Create(MLogFn, Params)->insertAfter(ValCast);
@@ -1069,10 +1068,8 @@ Function *MicroWorkloadExtract::extract(
         ParamTy.push_back(G->getType());
     }
 
-
-   
     auto *BufPtrTy = Type::getInt8PtrTy(Mod->getContext());
-    
+
     ParamTy.push_back(BufPtrTy);
 
     auto *StructTy    = getStructType(LiveOut, Mod);
@@ -1081,7 +1078,7 @@ Function *MicroWorkloadExtract::extract(
 
     FunctionType *StFuncType = FunctionType::get(Int1Ty, ParamTy, false);
 
-    //errs() << "Func: " << *StFuncType << "\n";
+    // errs() << "Func: " << *StFuncType << "\n";
 
     // Create the trace function
     Function *StaticFunc = Function::Create(
@@ -1125,70 +1122,31 @@ getTraceBlocks(Path &P, map<string, BasicBlock *> &BlockMap) {
     return RPath;
 }
 
-static uint32_t
-getMaxUndoSize(Module *Mod) {
-    uint32_t R = 0;
-    for(auto GI = Mod->global_begin(), GE = Mod->global_end(); 
-            GI != GE; GI++) {
-        if(GI->getName().startswith("__undo_num_stores_")) {
-            auto A = GI->getUniqueInteger();
-            uint32_t Val = A.getLimitedValue();
-            R = Val > R ? Val : R;
+static uint32_t getMaxUndoSize(SmallVector<Module *, 4> Modules) {
+    uint32_t R = 64;
+
+    for (auto Mod : Modules) {
+        for (auto GI = Mod->global_begin(), GE = Mod->global_end(); GI != GE;
+             GI++) {
+            if (GI->getName().startswith("__undo_num_stores_")) {
+                auto A = cast<ConstantInt>(
+                             cast<GlobalVariable>(GI)->getInitializer())
+                             ->getValue();
+                uint32_t Val = A.getLimitedValue();
+                R            = Val > R ? Val : R;
+            }
         }
     }
 
     return R;
 }
 
-static void addCtorAndDtor(Module *Mod) {
-
-    auto &Ctx = Mod->getContext();
-    auto *VoidTy = Type::getVoidTy(Ctx);
-
-    auto *BufPtrTy = PointerType::getUnqual(Type::getInt8PtrTy(Ctx));
-    auto *PtrToUndoBuffer = Mod->getNamedGlobal("__undo_buffer");
-
-    Type *CtorParamTy[] = {BufPtrTy, Type::getInt32Ty(Ctx), Type::getInt1Ty(Ctx)};
-
-    auto *MweCtor = Mod->getOrInsertFunction("__mwe_ctor", 
-            FunctionType::get(VoidTy, CtorParamTy, false));
-
-    auto *CtorWrap = cast<Function>(
-        Mod->getOrInsertFunction("__ctor_wrap", VoidTy, nullptr));
-
-    auto *CtorBB = BasicBlock::Create(Ctx, "entry", CtorWrap);
-    IRBuilder<> Builder(CtorBB);
-
-    auto maxUndoSize = getMaxUndoSize(Mod);
-
-    auto *Cond = EnableValueLogging || EnableMemoryLogging || EnableSimpleLogging ? 
-        ConstantInt::getTrue(Ctx) : ConstantInt::getFalse(Ctx);
-
-    vector<Value*> Args = {PtrToUndoBuffer, ConstantInt::get(Type::getInt32Ty(Ctx), maxUndoSize, false), Cond};
-    Builder.CreateCall(MweCtor, Args);
-    Builder.CreateRet(nullptr);
-
-    appendToGlobalCtors(*Mod, llvm::cast<Function>(CtorWrap), 0);
-
-    auto *MweDtor = Mod->getOrInsertFunction("__mwe_dtor", 
-            FunctionType::get(VoidTy, {BufPtrTy}, false));
-    auto *DtorWrap = cast<Function>(
-        Mod->getOrInsertFunction("__dtor_wrap", VoidTy, nullptr));
-    auto *DtorBB = BasicBlock::Create(Ctx, "entry", DtorWrap);
-    IRBuilder<> Builder2(DtorBB);
-    Builder2.CreateCall(MweDtor, {PtrToUndoBuffer});
-    Builder2.CreateRet(nullptr);
-    
-    appendToGlobalDtors(*Mod, cast<Function>(DtorWrap), 0);
-}
-
-
 static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
-                       Function *Offload, SetVector<Value *> &LiveIn,
+                       FunctionType *OffloadTy, SetVector<Value *> &LiveIn,
                        SetVector<Value *> &LiveOut, SetVector<Value *> &Globals,
                        DominatorTree *DT, string &Id) {
 
-    auto *OffloadTy = Offload->getFunctionType();
+    // auto *OffloadTy = Offload->getFunctionType();
 
     if (Blocks.size() == 1) {
         auto *B = Blocks.front();
@@ -1216,8 +1174,8 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     auto *Fail        = BasicBlock::Create(Ctx, "offload.false", &F);
     auto *Merge       = BasicBlock::Create(Ctx, "mergeblock", &F, nullptr);
     ConstantInt *Zero = ConstantInt::get(Int64Ty, 0);
-    //auto *Offload     = cast<Function>(
-        //Mod->getOrInsertFunction("__offload_func_" + Id, OffloadTy));
+    auto *Offload     = cast<Function>(
+        Mod->getOrInsertFunction("__offload_func_" + Id, OffloadTy));
 
     // Split the start basic block so that we can insert a call to the offloaded
     // function while maintaining the rest of the original CFG.
@@ -1246,44 +1204,44 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     /// function being offloaded. So this creates functionally incorrect
     /// code for the ARM hybrid where the FPGA fabric only references its own
     /// global block ram instead of the one shared with the CPU.
-    //if (ConvertGlobalsToPointers) {
-        for (auto &G : Globals) {
-            Params.push_back(G);
-        }
+    // if (ConvertGlobalsToPointers) {
+    for (auto &G : Globals) {
+        Params.push_back(G);
+    }
     //}
 
     auto *BufTy = Type::getInt8PtrTy(Ctx);
-    //ArrayType *LogArrTy   = ArrayType::get(IntegerType::get(Ctx, 8), 0);
+    // ArrayType *LogArrTy   = ArrayType::get(IntegerType::get(Ctx, 8), 0);
     ArrayType *SizesArrTy = ArrayType::get(IntegerType::get(Ctx, 32), 0);
 
-    //auto *ULog     = Mod->getOrInsertGlobal("__undo_log_" + Id, LogArrTy);
+    // auto *ULog     = Mod->getOrInsertGlobal("__undo_log_" + Id, LogArrTy);
     auto *USizes   = Mod->getOrInsertGlobal("__undo_sizes_" + Id, SizesArrTy);
     auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores_" + Id,
                                             IntegerType::getInt32Ty(Ctx));
 
     // 1. Load the address from the undo log global pointer
-    // 2. Pass the address as parameter   
+    // 2. Pass the address as parameter
     vector<Value *> Idx = {Zero, Zero};
 
     GlobalVariable *ULogPtrGV =
         new GlobalVariable(*Mod, BufTy, false, GlobalValue::InternalLinkage,
                            ConstantInt::getNullValue(BufTy), "__undo_buffer");
 
-    //auto *PtrToUndoBuffer = Mod->getOrInsertGlobal("__undo_buffer", BufPtrTy);
+    // auto *PtrToUndoBuffer = Mod->getOrInsertGlobal("__undo_buffer",
+    // BufPtrTy);
 
     auto *ULog = new LoadInst(ULogPtrGV, "", StartBB);
-    //auto *ULogSt = new LoadInst(ULog, "", StartBB);
+    // auto *ULogSt = new LoadInst(ULog, "", StartBB);
 
-    //auto *ULog = GetElementPtrInst::Create(Type::getInt8PtrTy(Ctx), 
-            //UndoBuffAddr, {Zero}, "", StartBB);
+    // auto *ULog = GetElementPtrInst::Create(Type::getInt8PtrTy(Ctx),
+    // UndoBuffAddr, {Zero}, "", StartBB);
 
     Params.push_back(ULog);
-    //Params.push_back(USizes);
+    // Params.push_back(USizes);
 
     Params.push_back(StPtr);
 
-
-    errs() << "Function: " << *Offload << "\n";
+    // errs() << "Function: " << *Offload << "\n";
 
     /// Create the call to the offloaded function
     auto *CI = CallInst::Create(Offload, Params, "", StartBB);
@@ -1301,7 +1259,8 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     auto *UndoTy = FunctionType::get(Type::getVoidTy(Ctx), ParamTy, false);
     auto *Undo   = Mod->getOrInsertFunction("__undo_mem", UndoTy);
 
-    //auto *UGEP      = GetElementPtrInst::Create(BufPtrTy, ULog, Idx, "", Fail);
+    // auto *UGEP      = GetElementPtrInst::Create(BufPtrTy, ULog, Idx, "",
+    // Fail);
     auto *USizesGEP = GetElementPtrInst::CreateInBounds(USizes, Idx, "", Fail);
     auto *UNS = GetElementPtrInst::CreateInBounds(NumStore, {Zero}, "", Fail);
     auto *NSLoad = new LoadInst(UNS, "", Fail);
@@ -1379,14 +1338,13 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
             if (UserBB != Orig->getParent() &&
                 !(UserBB == Merge && isa<PHINode>(UserInst))) {
                 SSAU.RewriteUseAfterInsertions(U);
-            }         
+            }
         }
     }
     // Success Path - End
-    
-    addCtorAndDtor(Mod);
 
-    common::writeModule(Mod, string("single.") + F.getName().str() + string(".ll"));
+    common::writeModule(Mod,
+                        string("single.") + F.getName().str() + string(".ll"));
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
 }
 
@@ -1402,39 +1360,87 @@ static void runHelperPasses(Function *Offload, string Id) {
     PM.run(*Offload->getParent());
 }
 
-static void liveInAA(SetVector<Value *> &LiveIn, AAResults &AA,
-                     map<std::string, uint64_t> &Data) {
-    SmallVector<Value *, 8> Pointers;
-    copy_if(LiveIn.begin(), LiveIn.end(), back_inserter(Pointers),
-            [](Value *V) { return V->getType()->isPointerTy(); });
+// static void liveInAA(SetVector<Value *> &LiveIn, AAResults &AA,
+// map<std::string, uint64_t> &Data) {
+// SmallVector<Value *, 8> Pointers;
+// copy_if(LiveIn.begin(), LiveIn.end(), back_inserter(Pointers),
+//[](Value *V) { return V->getType()->isPointerTy(); });
 
-    Data["num-livein-ptr"]    = Pointers.size();
-    Data["num-must-alias"]    = 0;
-    Data["num-no-alias"]      = 0;
-    Data["num-may-alias"]     = 0;
-    Data["num-partial-alias"] = 0;
-    Data["num-ld-ld-pairs"]   = 0;
+// Data["num-livein-ptr"]    = Pointers.size();
+// Data["num-must-alias"]    = 0;
+// Data["num-no-alias"]      = 0;
+// Data["num-may-alias"]     = 0;
+// Data["num-partial-alias"] = 0;
+// Data["num-ld-ld-pairs"]   = 0;
 
-    for (auto PB = Pointers.begin(), PE = Pointers.end(); PB != PE; PB++) {
-        for (auto NP = next(PB); NP != PE; NP++) {
-            switch (AA.alias(*PB, *NP)) {
-            case AliasResult::MustAlias:
-                Data["num-must-alias"]++;
-                break;
-            case AliasResult::NoAlias:
-                Data["num-no-alias"]++;
-                break;
-            case AliasResult::MayAlias:
-                Data["num-may-alias"]++;
-                break;
-            case AliasResult::PartialAlias:
-                Data["num-partial-alias"]++;
-                break;
-            }
-        }
-    }
+// for (auto PB = Pointers.begin(), PE = Pointers.end(); PB != PE; PB++) {
+// for (auto NP = next(PB); NP != PE; NP++) {
+// switch (AA.alias(*PB, *NP)) {
+// case AliasResult::MustAlias:
+// Data["num-must-alias"]++;
+// break;
+// case AliasResult::NoAlias:
+// Data["num-no-alias"]++;
+// break;
+// case AliasResult::MayAlias:
+// Data["num-may-alias"]++;
+// break;
+// case AliasResult::PartialAlias:
+// Data["num-partial-alias"]++;
+// break;
+//}
+//}
+//}
+//}
+
+static void addCtorAndDtor(Module *Mod,
+                           SmallVector<Module *, 4> OffloadModules) {
+
+    auto &Ctx    = Mod->getContext();
+    auto *VoidTy = Type::getVoidTy(Ctx);
+
+    auto *BufPtrTy        = PointerType::getUnqual(Type::getInt8PtrTy(Ctx));
+    auto *PtrToUndoBuffer = Mod->getNamedGlobal("__undo_buffer");
+
+    Type *CtorParamTy[] = {BufPtrTy, Type::getInt32Ty(Ctx),
+                           Type::getInt1Ty(Ctx)};
+
+    auto *MweCtor = Mod->getOrInsertFunction(
+        "__mwe_ctor", FunctionType::get(VoidTy, CtorParamTy, false));
+
+    auto *CtorWrap = cast<Function>(
+        Mod->getOrInsertFunction("__ctor_wrap", VoidTy, nullptr));
+
+    auto *CtorBB = BasicBlock::Create(Ctx, "entry", CtorWrap);
+    IRBuilder<> Builder(CtorBB);
+
+    auto maxUndoSize = getMaxUndoSize(OffloadModules);
+
+    auto *Cond =
+        EnableValueLogging || EnableMemoryLogging || EnableSimpleLogging
+            ? ConstantInt::getTrue(Ctx)
+            : ConstantInt::getFalse(Ctx);
+
+    vector<Value *> Args = {
+        PtrToUndoBuffer,
+        ConstantInt::get(Type::getInt32Ty(Ctx), maxUndoSize * 2 * 8, false),
+        Cond};
+    Builder.CreateCall(MweCtor, Args);
+    Builder.CreateRet(nullptr);
+
+    appendToGlobalCtors(*Mod, llvm::cast<Function>(CtorWrap), 0);
+
+    auto *MweDtor = Mod->getOrInsertFunction(
+        "__mwe_dtor", FunctionType::get(VoidTy, {BufPtrTy}, false));
+    auto *DtorWrap = cast<Function>(
+        Mod->getOrInsertFunction("__dtor_wrap", VoidTy, nullptr));
+    auto *DtorBB = BasicBlock::Create(Ctx, "entry", DtorWrap);
+    IRBuilder<> Builder2(DtorBB);
+    Builder2.CreateCall(MweDtor, {PtrToUndoBuffer});
+    Builder2.CreateRet(nullptr);
+
+    appendToGlobalDtors(*Mod, cast<Function>(DtorWrap), 0);
 }
-
 
 void MicroWorkloadExtract::process(Function &F) {
 
@@ -1464,27 +1470,26 @@ void MicroWorkloadExtract::process(Function &F) {
                 End == BlockMap[P.Seq.back()]) {
                 for (auto BN : P.Seq)
                     MergeBlocks.insert(BlockMap[BN]);
-            } 
+            }
         }
 
         auto BackEdges = common::getBackEdges(Start);
         Blocks         = getTopoChop(MergeBlocks, Start, BackEdges);
 
     } else {
-        assert(Sequences.size() == 1 &&
-               "Only 1 sequence for path");
+        assert(Sequences.size() == 1 && "Only 1 sequence for path");
         auto &P = Sequences.front();
         Id      = P.Id;
-            Blocks = getTraceBlocks(P, BlockMap);
+        Blocks  = getTraceBlocks(P, BlockMap);
     }
 
     Data["num-extract-blocks"] = Blocks.size();
 
     /// Print out the source lines :
-    //common::printPathSrc(Blocks);
+    // common::printPathSrc(Blocks);
     // errs() << "Blocks:\n";
     // Get the number of phi nodes originally
-    
+
     uint32_t PhiBefore = 0;
     for (auto &BB : Blocks) {
         // errs() << BB->getName() << " ";
@@ -1507,11 +1512,12 @@ void MicroWorkloadExtract::process(Function &F) {
     Function *Offload =
         extract(PostDomTree, Mod, BlockV, LiveIn, LiveOut, Globals, DT, LI, Id);
 
-
     runHelperPasses(Offload, Id);
 
-    instrument(F, BlockV, Offload, LiveIn, LiveOut, Globals,
+    instrument(F, BlockV, Offload->getFunctionType(), LiveIn, LiveOut, Globals,
                DT, Id);
+
+    addCtorAndDtor(F.getParent(), {Offload->getParent()});
 
     // Get the number of phi nodes after
     uint32_t PhiAfter = 0;

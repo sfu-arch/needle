@@ -52,24 +52,23 @@ bool EPPProfile::runOnModule(Module &module) {
 
     auto *voidTy = Type::getVoidTy(Ctx);
 
-    //auto *init =
-        //module.getOrInsertFunction("PaThPrOfIlInG_init", voidTy, nullptr);
-    //appendToGlobalCtors(module, llvm::cast<Function>(init), 0);
+    // auto *init =
+    // module.getOrInsertFunction("PaThPrOfIlInG_init", voidTy, nullptr);
+    // appendToGlobalCtors(module, llvm::cast<Function>(init), 0);
 
     Function *printer = nullptr;
-    Function *init = nullptr;
+    Function *init    = nullptr;
 
-    if(wideCounter) {
-        printer =  cast<Function>
-            (module.getOrInsertFunction("PaThPrOfIlInG_save64", voidTy, nullptr));
-        init = cast<Function>
-            (module.getOrInsertFunction("PaThPrOfIlInG_init64", voidTy, nullptr));
-    }
-    else {
-        printer = cast<Function>
-            (module.getOrInsertFunction("PaThPrOfIlInG_save32", voidTy, nullptr));
-        init = cast<Function>
-            (module.getOrInsertFunction("PaThPrOfIlInG_init32", voidTy, nullptr));
+    if (wideCounter) {
+        printer = cast<Function>(module.getOrInsertFunction(
+            "PaThPrOfIlInG_save64", voidTy, nullptr));
+        init = cast<Function>(module.getOrInsertFunction("PaThPrOfIlInG_init64",
+                                                         voidTy, nullptr));
+    } else {
+        printer = cast<Function>(module.getOrInsertFunction(
+            "PaThPrOfIlInG_save32", voidTy, nullptr));
+        init = cast<Function>(module.getOrInsertFunction("PaThPrOfIlInG_init32",
+                                                         voidTy, nullptr));
     }
 
     appendToGlobalCtors(module, llvm::cast<Function>(init), 0);
@@ -94,9 +93,9 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
     auto *voidTy = Type::getVoidTy(Ctx);
 
     IntegerType *CtrTy = nullptr;
-    Constant *Zap = nullptr;
-    
-    if(wideCounter) {
+    Constant *Zap      = nullptr;
+
+    if (wideCounter) {
         CtrTy = Type::getInt128Ty(Ctx);
         Zap   = ConstantInt::getIntegerValue(CtrTy, APInt(128, 0, true));
     } else {
@@ -104,14 +103,14 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
         Zap   = ConstantInt::getIntegerValue(CtrTy, APInt(64, 0, true));
     }
 
-    Function* logFun = nullptr;
+    Function *logFun = nullptr;
 
-    if(wideCounter) {
-        logFun = cast<Function>(M->getOrInsertFunction("PaThPrOfIlInG_logPath64", voidTy,
-                                               CtrTy, nullptr));
+    if (wideCounter) {
+        logFun = cast<Function>(M->getOrInsertFunction(
+            "PaThPrOfIlInG_logPath64", voidTy, CtrTy, nullptr));
     } else {
-        logFun = cast<Function>(M->getOrInsertFunction("PaThPrOfIlInG_logPath32", voidTy,
-                                               CtrTy, nullptr));
+        logFun = cast<Function>(M->getOrInsertFunction(
+            "PaThPrOfIlInG_logPath32", voidTy, CtrTy, nullptr));
     }
 
     auto *Ctr = new AllocaInst(CtrTy, nullptr, "epp.ctr",
@@ -129,11 +128,11 @@ void EPPProfile::instrument(Function &F, EPPEncode &Enc) {
             auto *LI = new LoadInst(Ctr, "ld.epp.ctr", addPos);
 
             Constant *CI = nullptr;
-            if(wideCounter)
+            if (wideCounter)
                 CI = ConstantInt::getIntegerValue(CtrTy, Increment);
             else {
                 auto I64 = APInt(64, Increment.getLimitedValue(), true);
-                CI = ConstantInt::getIntegerValue(CtrTy, I64);
+                CI       = ConstantInt::getIntegerValue(CtrTy, I64);
             }
 
             auto *BI = BinaryOperator::CreateAdd(LI, CI);
