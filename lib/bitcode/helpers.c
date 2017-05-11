@@ -88,7 +88,7 @@ void __mwe_dtor(char **ulog) {
 
 void __mwe_ctor(char **ulog, size_t ulog_size, int log_enable) {
 
-    *ulog = (char *)malloc(ulog_size);
+    *ulog = (char *)calloc(sizeof(char), ulog_size);
 
     if(log_enable) {
         fp_in   = fopen("livein.dump.bin", "wb");

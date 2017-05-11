@@ -30,8 +30,6 @@ using namespace llvm;
 using namespace mwe;
 using namespace std;
 
-//extern cl::opt<bool> SimulateDFG;
-//extern cl::opt<bool> DisableUndoLog;
 extern cl::opt<bool> OffloadDFG;
 
 static bool replaceGuardsHelper(Function &F, BasicBlock *RetBlock) {
@@ -92,7 +90,6 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
         return false;
     };
 
-    // for (auto &BB : TopoBlocks) {
     ReversePostOrderTraversal<Function *> RPOT(Offload);
     for (auto BB = RPOT.begin(); BB != RPOT.end(); ++BB) {
         for (auto &I : **BB) {
@@ -109,15 +106,6 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
     }
 
     Data["undo-log-size"] = Stores.size();
-
-    // Create the Undo Log as a global variable
-    ArrayType *LogArrTy =
-        ArrayType::get(IntegerType::get(Ctx, 8), Stores.size() * 2 * 8);
-    auto *Initializer = ConstantAggregateZero::get(LogArrTy);
-    GlobalVariable *ULogGV =
-        new GlobalVariable(*Mod, LogArrTy, false, GlobalValue::ExternalLinkage,
-                           Initializer, "__undo_log_" + Id);
-    ULogGV->setAlignment(8);
 
     // Create a global with the store size of each undo slot
     // Alternatively, smuggle the size in the address (i.e the address being saved)
@@ -145,34 +133,35 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
     // At the call site we will wire in the appropriate globals to the appropriate
     // function call parameters. 
     
-    auto ULog = &*------Offload->arg_end();  // Hehe
+    auto UBuf = &*----Offload->arg_end();  
 
     // Instrument the stores :
     // a) Get the value from the load
     // b) Store the value+addr into the undo_log buffer
+    
 
     uint32_t LogIndex = 0;
-    Value *Idx[2];
-    Idx[0]        = ConstantInt::getNullValue(Type::getInt32Ty(Ctx));
+
     auto Int8Ty   = Type::getInt8Ty(Ctx);
     auto *Int64Ty = Type::getInt64Ty(Ctx);
     for (auto &SI : Stores) {
         auto *Ptr = SI->getPointerOperand();
         auto *LI  = new LoadInst(Ptr, "undo", SI);
-        Idx[1]    = ConstantInt::get(Type::getInt32Ty(Ctx), LogIndex * 8);
+
+        auto *Pos = ConstantInt::get(Type::getInt32Ty(Ctx), LogIndex * 8);
         LogIndex++;
         GetElementPtrInst *AddrGEP = GetElementPtrInst::Create(
-            cast<PointerType>(ULog->getType())->getElementType(), ULog, Idx, "",
+            cast<PointerType>(UBuf->getType())->getElementType(), UBuf, {Pos}, "",
             SI);
         auto *AddrCast = new PtrToIntInst(Ptr, Int64Ty, "", SI);
         auto *AddrBI =
             new BitCastInst(AddrGEP, PointerType::getInt64PtrTy(Ctx), "", SI);
         new StoreInst(AddrCast, AddrBI, SI);
 
-        Idx[1] = ConstantInt::get(Type::getInt32Ty(Ctx), LogIndex * 8);
+        Pos = ConstantInt::get(Type::getInt32Ty(Ctx), LogIndex * 8);
         LogIndex++;
         GetElementPtrInst *ValGEP = GetElementPtrInst::Create(
-            cast<PointerType>(ULog->getType())->getElementType(), ULog, Idx, "",
+            cast<PointerType>(UBuf->getType())->getElementType(), UBuf, {Pos}, "",
             SI);
         auto *ValBI =
             new BitCastInst(ValGEP, PointerType::get(LI->getType(), 0), "", SI);
@@ -184,17 +173,14 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
     // Add a buffer init memset into the offload function entry
     Type *Tys[]  = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx)};
     auto *Memset = Intrinsic::getDeclaration(Mod, Intrinsic::memset, Tys);
-    auto *Zero   = ConstantInt::get(Int64Ty, 0, false);
-    Idx[1]       = Zero;
-    auto *UGEP   = GetElementPtrInst::Create(
-        cast<PointerType>(ULog->getType())->getElementType(), ULog, Idx, "",
-        Offload->getEntryBlock().getFirstNonPHI());
+
     Value *Params[] = {
-        UGEP, ConstantInt::get(Int8Ty, 0, false),
+        UBuf, ConstantInt::get(Int8Ty, 0, false),
         ConstantInt::get(Type::getInt32Ty(Ctx), Stores.size() * 2 * 8, false),
         ConstantInt::get(Type::getInt32Ty(Ctx), 8, false),
         ConstantInt::getFalse(Ctx)};
-    CallInst::Create(Memset, Params, "")->insertAfter(UGEP);
+    CallInst::Create(Memset, Params, "")->insertAfter(
+            &*Offload->getEntryBlock().getFirstInsertionPt());
 
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
 }
@@ -222,26 +208,6 @@ void MicroWorkloadHelper::replaceGuards(Function *Offload) {
         GuardFunc->eraseFromParent();
 }
 
-//void writeIfConversionDot(Function &F) {
-    //ofstream Out("ifc." + F.getName().str() + ".dot", ios::out);
-    //Out << "digraph \"IFC Graph\" {\n";
-    //for (auto &BB : F) {
-        //Out << "Node" << &BB << " [shape=record, label=\"" << BB.getName().str()
-            //<< "\"";
-
-        //auto T = BB.getTerminator();
-        //for (unsigned I = 0; I < T->getNumSuccessors(); I++) {
-            //Out << ", S" << I << "=\"Node" << T->getSuccessor(I) << "\"";
-        //}
-        //Out << "];\n";
-
-        //for (unsigned I = 0; I < T->getNumSuccessors(); I++) {
-            //Out << "Node" << &BB << "->Node" << T->getSuccessor(I) << ";\n";
-        //}
-    //}
-    //Out << "}\n";
-    //Out.close();
-//}
 
 bool MicroWorkloadHelper::runOnModule(Module &M) {
     // This needs to change if there are more
@@ -255,14 +221,6 @@ bool MicroWorkloadHelper::runOnModule(Module &M) {
         // the get the id from the last part of the name. Use this id for the
         // undo log buffer and the num store variable.
 
-        //if (SimulateDFG) {
-            //common::labelUID(F);
-            //common::writeModule(F.getParent(), string("single.") +
-                                                   //F.getName().str() +
-                                                   //string(".ll"));
-            //common::printDFG(F);
-            //common::instrumentDFG(F);
-        //}
         
         if(OffloadDFG) {
             common::labelUID(F);
@@ -272,10 +230,7 @@ bool MicroWorkloadHelper::runOnModule(Module &M) {
         common::runStatsPasses(F);
         common::writeModule(F.getParent(), F.getName().str() + string(".ll"));
         replaceGuards(&F);
-
-        //if(!DisableUndoLog) {
-            addUndoLog(&F);
-        //}
+        addUndoLog(&F);
     }
     return false;
 }
