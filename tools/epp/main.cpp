@@ -119,7 +119,7 @@ static void instrumentModule(Module &module, std::string outFile,
     pm.add(createTypeBasedAAWrapperPass());
     pm.add(new llvm::CallGraphWrapperPass());
     pm.add(new epp::PeruseInliner());
-    pm.add(new pasha::Simplify(FunctionList[0]));
+    pm.add(new needle::Simplify(FunctionList[0]));
     pm.add(new epp::Namer());
     pm.add(new LoopInfoWrapperPass());
     pm.add(new epp::EPPProfile());
@@ -163,7 +163,7 @@ static void interpretResults(Module &module, std::string filename) {
     pm.add(createTypeBasedAAWrapperPass());
     pm.add(new llvm::CallGraphWrapperPass());
     pm.add(new epp::PeruseInliner());
-    pm.add(new pasha::Simplify(FunctionList[0]));
+    pm.add(new needle::Simplify(FunctionList[0]));
     pm.add(new epp::Namer());
     pm.add(new LoopInfoWrapperPass());
     pm.add(new epp::EPPDecode());

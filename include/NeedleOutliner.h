@@ -1,5 +1,5 @@
-#ifndef MICROWORKLOAD_H
-#define MICROWORKLOAD_H
+#ifndef NEEDLEOUTLINER_H
+#define NEEDLEOUTLINER_H
 
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -34,7 +34,7 @@
 #include <sstream>
 #include <string>
 
-namespace mwe {
+namespace needle {
 
 // R=Real F=Fake I=In O=Out
 enum PathType { RIRO, FIRO, RIFO, FIFO };
@@ -48,7 +48,7 @@ struct Path {
     std::set<llvm::Value *> LiveIn, LiveOut, MemIn, MemOut, Globals;
 };
 
-struct MicroWorkloadExtract : public llvm::ModulePass {
+struct NeedleOutliner : public llvm::ModulePass {
     static char ID;
     std::string SeqFilePath;
     std::vector<Path> Sequences;
@@ -59,7 +59,7 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
 
     std::map<std::string, uint64_t> Data;
 
-    MicroWorkloadExtract(std::string S,
+    NeedleOutliner(std::string S,
                          std::vector<std::unique_ptr<llvm::Module>> &EM);
 
     virtual bool runOnModule(llvm::Module &M) override;
@@ -95,11 +95,11 @@ struct MicroWorkloadExtract : public llvm::ModulePass {
     }
 };
 
-struct MicroWorkloadHelper : public llvm::ModulePass {
+struct NeedleHelper : public llvm::ModulePass {
     static char ID;
     std::string Id;
     std::map<std::string, uint64_t> Data;
-    MicroWorkloadHelper(std::string I) : llvm::ModulePass(ID), Id(I) {}
+    NeedleHelper(std::string I) : llvm::ModulePass(ID), Id(I) {}
 
     virtual bool runOnModule(llvm::Module &) override;
     virtual bool doInitialization(llvm::Module &M) override;

@@ -13,7 +13,7 @@
 
 using namespace llvm;
 
-namespace pasha {
+namespace needle {
 
 struct Simplify : public ModulePass {
     static char ID;

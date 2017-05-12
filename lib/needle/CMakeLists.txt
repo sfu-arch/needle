@@ -1,5 +1,5 @@
-add_library(mw
-    MicroWorkloadExtract.cpp
-    MicroWorkloadHelper.cpp
+add_library(ndl
+    NeedleOutliner.cpp
+    NeedleHelper.cpp
     )
 

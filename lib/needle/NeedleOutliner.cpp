@@ -1,6 +1,6 @@
 #define DEBUG_TYPE "needle"
 
-#include "MicroWorkloadExtract.h"
+#include "NeedleOutliner.h"
 #include "Common.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseSet.h"
@@ -36,7 +36,7 @@
 #include <deque>
 
 using namespace llvm;
-using namespace mwe;
+using namespace needle;
 using namespace std;
 
 extern cl::list<std::string> FunctionList;
@@ -52,7 +52,7 @@ extern cl::opt<bool> SimulateDFG;
 extern cl::opt<ExtractType> ExtractAs;
 extern cl::opt<bool> DisableUndoLog;
 
-void MicroWorkloadExtract::readSequences() {
+void NeedleOutliner::readSequences() {
     ifstream SeqFile(SeqFilePath.c_str(), ios::in);
     assert(SeqFile.is_open() && "Could not open file");
     string Line;
@@ -87,8 +87,8 @@ void MicroWorkloadExtract::readSequences() {
     SeqFile.close();
 }
 
-MicroWorkloadExtract::MicroWorkloadExtract(
-    std::string S, std::vector<std::unique_ptr<llvm::Module>> &EM)
+NeedleOutliner::NeedleOutliner(std::string S,
+                               std::vector<std::unique_ptr<llvm::Module>> &EM)
     : llvm::ModulePass(ID), SeqFilePath(S), ExtractedModules(EM) {
     switch (ExtractAs) {
     case path:
@@ -100,13 +100,13 @@ MicroWorkloadExtract::MicroWorkloadExtract(
     }
 }
 
-bool MicroWorkloadExtract::doInitialization(Module &M) {
+bool NeedleOutliner::doInitialization(Module &M) {
     readSequences();
     Data.clear();
     return false;
 }
 
-bool MicroWorkloadExtract::doFinalization(Module &M) {
+bool NeedleOutliner::doFinalization(Module &M) {
     ofstream Outfile("mwe.stats.txt", ios::out);
     for (auto KV : Data) {
         Outfile << KV.first << " " << KV.second << "\n";
@@ -206,10 +206,12 @@ static void liveInHelper(SmallVector<BasicBlock *, 16> &RevTopoChop,
     // in the trace.
 }
 
-void MicroWorkloadExtract::extractHelper(
-    Function *StaticFunc, Function *GuardFunc, SetVector<Value *> &LiveIn,
-    SetVector<Value *> &LiveOut, SetVector<Value *> &Globals,
-    SmallVector<BasicBlock *, 16> &RevTopoChop, LLVMContext &Context) {
+void NeedleOutliner::extractHelper(Function *StaticFunc, Function *GuardFunc,
+                                   SetVector<Value *> &LiveIn,
+                                   SetVector<Value *> &LiveOut,
+                                   SetVector<Value *> &Globals,
+                                   SmallVector<BasicBlock *, 16> &RevTopoChop,
+                                   LLVMContext &Context) {
 
     ValueToValueMapTy VMap;
     auto BackEdges = common::getBackEdges(RevTopoChop.back());
@@ -635,7 +637,7 @@ static pair<BasicBlock *, BasicBlock *> getReturnBlocks(Function *F) {
 ///     a. success : actual values are dumped out
 ///     b. fail : partial
 /// This approach is to ensure consistency per invocation
-void MicroWorkloadExtract::valueLogging(Function *F) {
+void NeedleOutliner::valueLogging(Function *F) {
     if (!EnableValueLogging)
         return;
 
@@ -764,7 +766,7 @@ void MicroWorkloadExtract::valueLogging(Function *F) {
 /// of values instrumented alias analysis is used to only grab the
 /// first unique memory location. (address, value) tuples are written
 /// out to a file.
-void MicroWorkloadExtract::memoryLogging(Function *F) {
+void NeedleOutliner::memoryLogging(Function *F) {
     if (!EnableMemoryLogging)
         return;
 
@@ -881,11 +883,12 @@ static bool verifyChop(const SmallVector<BasicBlock *, 16> Chop) {
     return true;
 }
 
-Function *MicroWorkloadExtract::extract(
-    PostDominatorTree *PDT, Module *Mod,
-    SmallVector<BasicBlock *, 16> &RevTopoChop, SetVector<Value *> &LiveIn,
-    SetVector<Value *> &LiveOut, SetVector<Value *> &Globals, DominatorTree *DT,
-    LoopInfo *LI, string Id) {
+Function *NeedleOutliner::extract(PostDominatorTree *PDT, Module *Mod,
+                                  SmallVector<BasicBlock *, 16> &RevTopoChop,
+                                  SetVector<Value *> &LiveIn,
+                                  SetVector<Value *> &LiveOut,
+                                  SetVector<Value *> &Globals,
+                                  DominatorTree *DT, LoopInfo *LI, string Id) {
 
     auto *StartBB = RevTopoChop.back();
     auto *LastBB  = RevTopoChop.front();
@@ -1356,7 +1359,7 @@ static void runHelperPasses(Function *Offload, string Id) {
     PM.add(createSCEVAAWrapperPass());
     PM.add(createScopedNoAliasAAWrapperPass());
     PM.add(createCFLAAWrapperPass());
-    PM.add(new MicroWorkloadHelper(Id));
+    PM.add(new NeedleHelper(Id));
     PM.run(*Offload->getParent());
 }
 
@@ -1442,7 +1445,7 @@ static void addCtorAndDtor(Module *Mod,
     appendToGlobalDtors(*Mod, cast<Function>(DtorWrap), 0);
 }
 
-void MicroWorkloadExtract::process(Function &F) {
+void NeedleOutliner::process(Function &F) {
 
     common::runStatsPasses(F);
 
@@ -1539,7 +1542,7 @@ void MicroWorkloadExtract::process(Function &F) {
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
 }
 
-bool MicroWorkloadExtract::runOnModule(Module &M) {
+bool NeedleOutliner::runOnModule(Module &M) {
 
     for (auto &F : M)
         if (isTargetFunction(F, FunctionList))
@@ -1548,4 +1551,4 @@ bool MicroWorkloadExtract::runOnModule(Module &M) {
     return false;
 }
 
-char MicroWorkloadExtract::ID = 0;
+char NeedleOutliner::ID = 0;

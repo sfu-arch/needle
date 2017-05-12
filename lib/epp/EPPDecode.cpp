@@ -222,4 +222,4 @@ EPPDecode::decode(Function &F, APInt pathID, EPPEncode &Enc) {
 }
 
 char EPPDecode::ID = 0;
-static RegisterPass<EPPDecode> X("", "PASHA - EPPDecode");
+// static RegisterPass<EPPDecode> X("", "EPPDecode");

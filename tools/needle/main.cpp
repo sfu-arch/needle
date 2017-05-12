@@ -37,14 +37,14 @@
 #include "AllInliner.h"
 #include "AllInliner.h"
 #include "Common.h"
-#include "MicroWorkloadExtract.h"
 #include "Namer.h"
+#include "NeedleOutliner.h"
 #include "Simplify.h"
 
 using namespace std;
 using namespace llvm;
 using namespace llvm::sys;
-using namespace mwe;
+using namespace needle;
 
 // MWE-only options
 
@@ -205,12 +205,12 @@ int main(int argc, char **argv, const char **env) {
     pm.add(createCFLAAWrapperPass());
     pm.add(new llvm::CallGraphWrapperPass());
     pm.add(new epp::PeruseInliner());
-    pm.add(new pasha::Simplify(FunctionList[0]));
+    pm.add(new needle::Simplify(FunctionList[0]));
     pm.add(new epp::Namer());
     pm.add(new LoopInfoWrapperPass());
     pm.add(llvm::createPostDomTree());
     pm.add(new DominatorTreeWrapperPass());
-    pm.add(new mwe::MicroWorkloadExtract(SeqFilePath, ExtractedModules));
+    pm.add(new needle::NeedleOutliner(SeqFilePath, ExtractedModules));
     pm.add(createVerifierPass());
     pm.run(*module);
 

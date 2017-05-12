@@ -1,4 +1,4 @@
-#define DEBUG_TYPE "pasha_common"
+#define DEBUG_TYPE "needle_common"
 #include "Common.h"
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/ADT/SmallString.h"

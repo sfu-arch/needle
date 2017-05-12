@@ -1,4 +1,4 @@
-#define DEBUG_TYPE "pasha_inliner"
+#define DEBUG_TYPE "needle_inliner"
 #include "AllInliner.h"
 
 using namespace llvm;
@@ -38,4 +38,4 @@ void PeruseInliner::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 char PeruseInliner::ID = 0;
-static RegisterPass<PeruseInliner> X("", "PASHA -- Inliner");
+static RegisterPass<PeruseInliner> X("", "Inliner");

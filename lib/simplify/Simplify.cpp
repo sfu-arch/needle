@@ -13,7 +13,7 @@
 
 using namespace llvm;
 using namespace std;
-using namespace pasha;
+using namespace needle;
 
 bool Simplify::doInitialization(Module &M) { return false; }
 

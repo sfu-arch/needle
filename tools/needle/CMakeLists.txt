@@ -13,7 +13,7 @@ llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES ${LLVM_TARGETS_TO_BUILD}
         asmparser core linker bitreader bitwriter irreader ipo scalaropts
         analysis target mc support)
 
-target_link_libraries(needle inliner namer mw common simplify ${REQ_LLVM_LIBRARIES})
+target_link_libraries(needle inliner namer ndl common simplify ${REQ_LLVM_LIBRARIES})
 
 set_target_properties(needle
                       PROPERTIES

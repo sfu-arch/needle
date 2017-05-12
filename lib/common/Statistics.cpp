@@ -1,4 +1,4 @@
-#define DEBUG_TYPE "pasha_statistics"
+#define DEBUG_TYPE "needle_statistics"
 
 #include "Common.h"
 #include "llvm/ADT/SCCIterator.h"

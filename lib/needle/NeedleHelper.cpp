@@ -1,6 +1,6 @@
 #define DEBUG_TYPE "needle"
 
-#include "MicroWorkloadExtract.h"
+#include "NeedleOutliner.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -27,7 +27,7 @@
 #include "Common.h"
 
 using namespace llvm;
-using namespace mwe;
+using namespace needle;
 using namespace std;
 
 extern cl::opt<bool> OffloadDFG;
@@ -69,7 +69,7 @@ static Function *createUndoFunction(Module *Mod) {
 }
 
 // Class Methods
-void MicroWorkloadHelper::addUndoLog(Function *Offload) {
+void NeedleHelper::addUndoLog(Function *Offload) {
     // Get all the stores in the function minus the stores into
     // the struct needed for live outs.
     // Create a new global variable, 2 words per store (addr+data)
@@ -186,7 +186,7 @@ void MicroWorkloadHelper::addUndoLog(Function *Offload) {
     assert(!verifyModule(*Mod, &errs()) && "Module verification failed!");
 }
 
-void MicroWorkloadHelper::replaceGuards(Function *Offload) {
+void NeedleHelper::replaceGuards(Function *Offload) {
     auto &Context       = Offload->getContext();
     auto *RetFalseBlock = BasicBlock::Create(Context, "ret.fail", Offload);
     ReturnInst::Create(Context, ConstantInt::getFalse(Context), RetFalseBlock);
@@ -209,7 +209,7 @@ void MicroWorkloadHelper::replaceGuards(Function *Offload) {
         GuardFunc->eraseFromParent();
 }
 
-bool MicroWorkloadHelper::runOnModule(Module &M) {
+bool NeedleHelper::runOnModule(Module &M) {
     // This needs to change if there are more
     // than one offload function in the module we create.
     for (auto &F : M) {
@@ -234,13 +234,13 @@ bool MicroWorkloadHelper::runOnModule(Module &M) {
     return false;
 }
 
-bool MicroWorkloadHelper::doInitialization(Module &M) {
+bool NeedleHelper::doInitialization(Module &M) {
     common::optimizeModule(&M);
     Data.clear();
     return false;
 }
 
-bool MicroWorkloadHelper::doFinalization(Module &M) {
+bool NeedleHelper::doFinalization(Module &M) {
     ofstream Outfile("undo.stats.txt", ios::out);
     for (auto KV : Data) {
         Outfile << KV.first << " " << KV.second << "\n";
@@ -248,4 +248,4 @@ bool MicroWorkloadHelper::doFinalization(Module &M) {
     return false;
 }
 
-char MicroWorkloadHelper::ID = 0;
+char NeedleHelper::ID = 0;
