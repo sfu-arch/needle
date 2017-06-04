@@ -1363,38 +1363,6 @@ static void runHelperPasses(Function *Offload, string Id) {
     PM.run(*Offload->getParent());
 }
 
-// static void liveInAA(SetVector<Value *> &LiveIn, AAResults &AA,
-// map<std::string, uint64_t> &Data) {
-// SmallVector<Value *, 8> Pointers;
-// copy_if(LiveIn.begin(), LiveIn.end(), back_inserter(Pointers),
-//[](Value *V) { return V->getType()->isPointerTy(); });
-
-// Data["num-livein-ptr"]    = Pointers.size();
-// Data["num-must-alias"]    = 0;
-// Data["num-no-alias"]      = 0;
-// Data["num-may-alias"]     = 0;
-// Data["num-partial-alias"] = 0;
-// Data["num-ld-ld-pairs"]   = 0;
-
-// for (auto PB = Pointers.begin(), PE = Pointers.end(); PB != PE; PB++) {
-// for (auto NP = next(PB); NP != PE; NP++) {
-// switch (AA.alias(*PB, *NP)) {
-// case AliasResult::MustAlias:
-// Data["num-must-alias"]++;
-// break;
-// case AliasResult::NoAlias:
-// Data["num-no-alias"]++;
-// break;
-// case AliasResult::MayAlias:
-// Data["num-may-alias"]++;
-// break;
-// case AliasResult::PartialAlias:
-// Data["num-partial-alias"]++;
-// break;
-//}
-//}
-//}
-//}
 
 static void addCtorAndDtor(Module *Mod,
                            SmallVector<Module *, 4> OffloadModules) {
