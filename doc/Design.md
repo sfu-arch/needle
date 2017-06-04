@@ -82,7 +82,10 @@ Rollback of program state is performed in the following manner:
 
 #### Guard Lowering
 
-Control flow assertions in Needle are modeled as 
+Control flow assertions in Needle are modeled by removing the LLVM IR conditional branch instruction and replacing it with a dummy function call to `__guard_func`. The guard function takes two arguments. The first argument is the value produced by the comparison i.e the check and the second argument is the value it should produce. Thus the second paramenter encodes when the true or false condition which checks whether the assertion passes or not. The lowering for general purpose processors is to return false as soon as possible when the check fails. The insertion of guard intrinsics happens in `lib/needle/NeedleOutliner.cpp:465` and the lowering in `lib/needle/NeedleHelper:189`.
 
 ### Backend -- Synthesis and Simulation
 
+While Needle produces executables which can run on general purpose processors, the goal is to be able to use the offload function as input to a backend simulation or synthesis toolchain. To this end we have used Needle as part of the [Chainsaw - Micro'16](https://github.com/sfu-arch/chainsaw) project. In this project we generated a dataflow graph of operations. Chainsaw only targets paths and model control flow assertions as part of the simulation.   
+
+We have also integrated Needle with LegUp, a high level synthesis tool from Univesity of Toronto which uses LLVM to compile C to Verilog. The toolchain to target Verilog is available online as [Bhima](https://github.com/sfu-arch/bhima).  
