@@ -860,28 +860,28 @@ getTopoChop(DenseSet<BasicBlock *> &Chop, BasicBlock *StartBB,
     return Order;
 }
 
-static bool verifyChop(const SmallVector<BasicBlock *, 16> Chop) {
-    for (auto &CB : Chop) {
-        for (auto &I : *CB) {
-            CallSite CS(&I);
-            if (CS.isCall() || CS.isInvoke()) {
-                if (!CS.getCalledFunction()) {
-                    errs() << "Function Pointer\n";
-                    return false;
-                } else {
-                    if (CS.getCalledFunction()->isDeclaration() &&
-                        common::checkIntrinsic(CS)) {
-                        DEBUG(errs() << "External Call : "
-                                     << CS.getCalledFunction()->getName()
-                                     << "\n");
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    return true;
-}
+// static bool verifyChop(const SmallVector<BasicBlock *, 16> Chop) {
+//     for (auto &CB : Chop) {
+//         for (auto &I : *CB) {
+//             CallSite CS(&I);
+//             if (CS.isCall() || CS.isInvoke()) {
+//                 if (!CS.getCalledFunction()) {
+//                     errs() << "Function Pointer\n";
+//                     return false;
+//                 } else {
+//                     if (CS.getCalledFunction()->isDeclaration() &&
+//                         common::checkIntrinsic(CS)) {
+//                         DEBUG(errs() << "External Call : "
+//                                      << CS.getCalledFunction()->getName()
+//                                      << "\n");
+//                         return true;
+//                     }
+//                 }
+//             }
+//         }
+//     }
+//     return true;
+// }
 
 Function *NeedleOutliner::extract(PostDominatorTree *PDT, Module *Mod,
                                   SmallVector<BasicBlock *, 16> &RevTopoChop,
@@ -896,7 +896,7 @@ Function *NeedleOutliner::extract(PostDominatorTree *PDT, Module *Mod,
     auto BackEdges         = common::getBackEdges(StartBB);
     auto ReachableFromLast = fSliceDFS(LastBB, BackEdges);
 
-    assert(verifyChop(RevTopoChop) && "Invalid Region!");
+    //assert(verifyChop(RevTopoChop) && "Invalid Region!");
 
     auto handlePhiIn = [&LiveIn, &RevTopoChop, &Globals,
                         &StartBB](PHINode *Phi) {
