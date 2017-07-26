@@ -14,6 +14,10 @@ FILE *fp_out  = 0;
 FILE *fp_succ = 0;
 FILE *fp_mlog = 0;
 
+// TODO : Remove the prev store exists check and instead, run the loop in
+// reverse. Since the stores are saved in program order, the rollback will
+// issue multiple stores which ultimately will restore the original value.
+
 uint32_t __prev_store_exists(char *begin, char *loc) {
     char *curr = loc - 16;
     while (begin <= curr) {

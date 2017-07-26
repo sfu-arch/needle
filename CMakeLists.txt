@@ -6,7 +6,7 @@ set(PACKAGE_VERSION 0.1)
 set(PACKAGE_STRING "${PACKAGE_NAME} ${PACKAGE_VERSION}")
 set(PACKAGE_BUGREPORT "ska124@sfu.ca")
 
-set(CMAKE_CXX_FLAGS "-fno-rtti -std=c++1y -Werror -Wno-deprecated-declarations")
+set(CMAKE_CXX_FLAGS "-fno-rtti -D_GLIBCXX_USE_CXX11_ABI=0 -std=c++1y -Werror -Wno-deprecated-declarations")
 option(RT32 "32 bit EPP Runtime" OFF)
 option(TRACE_RUNTIME "Collect Run Length Encoded (RLE) Trace for EPP" OFF)
 

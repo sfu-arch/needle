@@ -48,7 +48,6 @@ extern cl::opt<bool> EnableSimpleLogging;
 extern bool isTargetFunction(const Function &f,
                              const cl::list<std::string> &FunctionList);
 extern cl::opt<bool> SimulateDFG;
-// extern cl::opt<bool> ConvertGlobalsToPointers;
 extern cl::opt<ExtractType> ExtractAs;
 extern cl::opt<bool> DisableUndoLog;
 
@@ -1218,9 +1217,13 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     ArrayType *SizesArrTy = ArrayType::get(IntegerType::get(Ctx, 32), 0);
 
     // auto *ULog     = Mod->getOrInsertGlobal("__undo_log_" + Id, LogArrTy);
-    auto *USizes   = Mod->getOrInsertGlobal("__undo_sizes_" + Id, SizesArrTy);
-    auto *NumStore = Mod->getOrInsertGlobal("__undo_num_stores_" + Id,
-                                            IntegerType::getInt32Ty(Ctx));
+   
+    Constant *USizes = nullptr, *NumStore = nullptr;
+    if(!DisableUndoLog) {
+        USizes   = Mod->getOrInsertGlobal("__undo_sizes_" + Id, SizesArrTy);
+        NumStore = Mod->getOrInsertGlobal("__undo_num_stores_" + Id,
+                                                IntegerType::getInt32Ty(Ctx));
+    }
 
     // 1. Load the address from the undo log global pointer
     // 2. Pass the address as parameter
@@ -1230,18 +1233,11 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
         new GlobalVariable(*Mod, BufTy, false, GlobalValue::InternalLinkage,
                            ConstantInt::getNullValue(BufTy), "__undo_buffer");
 
-    // auto *PtrToUndoBuffer = Mod->getOrInsertGlobal("__undo_buffer",
-    // BufPtrTy);
 
     auto *ULog = new LoadInst(ULogPtrGV, "", StartBB);
-    // auto *ULogSt = new LoadInst(ULog, "", StartBB);
 
-    // auto *ULog = GetElementPtrInst::Create(Type::getInt8PtrTy(Ctx),
-    // UndoBuffAddr, {Zero}, "", StartBB);
 
     Params.push_back(ULog);
-    // Params.push_back(USizes);
-
     Params.push_back(StPtr);
 
     // errs() << "Function: " << *Offload << "\n";
@@ -1257,21 +1253,24 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     BranchInst::Create(Merge, LastBB);
 
     // Fail Path -- Begin
-    Type *ParamTy[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx),
-                       Type::getInt32PtrTy(Ctx)};
-    auto *UndoTy = FunctionType::get(Type::getVoidTy(Ctx), ParamTy, false);
-    auto *Undo   = Mod->getOrInsertFunction("__undo_mem", UndoTy);
+    
+    if(!DisableUndoLog) {
 
-    // auto *UGEP      = GetElementPtrInst::Create(BufPtrTy, ULog, Idx, "",
-    // Fail);
-    auto *USizesGEP = GetElementPtrInst::CreateInBounds(USizes, Idx, "", Fail);
-    auto *UNS = GetElementPtrInst::CreateInBounds(NumStore, {Zero}, "", Fail);
-    auto *NSLoad = new LoadInst(UNS, "", Fail);
+        Type *ParamTy[] = {Type::getInt8PtrTy(Ctx), Type::getInt32Ty(Ctx),
+                           Type::getInt32PtrTy(Ctx)};
+        auto *UndoTy = FunctionType::get(Type::getVoidTy(Ctx), ParamTy, false);
+        auto *Undo   = Mod->getOrInsertFunction("__undo_mem", UndoTy);
 
-    // Fail -- Undo memory
-    vector<Value *> Args = {ULog, NSLoad, USizesGEP};
+        auto *USizesGEP = GetElementPtrInst::CreateInBounds(USizes, Idx, "", Fail);
+        auto *UNS = GetElementPtrInst::CreateInBounds(NumStore, {Zero}, "", Fail);
+        auto *NSLoad = new LoadInst(UNS, "", Fail);
 
-    CallInst::Create(Undo, Args, "", Fail);
+        // Fail -- Undo memory
+        vector<Value *> Args = {ULog, NSLoad, USizesGEP};
+
+        CallInst::Create(Undo, Args, "", Fail);
+
+    }
 
     if (EnableValueLogging || EnableMemoryLogging || EnableSimpleLogging) {
         CallInst::Create(Mod->getOrInsertFunction(

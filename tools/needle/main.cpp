@@ -132,7 +132,7 @@ cl::opt<bool> EnableMemoryLogging("mlog", cl::desc("Enable memory logging"),
                                   cl::value_desc("boolean"), cl::init(false),
                                   cl::cat(NeedleOptionCategory));
 
-cl::opt<bool> DisableUndoLog("ulog", cl::desc("Disable Undo Log"),
+cl::opt<bool> DisableUndoLog("no-undo-buf", cl::desc("Disable Undo Log"),
                              cl::init(false), cl::Hidden,
                              cl::cat(NeedleOptionCategory));
 
