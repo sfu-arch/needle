@@ -25,6 +25,13 @@ ifdef PRERUN
 endif
 	@touch .prerun.done
 
+rle-pack: .epp-inst.done .epp-run.done .prerun.done .rle-pack.done
+.rle-pack.done: .epp-run.done
+	@echo "RLE Pack to Gzip"
+	cd $(FUNCTION) && \
+		nl -baln < path-profile-trace.txt | gzip -c > $(NAME).gz
+
+
 epp-run: .epp-inst.done .epp-run.done .prerun.done
 .epp-run.done: .epp-inst.done .prerun.done
 	@echo "EPP-RUN"
