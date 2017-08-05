@@ -8,11 +8,21 @@
 uint64_t __mwe_success_count  = 0;
 uint64_t __mwe_fail_count     = 0;
 uint64_t __mwe_addr_log_count = 0;
+uint64_t success_cycle_count = 0;
+uint64_t fail_cycle_count = 0;
+uint64_t rollback_cycle_count = 0;
 
 FILE *fp_in   = 0;
 FILE *fp_out  = 0;
 FILE *fp_succ = 0;
 FILE *fp_mlog = 0;
+
+
+uint64_t rdtsc(){
+    unsigned int lo,hi;
+    __asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
+    return ((uint64_t)hi << 32) | lo;
+}
 
 // TODO : Remove the prev store exists check and instead, run the loop in
 // reverse. Since the stores are saved in program order, the rollback will
@@ -36,6 +46,7 @@ uint32_t __prev_store_exists(char *begin, char *loc) {
     X(64)
 
 void __undo_mem(char *buffer, uint32_t num_locs, uint32_t *sizes) {
+    uint64_t cycle = rdtsc();
     uint32_t buf_size = num_locs * 2 * 8;
     for (uint32_t i = 0; i < buf_size; i += 16) {
         uint64_t addr = *((uint64_t *)&buffer[i]);
@@ -71,6 +82,7 @@ void __undo_mem(char *buffer, uint32_t num_locs, uint32_t *sizes) {
             }
         }
     }
+    rollback_cycle_count += rdtsc() - cycle;
 }
 
 #undef LIST
@@ -80,6 +92,9 @@ void __mwe_dtor(char **ulog) {
     free(*ulog);
 
     if(fp_in) {
+        printf("avg-cycle-success %f\n", (double)success_cycle_count/__mwe_success_count) ;
+        /*printf("avg-cycle-fail %f\n", (double)fail_cycle_count/__mwe_fail_count) ;*/
+        printf("avg-cycle-rollback %f\n", (double)rollback_cycle_count/__mwe_fail_count) ;
         printf("mwe-num-success %" PRIu64 "\n", __mwe_success_count);
         printf("mwe-num-fail %" PRIu64 "\n", __mwe_fail_count);
         fclose(fp_in);
@@ -87,7 +102,6 @@ void __mwe_dtor(char **ulog) {
         fclose(fp_succ);
         fclose(fp_mlog);
     }
-
 }
 
 void __mwe_ctor(char **ulog, size_t ulog_size, int log_enable) {
@@ -117,16 +131,27 @@ void __log_succ(bool succ) {
     fwrite(&val, sizeof(bool), 1, fp_succ);
 }
 
-void __success() {
-    /*printf("mwe-success\n");*/
-    __mwe_success_count++;
-}
-
 void __mlog(uint64_t addr, uint64_t val, uint64_t sz) {
     fprintf(fp_mlog, "0x%016" PRIx64 " %" PRIu64 " %" PRIu64 "\n", addr, val, sz);
 }
 
+volatile uint64_t cycle = 0;
+
+void __enter() {
+    cycle = rdtsc(); 
+}
+
+void __success() {
+    /*printf("mwe-success\n");*/
+    success_cycle_count += rdtsc() - cycle;
+    cycle = 0;
+    __mwe_success_count++;
+}
+
+
 void __fail() {
     /*printf("mwe-fail\n");*/
+    /*fail_cycle_count += rdtsc() - cycle;*/
+    /*cycle = 0;*/
     __mwe_fail_count++;
 }

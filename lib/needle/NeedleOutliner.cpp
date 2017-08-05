@@ -1246,11 +1246,21 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
     auto *CI = CallInst::Create(Offload, Params, "", StartBB);
     BranchInst::Create(Success, Fail, CI, StartBB);
 
+    // Add instrumentation to indicate function entry
+
+    if (EnableValueLogging || EnableMemoryLogging || EnableSimpleLogging) {
+        CallInst::Create(Mod->getOrInsertFunction(
+                             "__enter", FunctionType::get(VoidTy, {}, false)),
+                         {}, "", CI);
+    }
+
     // Divert control flow to pass through merge block from
     // original CFG.
     Merge->getInstList().push_back(LastBB->getTerminator()->clone());
     LastBB->getTerminator()->eraseFromParent();
-    BranchInst::Create(Merge, LastBB);
+    auto *BI = BranchInst::Create(Merge, LastBB);
+
+    
 
     // Fail Path -- Begin
     
@@ -1277,7 +1287,7 @@ static void instrument(Function &F, SmallVector<BasicBlock *, 16> &Blocks,
                              "__fail", FunctionType::get(VoidTy, {}, false)),
                          {}, "", Fail);
     }
-
+    
     BranchInst::Create(SSplit, Fail);
     // Fail Path -- End
 
