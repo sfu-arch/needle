@@ -7,7 +7,9 @@
 #include "llvm/Analysis/CFGPrinter.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/AsmParser/Parser.h"
-#include "llvm/Bitcode/ReaderWriter.h"
+//#include "llvm/Bitcode/ReaderWriter.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
+#include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/CodeGen/CommandFlags.h"
 #include "llvm/CodeGen/LinkAllAsmWriterComponents.h"
 #include "llvm/CodeGen/LinkAllCodegenComponents.h"
@@ -43,6 +45,8 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/Scalar.h"
+
+#include <set>
 
 using namespace llvm;
 using namespace std;
@@ -93,7 +97,7 @@ void compile(Module &m, string outputPath, char optLevel) {
     TargetOptions options = InitTargetOptionsFromCodeGenFlags();
     unique_ptr<TargetMachine> machine(
         target->createTargetMachine(triple.getTriple(), MCPU, FeaturesStr,
-                                    options, RelocModel, CMModel, level));
+                                    options, RelocModel.getValue(), CMModel, level));
     assert(machine.get() && "Could not allocate target machine!");
 
     if (FloatABIForCalls != FloatABI::Default) {
@@ -255,7 +259,7 @@ void breakCritEdges(Function &F) {
 
 void printCFG(Function &F) {
     legacy::FunctionPassManager FPM(F.getParent());
-    FPM.add(llvm::createCFGPrinterPass());
+    FPM.add(llvm::createCFGPrinterLegacyPassPass());
     FPM.doInitialization();
     FPM.run(F);
     FPM.doFinalization();

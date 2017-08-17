@@ -72,7 +72,7 @@ struct NeedleOutliner : public llvm::ModulePass {
     void valueLogging(llvm::Function*);
 
     void process(llvm::Function &F);
-    llvm::Function *extract(llvm::PostDominatorTree *, llvm::Module *,
+    llvm::Function *extract(llvm::Module *,
                             llvm::SmallVector<llvm::BasicBlock *, 16> &,
                             llvm::SetVector<llvm::Value *> &,
                             llvm::SetVector<llvm::Value *> &,
@@ -91,7 +91,7 @@ struct NeedleOutliner : public llvm::ModulePass {
         AU.addRequired<llvm::AAResultsWrapperPass>();
         AU.addRequired<llvm::DominatorTreeWrapperPass>();
         AU.addRequired<llvm::LoopInfoWrapperPass>();
-        AU.addRequired<llvm::PostDominatorTree>();
+        //AU.addRequired<llvm::PostDominatorTree>();
     }
 };
 

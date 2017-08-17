@@ -1,5 +1,5 @@
 #include "llvm/Analysis/BasicAliasAnalysis.h"
-#include "llvm/Analysis/CFLAliasAnalysis.h"
+//#include "llvm/Analysis/CFLAliasAnalysis.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/ScalarEvolutionAliasAnalysis.h"
@@ -59,8 +59,7 @@ cl::opt<ExtractType> ExtractAs(
     cl::desc("Choose extract type, path/braid"),
     cl::values(clEnumVal(ExtractType::path, "Extract as path"),
                // clEnumVal(ExtractType::slice, "Extract as slice (chop)"),
-               clEnumVal(ExtractType::braid, "Extract as braid (merged paths)"),
-               clEnumValEnd),
+               clEnumVal(ExtractType::braid, "Extract as braid (merged paths)")),
     cl::Required, cl::cat(NeedleOptionCategory));
 
 cl::opt<string> InPath(cl::Positional, cl::desc("<Module to analyze>"),
@@ -168,9 +167,9 @@ int main(int argc, char **argv, const char **env) {
     // handling. It also initializes the built in support for convenient
     // command line option handling.
 
-    sys::PrintStackTraceOnErrorSignal();
+    sys::PrintStackTraceOnErrorSignal(argv[0]);
     llvm::PrettyStackTraceProgram X(argc, argv);
-    LLVMContext &context = getGlobalContext();
+    LLVMContext context;
     llvm_shutdown_obj shutdown;
 
     InitializeAllTargets();
@@ -202,7 +201,7 @@ int main(int argc, char **argv, const char **env) {
     pm.add(createGlobalsAAWrapperPass());
     pm.add(createSCEVAAWrapperPass());
     pm.add(createScopedNoAliasAAWrapperPass());
-    pm.add(createCFLAAWrapperPass());
+    //pm.add(createCFLAAWrapperPass());
     pm.add(new llvm::CallGraphWrapperPass());
     pm.add(new epp::PeruseInliner());
     pm.add(new needle::Simplify(FunctionList[0]));
@@ -216,13 +215,13 @@ int main(int argc, char **argv, const char **env) {
 
     // Use a Composite module instead of linkning into the original
     // as it doesn't work -- no idea why.
-    auto Composite = llvm::make_unique<Module>("llvm-link", getGlobalContext());
+    auto Composite = llvm::make_unique<Module>("llvm-link", context);
     Linker L(*Composite);
 
     L.linkInModule(move(module));
 
     unique_ptr<Module> HelperMod(
-        parseIRFile(HelperLib, err, getGlobalContext()));
+        parseIRFile(HelperLib, err, context));
     assert(HelperMod.get() && "Unable to read undo bitcode module");
     L.linkInModule(std::move(HelperMod));
 

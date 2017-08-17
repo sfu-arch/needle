@@ -9,13 +9,13 @@ before_script:
 - sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-5 /usr/bin/gcc
 - sudo unlink /usr/bin/g++ && sudo ln -s /usr/bin/g++-5 /usr/bin/g++
 - g++ --version
-- wget http://releases.llvm.org/3.8.1/clang+llvm-3.8.1-x86_64-linux-gnu-ubuntu-14.04.tar.xz
-- tar xf clang+llvm-3.8.1-x86_64-linux-gnu-ubuntu-14.04.tar.xz
-- export PATH=${PWD}/clang+llvm-3.8.1-x86_64-linux-gnu-ubuntu-14.04/bin:$PATH
-- cmake -DLLVM_DIR=clang+llvm-3.8.1-x86_64-linux-gnu-ubuntu-14.04/share/llvm/cmake/ .
+- wget http://releases.llvm.org/4.0.0/clang+llvm-4.0.0-x86_64-linux-gnu-ubuntu-14.04.tar.xz
+- tar xf clang+llvm-4.0.0-x86_64-linux-gnu-ubuntu-14.04.tar.xz
+- export PATH=${PWD}/clang+llvm-4.0.0-x86_64-linux-gnu-ubuntu-14.04/bin:$PATH
+- cmake -DLLVM_DIR=clang+llvm-4.0.0-x86_64-linux-gnu-ubuntu-14.04/lib/cmake/llvm .
 script:
 - make VERBOSE=1
-- make -C examples/workloads/164.gzip needle-path
+- make -C examples/workloads/401.bzip2 needle-path
 branches:
   only:
   - master

@@ -6,7 +6,7 @@ set(PACKAGE_VERSION 0.1)
 set(PACKAGE_STRING "${PACKAGE_NAME} ${PACKAGE_VERSION}")
 set(PACKAGE_BUGREPORT "ska124@sfu.ca")
 
-set(CMAKE_CXX_FLAGS "-fno-rtti -D_GLIBCXX_USE_CXX11_ABI=0 -std=c++1y -Werror -Wno-deprecated-declarations")
+set(CMAKE_CXX_FLAGS "-fno-rtti -std=c++1y -Werror -Wno-deprecated-declarations")
 option(RT32 "32 bit EPP Runtime" OFF)
 option(TRACE_RUNTIME "Collect Run Length Encoded (RLE) Trace for EPP" OFF)
 
@@ -22,7 +22,7 @@ set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/" ${CMAKE_MODULE_PATH})
 
 
 
-find_package(LLVM "3.8" REQUIRED CONFIG)
+find_package(LLVM "4.0" REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
@@ -49,17 +49,17 @@ add_definitions( ${LLVM_DEFINITIONS} )
 
 
 # Find clang 
-
-set(CLANG_VERSION_REQ "${LLVM_PACKAGE_VERSION}")
-find_package(Clang)
-if(CLANG_FOUND)
-    if(${CLANG_VERSION} VERSION_EQUAL CLANG_VERSION_REQ) 
-    else()
-        message(FATAL_ERROR "Incompatible clang version -- need ${CLANG_VERSION_REQ}, found ${CLANG_VERSION}")
-    endif()
-else()
-    message(FATAL_ERROR "needle needs clang ${CLANG_VERSION_REQ} in PATH, Cmake will exit" )
-endif()
+# 
+# set(CLANG_VERSION_REQ "${LLVM_PACKAGE_VERSION}")
+# find_package(Clang)
+# if(CLANG_FOUND)
+#     if(${CLANG_VERSION} VERSION_EQUAL CLANG_VERSION_REQ) 
+#     else()
+#         message(FATAL_ERROR "Incompatible clang version -- need ${CLANG_VERSION_REQ}, found ${CLANG_VERSION}")
+#     endif()
+# else()
+#     message(FATAL_ERROR "needle needs clang ${CLANG_VERSION_REQ} in PATH, Cmake will exit" )
+# endif()
 
 
 # 32 bit runtime
@@ -75,7 +75,7 @@ function(add_bitcode BC FILES)
     add_custom_command(
         OUTPUT ${BC}
         COMMAND ${CLANG_EXE} 
-                -c -g -emit-llvm ${BITCODE_FLAGS}
+                clang -c -g -emit-llvm ${BITCODE_FLAGS}
                 ${FILES}
                 -o ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/${BC}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}

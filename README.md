@@ -16,7 +16,7 @@
 
 ### Dependencies 
 
-1. LLVM 3.8
+1. LLVM 4.0
 2. CMake 2.8.8  
 3. Doxygen 1.7.6 (optional)
 4. c++14 compatible compiler, gcc-5 or greater should suffice
@@ -27,9 +27,9 @@
 2. Download LLVM    
     `$ cd needle && ./get_llvm.sh && cd ..`
 3. Run cmake and make in a separate build folder    
-    `$ mkdir needle-build && cd needle-build && cmake ../needle -DLLVM_DIR=../needle/llvm-3.8/share/llvm/cmake && make -j 4`
+    `$ mkdir needle-build && cd needle-build && cmake ../needle -DLLVM_DIR=../needle/llvm-4.0/lib/cmake/llvm && make -j 4`
 4. Run an example    
-    `$ cd examples/workloads/164.gzip && make needle-run-path`
+    `$ cd examples/workloads/401.bzip2 && make needle-run-path`
 
 ### What's in the NEEDLE repository?
 

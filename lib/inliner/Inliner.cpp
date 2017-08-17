@@ -28,14 +28,15 @@ InlineCost PeruseInliner::getInlineCost(CallSite CS) {
 
 bool PeruseInliner::runOnSCC(CallGraphSCC &SCC) {
     bool Changed = false;
-    while ((Changed = Inliner::runOnSCC(SCC)))
+    while ((Changed = LegacyInlinerBase::runOnSCC(SCC)))
         ;
     return Changed;
 }
 
 void PeruseInliner::getAnalysisUsage(AnalysisUsage &AU) const {
-    Inliner::getAnalysisUsage(AU);
+    LegacyInlinerBase::getAnalysisUsage(AU);
 }
 
 char PeruseInliner::ID = 0;
 static RegisterPass<PeruseInliner> X("", "Inliner");
+

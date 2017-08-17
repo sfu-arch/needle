@@ -8,7 +8,7 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/BasicAliasAnalysis.h"
 #include "llvm/Analysis/CFG.h"
-#include "llvm/Analysis/CFLAliasAnalysis.h"
+//#include "llvm/Analysis/CFLAliasAnalysis.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/ScalarEvolutionAliasAnalysis.h"
 #include "llvm/Analysis/ScopedNoAliasAA.h"
@@ -882,7 +882,7 @@ getTopoChop(DenseSet<BasicBlock *> &Chop, BasicBlock *StartBB,
 //     return true;
 // }
 
-Function *NeedleOutliner::extract(PostDominatorTree *PDT, Module *Mod,
+Function *NeedleOutliner::extract(Module *Mod,
                                   SmallVector<BasicBlock *, 16> &RevTopoChop,
                                   SetVector<Value *> &LiveIn,
                                   SetVector<Value *> &LiveOut,
@@ -1357,7 +1357,7 @@ static void runHelperPasses(Function *Offload, string Id) {
     PM.add(createGlobalsAAWrapperPass());
     PM.add(createSCEVAAWrapperPass());
     PM.add(createScopedNoAliasAAWrapperPass());
-    PM.add(createCFLAAWrapperPass());
+    //PM.add(createCFLAAWrapperPass());
     PM.add(new NeedleHelper(Id));
     PM.run(*Offload->getParent());
 }
@@ -1416,7 +1416,7 @@ void NeedleOutliner::process(Function &F) {
 
     common::runStatsPasses(F);
 
-    PostDomTree = &getAnalysis<PostDominatorTree>(F);
+    // PostDomTree = &getAnalysis<PostDominatorTree>(F);
     auto *DT    = &getAnalysis<DominatorTreeWrapperPass>(F).getDomTree();
     auto *LI    = &getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
 
@@ -1470,8 +1470,9 @@ void NeedleOutliner::process(Function &F) {
     }
     // errs() << "\n";
 
+    LLVMContext Context;
     ExtractedModules.push_back(
-        llvm::make_unique<Module>("mwe", getGlobalContext()));
+        llvm::make_unique<Module>("mwe", Context));
     Module *Mod = ExtractedModules.back().get();
     Mod->setDataLayout(F.getParent()->getDataLayout());
 
@@ -1480,7 +1481,7 @@ void NeedleOutliner::process(Function &F) {
     // Extract the blocks and create a new function
     SetVector<Value *> LiveOut, LiveIn, Globals;
     Function *Offload =
-        extract(PostDomTree, Mod, BlockV, LiveIn, LiveOut, Globals, DT, LI, Id);
+        extract(Mod, BlockV, LiveIn, LiveOut, Globals, DT, LI, Id);
 
     runHelperPasses(Offload, Id);
 

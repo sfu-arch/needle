@@ -15,7 +15,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO.h"
-#include "llvm/Transforms/IPO/InlinerPass.h"
+#include "llvm/Transforms/IPO/Inliner.h"
 #include <fstream>
 
 
@@ -25,11 +25,11 @@ namespace epp {
 
 /// Inliner class which inlines everything. Very docu
 ///
-struct PeruseInliner : public Inliner {
+struct PeruseInliner : public LegacyInlinerBase {
     static char ID;
 
   public:
-    PeruseInliner() : Inliner(ID, -2000000000, true) {}
+    PeruseInliner() : LegacyInlinerBase(ID, true) {}
 
     ~PeruseInliner() {}
 

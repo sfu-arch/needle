@@ -11,6 +11,7 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Transforms/Utils/UnifyFunctionExitNodes.h"
+#include "llvm/ADT/StringRef.h"
 
 #include <map>
 #include <unordered_map>
@@ -39,7 +40,7 @@ struct EPPEncode : public llvm::FunctionPass {
     bool doInitialization(llvm::Module &m) override;
     bool doFinalization(llvm::Module &m) override;
     void releaseMemory() override;
-    const char *getPassName() const override { return "PASHA - EPPEncode"; }
+    StringRef getPassName() const override { return "EPPEncode"; }
 };
 }
 #endif

@@ -5,7 +5,9 @@
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/AsmParser/Parser.h"
-#include "llvm/Bitcode/ReaderWriter.h"
+//#include "llvm/Bitcode/ReaderWriter.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
+#include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/CodeGen/LinkAllAsmWriterComponents.h"
 #include "llvm/CodeGen/LinkAllCodegenComponents.h"
 #include "llvm/IR/DataLayout.h"
@@ -118,7 +120,7 @@ static void instrumentModule(Module &module, std::string outFile,
     pm.add(llvm::createBasicAAWrapperPass());
     pm.add(createTypeBasedAAWrapperPass());
     pm.add(new llvm::CallGraphWrapperPass());
-    pm.add(new epp::PeruseInliner());
+    //pm.add(new epp::PeruseInliner());
     pm.add(new needle::Simplify(FunctionList[0]));
     pm.add(new epp::Namer());
     pm.add(new LoopInfoWrapperPass());
@@ -162,7 +164,7 @@ static void interpretResults(Module &module, std::string filename) {
     pm.add(createBasicAAWrapperPass());
     pm.add(createTypeBasedAAWrapperPass());
     pm.add(new llvm::CallGraphWrapperPass());
-    pm.add(new epp::PeruseInliner());
+    //pm.add(new epp::PeruseInliner());
     pm.add(new needle::Simplify(FunctionList[0]));
     pm.add(new epp::Namer());
     pm.add(new LoopInfoWrapperPass());
@@ -175,9 +177,9 @@ int main(int argc, char **argv, const char **env) {
     // This boilerplate provides convenient stack traces and clean LLVM exit
     // handling. It also initializes the built in support for convenient
     // command line option handling.
-    sys::PrintStackTraceOnErrorSignal();
+    sys::PrintStackTraceOnErrorSignal(argv[0]);
     llvm::PrettyStackTraceProgram X(argc, argv);
-    LLVMContext &context = getGlobalContext();
+    LLVMContext context;
     llvm_shutdown_obj shutdown;
 
     InitializeAllTargets();
