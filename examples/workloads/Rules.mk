@@ -25,6 +25,13 @@ ifdef PRERUN
 endif
 	@touch .prerun.done
 
+rle-pack: .epp-inst.done .epp-run.done .prerun.done .rle-pack.done
+.rle-pack.done: .epp-run.done
+	@echo "RLE Pack to Gzip"
+	cd $(FUNCTION) && \
+		nl -baln < path-profile-trace.txt | gzip -c > $(NAME).gz
+
+
 epp-run: .epp-inst.done .epp-run.done .prerun.done
 .epp-run.done: .epp-inst.done .prerun.done
 	@echo "EPP-RUN"
@@ -47,7 +54,7 @@ needle-path: .epp-decode.done .needle-path.done
 	cd $(FUNCTION) && \
 	export PATH=$(LLVM_OBJ):$(PATH) && \
     python $(ROOT)/examples/scripts/path.py epp-sequences.txt > paths.stats.txt && \
-	$(NEEDLE_OBJ)/needle -fn=$(FUNCTION) -ExtractType::path -seq=path-seq-0.txt $(LIBS) -u=$(HELPER_LIB) $(NAME).bc -o $(NAME)-needle-0 2>&1 > ../needle-path.log
+	$(NEEDLE_OBJ)/needle -fn=$(FUNCTION) -ExtractType::path -slog -seq=path-seq-0.txt $(LIBS) -u=$(HELPER_LIB) $(NAME).bc -o $(NAME)-needle-0 2>&1 > ../needle-path.log
 
 needle-braid: .epp-decode.done .needle-braid.done
 .needle-braid.done: .epp-decode.done 
