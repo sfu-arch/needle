@@ -22,11 +22,7 @@
 4. c++14 compatible compiler, gcc-5 or greater should suffice
 
 ### Build 
-First of all give execute permissions to following scripts:
-```
-  # chmod +x ./mem-axc/gems-lib-ooo/scripts/calc_host.sh
-  # chmod +x ./install.sh
-```
+
 1. Clone this repository (or download)    
     `$ git clone git@github.com:sfu-arch/needle.git`
 2. Download LLVM    
